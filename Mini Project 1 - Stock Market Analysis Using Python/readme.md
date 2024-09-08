@@ -51,7 +51,3 @@ The following Python libraries will be utilized:
 ## Conclusion
 
 By the end of this project, we aim to provide meaningful insights into the performance and risks associated with the stocks of these major technology companies, leveraging data science techniques.
-
----
-
-Feel free to contribute to this project by providing suggestions, improvements, or new ideas!
