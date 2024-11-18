@@ -74,7 +74,7 @@ The dataset contains two columns:
 
 ## File Structure
 ```plaintext
-Mini Project 3  – Twitter Sentimental Analysis  Using NLP and Python/
+Twitter Sentimental Analysis Using NLP/
 ├── scripts/
     └── Mini Project 3 – Twitter Sentimental Analysis  Using NLP and Python (Python scripts).py
 ├── Mini Project 3 – Twitter Sentimental Analysis  Using NLP and Python.ipynb
