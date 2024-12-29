@@ -137,7 +137,7 @@ An exploratory notebook (`movie_recommender_system_notebook.ipynb`) detailing da
 ---
 
 ## Author
-Developed as part of the **DSML Internship Certification Program**.
+Developed by Yang Tuo as part of the **DSML Internship Certification Program**.
 
 ---
 
