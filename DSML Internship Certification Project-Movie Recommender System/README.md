@@ -69,7 +69,7 @@ DSML Internship Certification Project/
 - **ratings.csv**: Includes user ratings for movies.
 
 ### 2. Desktop Application (PyQt5)
-A standalone desktop application that provides movie recommendations based on the selected algorithm. The application leverages modular designs:
+A standalone desktop application that provides movie recommendations based on the selected algorithm. The application uses modular designs:
 - **Recommendation Algorithms**:
   - Collaborative Filtering
   - Content-Based Filtering
@@ -132,7 +132,7 @@ An exploratory notebook (`movie_recommender_system_notebook.ipynb`) detailing da
 
 ## Requirements
 - Python 3.10 or higher
-- Required Python Libraries: `pandas`, `numpy`, `scikit-learn`, `PyQt5`, `Flask`, `matplotlib`
+- Required Python Libraries: `pandas`, `numpy`, `scikit-learn`, `PyQt5`, `Flask`, `matplotlib`, `wordcloud`
 
 ---
 
