@@ -29,7 +29,6 @@ Below is the file structure of the project:
   - .ipynb_checkpoints/
     - Mini Project 1 - Stock Market Analysis Using Python-checkpoint.ipynb
   - Mini Project 1 - Stock Market Analysis Using Python.ipynb
-  - Mini Project 1 - Stock Market Analysis Using Python.py
 
 
 ## Prerequisites
