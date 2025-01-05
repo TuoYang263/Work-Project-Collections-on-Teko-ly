@@ -13,8 +13,6 @@ This project is a comprehensive application designed to analyze stock market dat
 ## File Structure
 Below is the file structure of the project:
 
-- .ipynb_checkpoints/
-  - Mini Project 1 - Stock Market Analysis Using Python-checkpoint.ipynb
 - Flask app/
   - app.py
   - static/
@@ -26,8 +24,6 @@ Below is the file structure of the project:
     - results.html
     - waiting.html
 - Notebook/
-  - .ipynb_checkpoints/
-    - Mini Project 1 - Stock Market Analysis Using Python-checkpoint.ipynb
   - Mini Project 1 - Stock Market Analysis Using Python.ipynb
 
 
