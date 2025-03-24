@@ -18,7 +18,7 @@ This dashboard was built to analyze the sales and return activity of a fictional
 📂 Maven Market Project
 ├── MavenMarket_Report.pbix                # Power BI dashboard file
 ├── Maven_Market.png                       # The icon of Maven Market 
-├── Maven_Market_Dashboard.png  	         # Screenshot of the final dashboard
+├── MavenMarket_Dashboard.png  	         # Screenshot of the final dashboard
 ├── Power BI Demo Video.mp4                # Walkthrough demo video
 ├── Maven Transactions/                    # Raw transaction data for 1997 & 1998
 ├── Maven+Market+CSV+Files/                # Supporting datasets (Products, Customers, Stores, etc.)
@@ -37,7 +37,7 @@ This dashboard was built to analyze the sales and return activity of a fictional
 
 ## 🖼️ Sample Dashboard
 
-![Dashboard Preview](Maven_Market_Dashboard.png)
+![Dashboard Preview](MavenMarket_Dashboard.png)
 
 ## 🎬 Demo Video
 
