@@ -1,7 +1,7 @@
 
 # 📂 Data Projects Portfolio
 
-Hi, I’m [Your Name] – passionate about turning data into actionable solutions.
+Hi, I’m Tuo Yang – passionate about turning data into actionable solutions.
 
 Welcome! This repository is a curated collection of practical data projects I've worked on, covering a range of domains and technologies—from data cleaning and analytics to machine learning and business intelligence.
 
