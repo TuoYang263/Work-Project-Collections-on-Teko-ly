@@ -11,23 +11,23 @@ Welcome! This repository contains a curated collection of machine learning, comp
 
 | Category                 | Project                                                                 |
 |--------------------------|-------------------------------------------------------------------------|
-| Machine Learning / CV    | [Breast Cancer Classification](./Projects/BreastCancerClassification)    |
-| Machine Learning / CV    | [Stock Price Prediction](./Projects/StockPricePrediction)                |
-| Machine Learning / CV    | [Used Cars Price Prediction](./Projects/Used%20Cars%20Price%20Prediction%20-%20Data%20Science%20Project) |
-| Deep Learning / CV       | [Real-Time Face Mask Detector](./Projects/Real-Time_Face_Mask_Detector)  |
-| Deep Learning / CV       | [Handwritten Digit Recognition](./Projects/HandwrittenDigitRecognition)  |
-| Deep Learning / CV       | [Road Lane Line Detection](./Projects/RoadLaneLineDetection)              |
-| Deep Learning / CV       | [Sign Language Recognition](./Projects/SignLanguageRecognition)          |
-| Deep Learning / CV       | [Image Cartoonifier](./Projects/Image_Cartoonier)                        |
-| Deep Learning / CV       | [Color Detection](./Projects/ColorDetection)                             |
+| Machine Learning Projects| [Breast Cancer Classification](./Projects/BreastCancerClassification)    |
+| Data Science & Analytics | [Stock Price Prediction](./Projects/StockPricePrediction)                |
+| Data Science & Analytics | [Used Cars Price Prediction](./Projects/Used%20Cars%20Price%20Prediction%20-%20Data%20Science%20Project) |
+| Computer Vision Projects | [Real-Time Face Mask Detector](./Projects/Real-Time_Face_Mask_Detector)  |
+| Computer Vision Projects | [Handwritten Digit Recognition](./Projects/HandwrittenDigitRecognition)  |
+| Computer Vision Projects | [Road Lane Line Detection](./Projects/RoadLaneLineDetection)              |
+| Computer Vision Projects | [Sign Language Recognition](./Projects/SignLanguageRecognition)          |
+| Computer Vision Projects | [Image Cartoonifier](./Projects/Image_Cartoonier)                        |
+| Computer Vision Projects | [Color Detection](./Projects/ColorDetection)                             |
 | NLP                      | [Fake News Detection](./Projects/FakeNewsDetectionwithPythonandML)       |
 | NLP                      | [Twitter Sentiment Analysis](./Projects/Mini%20Project%203%20-%20Twitter%20Sentimental%20Analysis%20Using%20NLP%20and%20Python) |
-| Analytics / BI           | [Power BI Maven Project](./Projects/Power-BI-Maven-Project)              |
-| Analytics / Domain Case  | [Industry Core Infrastructure](./Projects/Mini%20Project%204%20-%20Industry%20Core%20Infrastructure) |
-| Recommender System       | [Movie Recommender System](./Projects/DSML%20Internship%20Certification%20Project-Movie%20Recommender%20System) |
-| Resolution Analysis      | [Consumer Complaint Resolution](./Projects/Mini%20Project%202%20-%20Consumer%20Complaint%20Resolution%20Analysis%20Using%20Python) |
-| Market Analysis          | [Stock Market Analysis](./Projects/Mini%20Project%201%20-%20Stock%20Market%20Analysis%20Using%20Python) |
-| Surveillance Detection   | [Deep Surveillance](./Projects/DeepSurveillanceWithDeepLearning)
+| BI & Analytics           | [Power BI Maven Project](./Projects/Power-BI-Maven-Project)              |
+| BI & Analytics           | [Industry Core Infrastructure](./Projects/Mini%20Project%204%20-%20Industry%20Core%20Infrastructure) |
+| Data Science & Analytics | [Movie Recommender System](./Projects/DSML%20Internship%20Certification%20Project-Movie%20Recommender%20System) |
+| Data Science & Analytics | [Consumer Complaint Resolution](./Projects/Mini%20Project%202%20-%20Consumer%20Complaint%20Resolution%20Analysis%20Using%20Python) |
+| Data Science & Analytics | [Stock Market Analysis](./Projects/Mini%20Project%201%20-%20Stock%20Market%20Analysis%20Using%20Python) |
+| Computer Vision Projects | [Deep Surveillance](./Projects/DeepSurveillanceWithDeepLearning)
 
 ## 🚀 Featured Projects (Data Science & Analytics)
 
