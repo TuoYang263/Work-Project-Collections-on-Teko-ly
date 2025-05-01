@@ -1,1 +1,0 @@
-Run python app.py in command to start the Flask app. The webpage app can be accessed via the URL: http://127.0.0.1:5000

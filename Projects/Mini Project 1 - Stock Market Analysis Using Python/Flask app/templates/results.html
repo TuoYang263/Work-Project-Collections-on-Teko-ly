@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Results</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Stock Market Analysis Results</h1>
+    </header>
+
+    <main>
+        <h2>Close Price Plot</h2>
+        <div>{{ close_price_plot | safe }}</div>
+
+        <h2>Volume Plot</h2>
+        <div>{{ volume_plot | safe }}</div>
+
+        <h2>Moving Average Plot</h2>
+        <div>{{ moving_avg_plot | safe }}</div>
+
+        <h2>Pie Chart</h2>
+        <div>{{ pie_chart_plot | safe }}</div>
+    </main>
+
+    <footer>
+        <a href="{{ url_for('index') }}">Back to Home</a>
+    </footer>
+</body>
+</html>

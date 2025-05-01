@@ -3,13 +3,31 @@
 
 Hi, I’m Tuo Yang – passionate about turning data into actionable solutions.
 
-Welcome! This repository is a curated collection of practical data projects I've worked on, covering a range of domains and technologies—from data cleaning and analytics to machine learning and business intelligence.
-
-These projects reflect my ability to work across the data pipeline: from collecting and transforming raw data to building predictive models and presenting insights clearly.
-
-Whether you're hiring for a data analyst, data engineer, or machine learning-related role, I hope these examples demonstrate the breadth and depth of my technical and analytical skills.
+Welcome! This repository contains a curated collection of machine learning, computer vision, NLP, and business analytics projects developed during my data science internship and personal studies. Each folder includes source code, documentation, and example outputs to demonstrate practical skills in real-world contexts.
 
 ---
+
+## 🔍 Quick Project Index
+
+| Category                 | Project                                                                 |
+|--------------------------|-------------------------------------------------------------------------|
+| Machine Learning / CV    | [Breast Cancer Classification](./Projects/BreastCancerClassification)    |
+| Machine Learning / CV    | [Stock Price Prediction](./Projects/StockPricePrediction)                |
+| Machine Learning / CV    | [Used Cars Price Prediction](./Projects/Used%20Cars%20Price%20Prediction%20-%20Data%20Science%20Project) |
+| Deep Learning / CV       | [Real-Time Face Mask Detector](./Projects/Real-Time_Face_Mask_Detector)  |
+| Deep Learning / CV       | [Handwritten Digit Recognition](./Projects/HandwrittenDigitRecognition)  |
+| Deep Learning / CV       | [Road Lane Line Detection](./Projects/RoadLaneLineDetection)              |
+| Deep Learning / CV       | [Sign Language Recognition](./Projects/SignLanguageRecognition)          |
+| Deep Learning / CV       | [Image Cartoonifier](./Projects/Image_Cartoonier)                        |
+| Deep Learning / CV       | [Color Detection](./Projects/ColorDetection)                             |
+| NLP                      | [Fake News Detection](./Projects/FakeNewsDetectionwithPythonandML)       |
+| NLP                      | [Twitter Sentiment Analysis](./Projects/Mini%20Project%203%20-%20Twitter%20Sentimental%20Analysis%20Using%20NLP%20and%20Python) |
+| Analytics / BI           | [Power BI Maven Project](./Projects/Power-BI-Maven-Project)              |
+| Analytics / Domain Case  | [Industry Core Infrastructure](./Projects/Mini%20Project%204%20-%20Industry%20Core%20Infrastructure) |
+| Recommender System       | [Movie Recommender System](./Projects/DSML%20Internship%20Certification%20Project-Movie%20Recommender%20System) |
+| Resolution Analysis      | [Consumer Complaint Resolution](./Projects/Mini%20Project%202%20-%20Consumer%20Complaint%20Resolution%20Analysis%20Using%20Python) |
+| Market Analysis          | [Stock Market Analysis](./Projects/Mini%20Project%201%20-%20Stock%20Market%20Analysis%20Using%20Python) |
+| Surveillance Detection   | [Deep Surveillance](./Projects/DeepSurveillanceWithDeepLearning)
 
 ## 🚀 Featured Projects (Data Science & Analytics)
 
@@ -77,5 +95,5 @@ These are the projects I'm most proud of—covering data analytics, predictive m
 
 ## 📫 Contact
 
-If you're a recruiter or collaborator, feel free to connect!  
+Thanks for visiting my project collection! If you'd like access to specific repos or notebooks, feel free to reach out via [LinkedIn](https://www.linkedin.com/in/tuo-yang-6b772b207/).  
 _I'm always open to discussing data-driven opportunities._

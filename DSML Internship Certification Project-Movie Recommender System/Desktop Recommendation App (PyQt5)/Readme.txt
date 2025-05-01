@@ -1,1 +1,0 @@
-Run python pyqt5_app_main.py to start the app!
