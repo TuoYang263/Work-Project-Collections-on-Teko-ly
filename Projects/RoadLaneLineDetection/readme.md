@@ -31,9 +31,10 @@ follows the steps below:
    
    By running the script python GUI.py, we can get visualization results for road lane line detection in GUI.
 
-```markdown ## 3. Project Organization
+## 3. Project Organization
 The project is organized as follows: 
 
+```markdown
 ├── README.md          				   <- The README for developers using this project.
 ├── image_processing_process           <- The folder includes images to display the whole image processing process for road lane line detection.
 ├── road_lane_detection_output         <- The detection results of road lane lines from all footages in the folder videos_input
