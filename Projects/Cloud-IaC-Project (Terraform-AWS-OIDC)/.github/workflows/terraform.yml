@@ -1,0 +1,79 @@
+name: AWS Terraform CI/CD (OIDC)
+run-name: >
+  Terraform
+  ${{ github.event_name == 'pull_request' && 'CI — Plan' || 'CI — Apply' }}
+  (${{ github.event_name == 'pull_request'
+        && format('PR #{0} from {1}', github.event.pull_request.number, github.head_ref)
+        || github.ref_name }})
+
+on:
+  push:
+    paths: 
+      - 'aws-demo/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'aws-demo/**'
+      - '.github/workflows/**'
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write   # Required: allow Github to request OIDC tokens
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aws-demo
+
+    steps:
+      # Step 1: Checkout repository code
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      # Step 3: Configure AWS credentials via OIDC (no static keys required)
+      - name: Configure AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::438336772967:role/ci-terraform-role
+          role-session-name: gha-terraform
+          aws-region: eu-north-1
+
+      # Step 4: Debug S3 head-bucket
+      - name: Debug S3 head-bucket
+        run: aws s3api head-bucket --bucket "${{ vars.BUCKET_NAME }}" || echo "head-bucket failed"
+
+      # Step 5: Quick identity check
+      - name: Who am I
+        run: aws sts get-caller-identity
+
+      # Step 6: Initialize Terraform
+      - name: Terraform Init
+        run: terraform init -input=false -reconfigure
+      
+      # Step 7: Check formatting
+      - name: Terraform Fmt (check)
+        run: terraform fmt -check -recursive -diff
+
+      # Step 8: Validate configuration
+      - name: Terraform Validate
+        run: terraform validate
+
+      # Step 9: Plan changes
+      - name: Terraform Plan
+        run: terraform plan -input=false -out=tf.plan -var "bucket_name=${{ vars.BUCKET_NAME }}"
+
+      # Step 10: Apply changes (only on main branch)
+      - name: Terraform Apply (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -auto-approve tf.plan
+
+      

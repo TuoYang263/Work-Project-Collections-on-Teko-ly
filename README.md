@@ -3,7 +3,7 @@
 
 Hi, I’m Tuo Yang – passionate about turning data into actionable solutions.
 
-Welcome! This repository contains a curated collection of machine learning, computer vision, NLP, and business analytics projects developed during my data science internship and personal studies. Each folder includes source code, documentation, and example outputs to demonstrate practical skills in real-world contexts.
+Welcome! This repository contains a curated collection of machine learning, computer vision, NLP, and business analytics projects, as well as data engineering case studies developed during my data science internship and personal studies. Each folder includes source code, documentation, and example outputs to demonstrate practical skills in real-world contexts.
 
 ---
 
@@ -11,6 +11,8 @@ Welcome! This repository contains a curated collection of machine learning, comp
 
 | Category                 | Project                                                                 |
 |--------------------------|-------------------------------------------------------------------------|
+| Data Engineering         | [NYC Yellow Taxi Data Pipeline (Delta Lake + Airflow)](./Projects/NYC-Taxi-Pipeline) |
+| Cloud Infrastructure     | [Terraform on AWS with GitHub OIDC](./Projects/Cloud-IaC-Project (Terraform-AWS-OIDC)) |
 | Machine Learning Projects| [Breast Cancer Classification](./Projects/BreastCancerClassification)    |
 | Data Science & Analytics | [Stock Price Prediction](./Projects/StockPricePrediction)                |
 | Data Science & Analytics | [Used Cars Price Prediction](./Projects/Used%20Cars%20Price%20Prediction%20-%20Data%20Science%20Project) |
@@ -35,6 +37,8 @@ These are the projects I'm most proud of—covering data analytics, predictive m
 
 | Project | Category | Description | Tech Stack |
 |--------|----------|-------------|------------|
+| [NYC Yellow Taxi Data Pipeline](./Projects/NYC-Taxi-Pipeline) | Data Engineering | Medallion architecture (Bronze/Silver/Gold) using Delta Lake & Airflow; BigQuery + Databricks dashboard integration. | PySpark, Delta Lake, Airflow, BigQuery |
+| [Terraform on AWS with GitHub OIDC](./Projects/Cloud-IaC-Project (Terraform-AWS-OIDC)) | Cloud IAC | Infrastructure as Code demo: S3 + IAM role provisioned via Terraform, deployed securely with GitHub Actions OIDC (no static keys). | Terraform, AWS, GitHub Actions |
 | [Stock Market Analysis](./Projects/Mini%20Project%201%20-%20Stock%20Market%20Analysis%20Using%20Python) | Finance | Time series forecasting and trend analysis on stock data. | Python, Pandas, Matplotlib |
 | [Used Cars Price Prediction](./Projects/Used%20Cars%20Price%20Prediction%20-%20Data%20Science%20with%20Python%20Certification%20Course%20Certification%20Project) | Regression | Predicts car prices using ML algorithms on structured datasets. | Python, scikit-learn, XGBoost |
 | [Consumer Complaint Analysis](./Projects/Mini%20Project%202%20-%20Consumer%20Complaint%20Resolution%20Analysis%20Using%20Python) | NLP & Analytics | Analyzes customer complaint trends and resolution outcomes. | Python, Pandas, NLP |
