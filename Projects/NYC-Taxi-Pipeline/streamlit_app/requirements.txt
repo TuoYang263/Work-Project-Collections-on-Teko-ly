@@ -1,4 +1,5 @@
-streamlit==1.45.1
+streamlit==1.49.1
+tornado==6.5.2
 pandas==2.2.3
 plotly==6.1.2
 google-cloud-bigquery==3.30.0

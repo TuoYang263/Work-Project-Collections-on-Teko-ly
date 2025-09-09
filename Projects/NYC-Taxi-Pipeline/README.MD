@@ -26,18 +26,19 @@ At present, the core modules are implemented, and testing/debugging is ongoing.
 
 ## 📂 Current Progress
 
-- ✅ **Bronze ingestion** implemented (`delta_medallion_pipeline.py`)  
-- ✅ **Silver transformation** implemented (reusing `transform_trip_data_spark.py`)  
-- ✅ **Gold aggregation** logic (hourly summary, pickup/dropoff by zone) written  
-- 🚧 **Debugging & Testing** of Medallion pipeline (in progress)  
-- 🚧 **BigQuery export** to analytics tables  
-- 🚧 **Databricks dashboard** (planned – will visualize Gold KPIs like trip volume & avg fare) 
+- ✅ Bronze ingestion implemented (`delta_medallion_pipeline.py`)  
+- ✅ Silver transformation implemented (reusing `transform_trip_data_spark.py`)  
+- ✅ Gold aggregation logic (hourly summary, pickup/dropoff by zone) written and tested  
+- ✅ Streamlit dashboard (Trend Viewer & Zone Heatmap) connected to Gold layer  
+- 🚧 BigQuery export to analytics tables (partially tested)  
+- 🚧 Databricks dashboard (planned – will visualize Gold KPIs like trip volume & avg fare) 
 
 ---
 
 ### 🗂️ System Architecture
 
 The pipeline follows a modular design that separates raw data ingestion, cleaning, cloud storage, orchestration, and frontend rendering.
+The pipeline also supports Delta Lake storage with Medallion layers (Bronze/Silver/Gold), enabling schema evolution and time-travel queries.
 
 1. **Download Raw Parquet Data**  
    A Python script pulls NYC Yellow Taxi trip records from the TLC S3 repository.  

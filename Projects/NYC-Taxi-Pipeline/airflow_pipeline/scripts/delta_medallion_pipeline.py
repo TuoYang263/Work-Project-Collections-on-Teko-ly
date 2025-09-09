@@ -1,7 +1,7 @@
 # scripts/delta_medallion_pipeline.py
-# Medallion (Bronze -> Sliver -> Gold) pipeline using Delta Lake + Spark
+# Medallion (Bronze -> Silver -> Gold) pipeline using Delta Lake + Spark
 # Bronze: ingest raw monthly parquet -> Delta
-# Sliver: clean/standardize
+# Silver: clean/standardize
 # Gold: aggregate hourly summary & zone daily summaries
 # Optional: export Gold hourly summary -> BigQuery
 
@@ -41,6 +41,11 @@ try:
 except Exception:
     from logger import get_logger
 
+try:
+    from scripts.get_bigquery_client import get_bigquery_client
+except Exception:
+    from get_bigquery_client import get_bigquery_client
+
 # Optional: delta-spark helper (if available in env)
 try:
     from delta import configure_spark_with_delta_pip
@@ -54,32 +59,65 @@ BASE_DIR = getattr(config, "BASE_DIR", PROJECT_ROOT)
 DELTA_BASE = os.path.join(BASE_DIR, "data", "delta")
 
 BRONZE_TRIPS = os.path.join(DELTA_BASE, "bronze", "trips")          # raw delta
-SLIVER_TRIPS = os.path.join(DELTA_BASE, "sliver", "trips_clean")    # cleaned
+SILVER_TRIPS = os.path.join(DELTA_BASE, "silver", "trips_clean")    # cleaned
 GOLD_SUMMARY_HOURLY = os.path.join(DELTA_BASE, "gold", "trip_summary_hourly")
 GOLD_ZONE_PICKUP_DAILY = os.path.join(DELTA_BASE, "gold", "zone_summary_pickup_daily")
 GOLD_ZONE_DROPOFF_DAILY = os.path.join(DELTA_BASE, "gold", "zone_summary_dropoff_daily")
 
-for p in [BRONZE_TRIPS, SLIVER_TRIPS, GOLD_SUMMARY_HOURLY,
+for p in [BRONZE_TRIPS, SILVER_TRIPS, GOLD_SUMMARY_HOURLY,
            GOLD_ZONE_PICKUP_DAILY, GOLD_ZONE_DROPOFF_DAILY]:
     os.makedirs(p, exist_ok=True)
 
 # ---------- Spark ----------
+from pyspark.sql import SparkSession
+
 def get_spark(app_name: str = "NYC Medallion (Delta)") -> SparkSession:
     """
-    Create SparkSession with Delta Lake enabled.
-    If delta helper isn't available, assume JARs are provided by the env.
+    Create or get a SparkSession with Delta Lake support enabled.
+    This function makes sure we always use a session configured with Delta,
+    even if another plain Spark session was created before.
     """
+
+    # 1) If an active Spark session exists but Delta is not enabled,
+    #    stop it to avoid reusing a misconfigured session.
+    active = SparkSession.getActiveSession()
+    if active:
+        exts = active.conf.get("spark.sql.extensions", "")
+        if "DeltaSparkSessionExtension" not in exts:
+            try:
+                active.stop()
+            except Exception:
+                pass
+
+    # 2) Try to import Delta's helper inside the function (not at module level).
+    #    This avoids the case where module import failed before Delta was installed.
+    try:
+        from delta import configure_spark_with_delta_pip  # type: ignore
+    except Exception:
+        configure_spark_with_delta_pip = None  # noqa: F811
+
+    # 3) Build SparkSession with Delta configurations.
     builder = (
         SparkSession.builder
         .appName(app_name)
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
         .config("spark.databricks.delta.schema.autoMerge.enabled", "true")
+        .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.2.0")
     )
-    if configure_spark_with_delta_pip is not None:
-        spark = configure_spark_with_delta_pip(builder).getOrCreate()
-    else:
-        spark = builder.getOrCreate()
+
+    # 4) If Delta helper is available, wrap the builder with it; otherwise fallback.
+    spark = (
+        configure_spark_with_delta_pip(builder).getOrCreate()
+        if configure_spark_with_delta_pip is not None
+        else builder.getOrCreate()
+    )
+
+    # 5) Final validation: make sure Delta extension is actually enabled.
+    exts = spark.conf.get("spark.sql.extensions", "")
+    if "DeltaSparkSessionExtension" not in exts:
+        raise RuntimeError(f"Delta not enabled. current spark.sql.extensions={exts}")
+
     return spark
 
 # ---------- Bronze ----------
@@ -89,6 +127,7 @@ def write_bronze(year: int, months: List[int]) -> str:
     Adds _ingest_time and partitions by pickup_day (if pickup timestsamp exists).
     """
     spark = get_spark("Bronze Ingest (Delta)")
+    logger.info(f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}")
     local_paths = download_to_local(year, months)   # returns local file paths
     if not local_paths:
         raise RuntimeError("No input files found for Bronze ingest.")
@@ -139,6 +178,7 @@ def write_silver() -> str:
     and persist Silver Delta.
     """
     spark = get_spark("Silver Clean (Delta)")
+    logger.info(f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}")
 
     logger.info(f"[Silver] Loading Bronze from: {BRONZE_TRIPS}")
     bronze = spark.read.format("delta").load(BRONZE_TRIPS)
@@ -165,6 +205,8 @@ def write_gold() -> dict:
       - zone_summary_dropoff_daily
     """
     spark = get_spark("Gold Aggregate (Delta)")
+    logger.info(f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}")
+    
     df = spark.read.format("delta").load(SILVER_TRIPS)
 
     # Minimal additional DQ filters (already mostly done in transform)
@@ -174,6 +216,18 @@ def write_gold() -> dict:
             filters.append(F.col(c) > 0)
     if filters:
         df = df.filter(reduce(lambda a, b: a & b, filters))
+
+    # Time Range Filtering
+    year = config.SETTINGS["data_config"]["year"]
+    months = config.SETTINGS["data_config"]["months"]
+
+    print(f"Year: {year}")
+    print(f"Month: {months}")
+
+    df = df.filter(
+        (F.year("tpep_pickup_datetime") == year) &
+        (F.month("tpep_pickup_datetime").isin(months))
+    )
 
     # Hourly summary
     summary_hourly = (
@@ -222,41 +276,70 @@ def write_gold() -> dict:
         "zone_dropoff_daily": GOLD_ZONE_DROPOFF_DAILY,
     }
 
+# ---------- Export Gold → BigQuery (3 tables) ----------
+def _bq_table_ref(project_id: str, dataset_id: str, table_name: str) -> str:
+    return f"{project_id}.{dataset_id}.{table_name}"
 
-# ---------- Export Gold → BigQuery ----------
-def export_gold_to_bigquery():
-    """
-    Export Gold hourly summary Delta table to BigQuery table:
-      <config.PROJECT_ID>.<config.DATASET_ID>.<config.SUMMARY_TABLE_NAME>
-    Requires GOOGLE_APPLICATION_CREDENTIALS or default creds.
-    """
+def _export_delta_to_bq(delta_path: str, table_ref: str):
     from google.cloud import bigquery
+    spark = get_spark("Export Delta -> BigQuery")
+    df = spark.read.format("delta").load(delta_path)
+    pdf = df.toPandas()
 
-    project_id = getattr(config, "PROJECT_ID", None)
-    dataset_id = getattr(config, "DATASET_ID", None)
-    table_name = getattr(config, "SUMMARY_TABLE_NAME", None)
-
-    if not (project_id and dataset_id and table_name):
-        raise RuntimeError("PROJECT_ID/DATASET_ID/SUMMARY_TABLE_NAME must be set in config.py")
-
-    table_ref = f"{project_id}.{dataset_id}.{table_name}"
-
-    spark = get_spark("Export Gold -> BigQuery")
-    summary = spark.read.format("delta").load(GOLD_SUMMARY_HOURLY)
-    pdf = summary.toPandas()
-
-    client = bigquery.Client(project=project_id)
+    client = get_bigquery_client()
     job_config = bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
         autodetect=True,
     )
+    logger.info(f"[Export] Uploading {delta_path} → {table_ref} ...")
+    job = client.load_table_from_dataframe(pdf, table_ref, job_config=job_config)
+    job.result()
+    logger.info(f"[Export] Upload complete: {table_ref}")
 
-    logger.info(f"[Export] Uploading Gold hourly summary to {table_ref} ...")
-    load_job = client.load_table_from_dataframe(pdf, table_ref, job_config=job_config)
-    load_job.result()
-    logger.info(f"[Export] Upload complete.")
+def export_gold_to_bigquery():
+    """
+    Backward-compatible: export ONLY hourly summary to BigQuery.
+    Table name comes from config.SUMMARY_TABLE_NAME (legacy).
+    """
+    project_id = getattr(config, "PROJECT_ID", None)
+    dataset_id = getattr(config, "DATASET_ID", None)
+    table_name = getattr(config, "SUMMARY_TABLE_NAME", None)  # legacy key
+
+    if not (project_id and dataset_id and table_name):
+        raise RuntimeError("PROJECT_ID/DATASET_ID/SUMMARY_TABLE_NAME must be set in config.py")
+
+    table_ref = _bq_table_ref(project_id, dataset_id, table_name)
+    _export_delta_to_bq(GOLD_SUMMARY_HOURLY, table_ref)
     return table_ref
 
+def export_all_gold_to_bigquery():
+    """
+    Export 3 Gold tables to BigQuery:
+      - hourly summary                → SUMMARY_TABLE_NAME (legacy) or 'trip_summary_hourly'
+      - zone_summary_pickup_daily     → ZONE_PICKUP_SUMMARY_TABLE_NAME or default name
+      - zone_summary_dropoff_daily    → ZONE_DROPOFF_SUMMARY_TABLE_NAME or default name
+    """
+    project_id = getattr(config, "PROJECT_ID", None)
+    dataset_id = getattr(config, "DATASET_ID", None)
+
+    if not (project_id and dataset_id):
+        raise RuntimeError("PROJECT_ID and DATASET_ID must be set in config.py")
+
+    # Get the table name (use names from config if it does have, otherwise by default)
+    hourly_tbl   = getattr(config, "SUMMARY_TABLE_NAME", "trip_summary_hourly")
+    pickup_tbl   = getattr(config, "ZONE_PICKUP_SUMMARY_TABLE_NAME", "zone_summary_pickup_daily")
+    dropoff_tbl  = getattr(config, "ZONE_DROPOFF_SUMMARY_TABLE_NAME", "zone_summary_dropoff_daily")
+
+    # Delta → BQ
+    _export_delta_to_bq(GOLD_SUMMARY_HOURLY,      _bq_table_ref(project_id, dataset_id, hourly_tbl))
+    _export_delta_to_bq(GOLD_ZONE_PICKUP_DAILY,   _bq_table_ref(project_id, dataset_id, pickup_tbl))
+    _export_delta_to_bq(GOLD_ZONE_DROPOFF_DAILY,  _bq_table_ref(project_id, dataset_id, dropoff_tbl))
+
+    return {
+        "hourly":  _bq_table_ref(project_id, dataset_id, hourly_tbl),
+        "pickup":  _bq_table_ref(project_id, dataset_id, pickup_tbl),
+        "dropoff": _bq_table_ref(project_id, dataset_id, dropoff_tbl),
+    }
 
 # ---------- Airflow-friendly callables ----------
 def bronze_task(**_):
@@ -270,8 +353,8 @@ def silver_task(**_):
 def gold_task(**_):
     return write_gold()
 
-def export_bq_task(**_):
-    return export_gold_to_bigquery()
+def export_bq_all_task(**_):
+    return export_all_gold_to_bigquery()
 
 if __name__ == "__main__":
     # Local sequential run (optional)

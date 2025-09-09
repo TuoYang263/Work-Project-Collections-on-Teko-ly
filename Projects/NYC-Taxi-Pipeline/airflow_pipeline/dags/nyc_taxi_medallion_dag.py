@@ -9,15 +9,15 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 
 # Ensure project root & scripts/ are importable
-DAG_DIR = os.path.dirname(__file__)
-PROJECT_ROOT = os.path.abspath(os.path.join(DAG_DIR))
+DAG_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(DAG_DIR, os.pardir))
 SCRIPTS_DIR = os.path.join(PROJECT_ROOT, "scripts")
 
-for p in [PROJECT_ROOT, SCRIPTS_DIR]:
+for p in [SCRIPTS_DIR, PROJECT_ROOT]:
     if p not in sys.path:
         sys.path.append(p)
 
-from logger import get_logger  # or scripts.logger, both ok
+from scripts import get_logger  # or scripts.logger, both ok
 logger = get_logger("nyc_taxi_medallion_dag")
 
 # Robust import of pipeline module
@@ -61,7 +61,7 @@ with DAG(
 
     export_bq = PythonOperator(
         task_id="export_gold_to_bigquery",
-        python_callable=pipeline.export_bq_task,
+        python_callable=pipeline.export_bq_all_task,
     )
 
     bronze >> silver >> gold >> export_bq
