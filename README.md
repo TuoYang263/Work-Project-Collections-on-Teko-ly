@@ -1,104 +1,95 @@
+# Data Engineering Portfolio — Tuo Yang
 
-# 📂 Data Projects Portfolio
+Hi, I’m Tuo.
 
-Hi, I’m Tuo Yang – passionate about turning data into actionable solutions.
+I build **reliable, end-to-end data pipelines** — from raw ingestion and transformation to analytics-ready tables and dashboards.
 
-Welcome! This repository contains a curated collection of machine learning, computer vision, NLP, and business analytics projects, as well as data engineering case studies developed during my data science internship and personal studies. Each folder includes source code, documentation, and example outputs to demonstrate practical skills in real-world contexts.
+My background is in data science and analytics, which helps with data quality checks, business logic, and downstream use cases.  
+Over time, my work has shifted toward **data engineering and production systems**.
 
----
-
-## 🔍 Quick Project Index
-
-| Category                 | Project                                                                 |
-|--------------------------|-------------------------------------------------------------------------|
-| Data Engineering         | [NYC Yellow Taxi Data Pipeline (Delta Lake + Airflow)](./Projects/NYC-Taxi-Pipeline) |
-| Cloud Infrastructure     | [Terraform on AWS with GitHub OIDC](./Projects/Cloud-IaC-Terraform-AWS-OIDC) |
-| Machine Learning Projects| [Breast Cancer Classification](./Projects/BreastCancerClassification)    |
-| Data Science & Analytics | [Stock Price Prediction](./Projects/StockPricePrediction)                |
-| Data Science & Analytics | [Used Cars Price Prediction](./Projects/Used%20Cars%20Price%20Prediction%20-%20Data%20Science%20Project) |
-| Computer Vision Projects | [Real-Time Face Mask Detector](./Projects/Real-Time_Face_Mask_Detector)  |
-| Computer Vision Projects | [Handwritten Digit Recognition](./Projects/HandwrittenDigitRecognition)  |
-| Computer Vision Projects | [Road Lane Line Detection](./Projects/RoadLaneLineDetection)              |
-| Computer Vision Projects | [Sign Language Recognition](./Projects/SignLanguageRecognition)          |
-| Computer Vision Projects | [Image Cartoonifier](./Projects/Image_Cartoonier)                        |
-| Computer Vision Projects | [Color Detection](./Projects/ColorDetection)                             |
-| NLP                      | [Fake News Detection](./Projects/FakeNewsDetectionwithPythonandML)       |
-| NLP                      | [Twitter Sentiment Analysis](./Projects/Mini%20Project%203%20-%20Twitter%20Sentimental%20Analysis%20Using%20NLP%20and%20Python) |
-| BI & Analytics           | [Power BI Maven Project](./Projects/Power-BI-Maven-Project)              |
-| BI & Analytics           | [Industry Core Infrastructure](./Projects/Mini%20Project%204%20-%20Industry%20Core%20Infrastructure) |
-| Data Science & Analytics | [Movie Recommender System](./Projects/DSML%20Internship%20Certification%20Project-Movie%20Recommender%20System) |
-| Data Science & Analytics | [Consumer Complaint Resolution](./Projects/Mini%20Project%202%20-%20Consumer%20Complaint%20Resolution%20Analysis%20Using%20Python) |
-| Data Science & Analytics | [Stock Market Analysis](./Projects/Mini%20Project%201%20-%20Stock%20Market%20Analysis%20Using%20Python) |
-| Computer Vision Projects | [Deep Surveillance](./Projects/DeepSurveillanceWithDeepLearning)
-
-## 🚀 Featured Projects (Data Science & Analytics)
-
-These are the projects I'm most proud of—covering data analytics, predictive modeling, and business insights.
-
-| Project | Category | Description | Tech Stack |
-|--------|----------|-------------|------------|
-| [NYC Yellow Taxi Data Pipeline](./Projects/NYC-Taxi-Pipeline) | Data Engineering | Medallion architecture (Bronze/Silver/Gold) using Delta Lake & Airflow; BigQuery + Databricks dashboard integration. | PySpark, Delta Lake, Airflow, BigQuery |
-| [Terraform on AWS with GitHub OIDC](./Projects/Cloud-IaC-Terraform-AWS-OIDC) | Cloud IAC | Infrastructure as Code demo: S3 + IAM role provisioned via Terraform, deployed securely with GitHub Actions OIDC (no static keys). | Terraform, AWS, GitHub Actions |
-| [Stock Market Analysis](./Projects/Mini%20Project%201%20-%20Stock%20Market%20Analysis%20Using%20Python) | Finance | Time series forecasting and trend analysis on stock data. | Python, Pandas, Matplotlib |
-| [Used Cars Price Prediction](./Projects/Used%20Cars%20Price%20Prediction%20-%20Data%20Science%20with%20Python%20Certification%20Course%20Certification%20Project) | Regression | Predicts car prices using ML algorithms on structured datasets. | Python, scikit-learn, XGBoost |
-| [Consumer Complaint Analysis](./Projects/Mini%20Project%202%20-%20Consumer%20Complaint%20Resolution%20Analysis%20Using%20Python) | NLP & Analytics | Analyzes customer complaint trends and resolution outcomes. | Python, Pandas, NLP |
-| [Power BI Sales Dashboard](./Projects/Power-BI-Maven-Project) | Business Analytics | Interactive business intelligence dashboard with KPIs. | Power BI |
-| [Movie Recommendation System](./Projects/DSML%20Internship%20Certification%20Project-Movie%20Recommender%20System) | Recommender System | Collaborative filtering-based movie recommender engine. | Python, surprise library |
+This repository highlights the projects that best represent my current focus.
 
 ---
 
-## 🧠 Machine Learning Projects
+## ⭐ Featured Project — Primary Focus
 
-| Project | Description |
-|--------|-------------|
-| [Breast Cancer Classification](./Projects/BreastCancerClassification) | Supervised classification to detect malignancy in cancer data. |
-| [Used Cars Price Prediction](./Projects/Used%20Cars%20Price%20Prediction%20-%20Data%20Science%20with%20Python%20Certification%20Course%20Certification%20Project) | Regression model to predict used car prices. |
+### 🚕 NYC Yellow Taxi Data Engineering Pipeline  
+**End-to-end batch data pipeline with analytics and visualization**
 
----
+This project covers the full path from ingestion to consumption:
 
-## 🖼️ Computer Vision Projects
+- Designed a medallion-style data model (raw → cleaned → aggregated)
+- Implemented batch transformations using PySpark
+- Loaded analytics tables into BigQuery for downstream querying
+- Built interactive dashboards with Streamlit for exploration and reporting
+- Structured to be cloud-portable and migration-ready
 
-| Project | Description |
-|--------|-------------|
-| [Face Mask Detection](./Projects/Real-Time_Face_Mask_Detector) | Real-time detection of face masks using OpenCV and deep learning. |
-| [Handwritten Digit Recognition](./Projects/HandwrittenDigitRecognition) | MNIST digit classification using CNNs. |
-| [Road Lane Line Detection](./Projects/RoadLaneLineDetection) | Lane detection using edge detection and perspective transforms. |
-| [Sign Language Recognition](./Projects/SignLanguageRecognition) | CNN-based classification of ASL signs. |
-| [Image Cartoonifier](./Projects/Image_Cartoonier) | Turns real images into cartoon-style using OpenCV filters. |
-| [Color Detection](./Projects/ColorDetection) | Identifies named colors in real-time via HSV color space. |
+**Tech stack:**  
+PySpark · BigQuery · Airflow · Docker · Streamlit · SQL
 
----
-
-## 🗣️ Natural Language Processing (NLP)
-
-| Project | Description |
-|--------|-------------|
-| [Fake News Detection](./Projects/FakeNewsDetectionwithPythonandML) | Classifies fake vs. real news using NLP and ML. |
-| [Twitter Sentiment Analysis](./Projects/Mini%20Project%203%20%20%E2%80%93%20Twitter%20Sentimental%20Analysis%20Using%20NLP%20and%20Python) | Analyzes sentiment in tweets using NLP techniques. |
+👉 View pipeline design, code, and usage details:  
+[`NYC-Taxi-Pipeline`](./Projects/NYC-Taxi-Pipeline)
 
 ---
 
-## 📊 Business Analytics
+## ☁️ Cloud & Infrastructure — Supporting Project
 
-| Project | Description |
-|--------|-------------|
-| [Power BI Dashboard](./Projects/Power-BI-Maven-Project) | Interactive sales dashboard and insights. |
-| [Industry Core Infrastructure](./Projects/Mini%20Project%204%20-%20lndustry%20Core%20Infrastructure) | Data-driven insight into key infrastructure industries. |
+### Terraform on AWS with GitHub OIDC
+
+A compact infrastructure project with an emphasis on security and repeatability:
+
+- Provisioned resources using Terraform
+- Set up CI/CD with GitHub Actions OIDC (no static credentials)
+- Kept infrastructure and application logic separated
+
+**Tech stack:**  
+Terraform · AWS · GitHub Actions
+
+👉 View infrastructure setup and CI/CD configuration:  
+[`Cloud-IaC-Terraform-AWS-OIDC`](./Projects/Cloud-IaC-Terraform-AWS-OIDC)
 
 ---
 
-## 🧰 Tools & Tech Stack
+## 📊 Analytics & Data Science Background
 
-- **Languages:** Python, SQL
-- **Libraries:** Pandas, NumPy, scikit-learn, Matplotlib, Seaborn, OpenCV, TensorFlow, Keras, XGBoost
-- **NLP:** NLTK, spaCy, TF-IDF, sentiment analysis
-- **Visualization:** Power BI, Matplotlib, Seaborn
-- **Others:** Jupyter Notebook, Git, VS Code
+Before moving into data engineering, I worked on analytics and modeling projects.  
+That background still informs how I design pipelines — especially around data meaning, correctness, and business context.
+
+Selected examples include:
+
+- Stock Market Analysis (time series exploration and trend analysis)
+- Consumer Complaint Resolution (NLP-driven analysis)
+- Used Cars Price Prediction (regression and feature engineering)
+- Power BI Sales Dashboard (business reporting and KPI tracking)
+
+👉 Related analytics and modeling projects are available under the `Projects/` directory.
+
+---
+
+## 🧪 Archived / Learning Projects
+
+This repository also includes earlier projects in machine learning, computer vision, and NLP from coursework and self-study.
+
+They are kept for reference, but they are not the focus of my current work.
+
+👉 Archived projects are available under the `Projects/` directory for reference.
+
+---
+
+## 🧰 Core Skills & Tools
+
+- **Languages:** Python, SQL  
+- **Data Engineering:** PySpark, BigQuery, Airflow, Docker  
+- **Analytics & BI:** Pandas, Streamlit, Power BI  
+- **Cloud & DevOps:** Terraform, GitHub Actions  
+- **Workflow:** Git, Jupyter, reproducible pipelines
 
 ---
 
 ## 📫 Contact
 
-Thanks for visiting my project collection! If you'd like access to specific repos or notebooks, feel free to reach out via [LinkedIn](https://www.linkedin.com/in/tuo-yang-6b772b207/).
+If you are reviewing this repository as part of a job application,  
+the **NYC Yellow Taxi pipeline** is the best place to start.
 
-_I'm always open to discussing data-driven opportunities._
+LinkedIn:  
+https://www.linkedin.com/in/tuo-yang-6b772b207/
