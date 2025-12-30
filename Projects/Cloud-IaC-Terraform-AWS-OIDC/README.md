@@ -1,4 +1,16 @@
+# Who is this for
+This demo is intended as a reference for engineers who want a clean,
+secure baseline for Terraform CI/CD on AWS using GitHub Actions OIDC.
+
 # Cloud IAC Demos – Terraform on AWS (GitHub OIDC)
+This repository demonstrates a minimal but production-realistic
+Terraform + GitHub Actions + AWS setup using OIDC authentication
+(no long-lived credentials).
+
+The focus is on showing secure CI authentication, clear plan/apply
+separation, and least-privilege IAM patterns that are directly
+applicable to larger data or platform projects.
+
 This repo shows how to use **Terraform** with **GitHub Actions + OIDC** (no long-lived keys) to create:
 * one **S3 demo bucket**, and
 * one small **IAM role** for the demo.
@@ -9,7 +21,7 @@ CI runs `plan` on pull requests and runs `apply` only after merging to **main**.
 
 ---
 
-## What’s in the repo
+## What’s in the repo (structure overview)
 
 ```text
 .github/workflows/terraform.yml      # GitHub Actions workflow (OIDC)
@@ -30,7 +42,7 @@ docs/
 
 ---
 
-## One-time AWS setup
+## One-time AWS setup (Manual AWS console steps, done once)
 **1. Remote state (do this once)**
 * Create an S3 bucket, e.g. `tf-state-438336772967-eu-north-1`.
 * Create a DynamoDB table tf-lock-eu-north-1 (partition key LockID).
@@ -122,6 +134,10 @@ The policy grants only what’s needed:
 
 If you want to make it even tighter later, replace the bucket wildcard with your final bucket ARN.
 
+While the resources here are intentionally small, the CI/CD and IAM
+patterns are designed to be portable to larger, real-world
+infrastructure setups.
+
 ---
 
 ## Clean up
@@ -131,6 +147,11 @@ terraform destroy -auto-approve -var "bucket_name=<your-bucket>"
 ```
 
 If you’re done with the demo for good, empty and delete the remote state bucket and the DynamoDB lock table (or keep them for future demos).
+
+---
+
+## Status
+Stable demo project. No further features planned.
 
 ---
 
