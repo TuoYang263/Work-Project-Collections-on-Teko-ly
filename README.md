@@ -4,7 +4,8 @@ Hi, I’m Tuo.
 
 I build **reliable, end-to-end data pipelines** — from raw ingestion and transformation to analytics-ready tables and dashboards.
 
-My background is in data science and analytics, which helps with data quality checks, business logic, and downstream use cases.  
+My background is in data science and analytics, which helps with data quality checks, business logic, and downstream use cases.
+  
 Over time, my work has shifted toward **data engineering and production systems**.
 
 This repository highlights the projects that best represent my current focus.
