@@ -44,7 +44,11 @@ PLOTLY_TEMPLATE = SETTINGS.get('plotly_template', "plotly_white")
 MAP_CENTER = SETTINGS.get('map_center', {"lat": 40.7128, "lon": -74.0060})
 
 # -----------------------------------
-# Credentials
+# Credentials (local only, NOT used in Streamlit Cloud)
 # -----------------------------------
 raws_creds_path = SETTINGS.get('google_application_credentials', '')
-SERVICE_ACCOUNT_PATH = os.path.join(PROJECT_BASE_DIR, os.path.expandvars(raws_creds_path))
+SERVICE_ACCOUNT_PATH = (
+    os.path.join(PROJECT_BASE_DIR, os.path.expandvars(raws_creds_path))
+    if raws_creds_path else None
+)
+
