@@ -2,10 +2,10 @@
 # BigQuery Upload
 # ------------------------------------------------
 bigquery_config:
-  project_id: ${BQ_PROJECT_ID}
-  dataset: ${BQ_DATASET}
-  table: ${BQ_TABLE}
-  summary_table: ${BQ_SUMMARY_TABLE}
+  project_id: balmy-nuance-468118-g4
+  dataset: nyc_taxi
+  table: yellow_tripdata_cleaned
+  summary_table: trip_summary_hourly
 
 # ------------------------------------------------
 # GeoJSON Config
