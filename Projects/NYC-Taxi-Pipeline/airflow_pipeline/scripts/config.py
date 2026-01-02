@@ -35,6 +35,14 @@ TABLE_NAME = os.path.expandvars(raw_table_name)
 raw_summary_table_name = SETTINGS.get('bigquery_config', {}).get('summary_table', '')
 SUMMARY_TABLE_NAME = os.path.expandvars(raw_summary_table_name)
 
+raw_location_name = SETTINGS.get('bigquery_config', {}).get('location', '')
+LOCATION = (
+    os.getenv("BQ_LOCATION")
+    or os.path.expandvars(raw_location_name)
+)
+
+print(LOCATION)
+
 # -----------------------------------
 # Credentials
 # -----------------------------------

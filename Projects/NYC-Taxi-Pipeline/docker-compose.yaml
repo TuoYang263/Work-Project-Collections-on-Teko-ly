@@ -78,7 +78,7 @@ x-airflow-common:
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
     # The following line can be used to set a custom config file, stored in the local config folder
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
-    GOOGLE_APPLICATION_CREDENTIALS_PATH: ${GOOGLE_APPLICATION_CREDENTIALS_PATH}
+    GOOGLE_APPLICATION_CREDENTIALS: '/opt/airflow/creds/gcp_service_account.json'
     BQ_PROJECT_ID: ${BQ_PROJECT_ID}
     BQ_DATASET: ${BQ_DATASET}
     BQ_TABLE: ${BQ_TABLE}
@@ -90,7 +90,7 @@ x-airflow-common:
     - ./airflow_pipeline/logs:/opt/airflow/logs
     - ./airflow_pipeline/data:/opt/airflow/data
     - ./creds:/opt/airflow/creds
-  user: "${AIRFLOW_UID:-50000}:0"
+  # user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
     redis:
@@ -239,7 +239,7 @@ services:
         airflow db upgrade &&
         airflow users create --username ${_AIRFLOW_WWW_USER_USERNAME} --password ${_AIRFLOW_WWW_USER_PASSWORD} --role Admin --email admin@example.com --firstname Admin --lastname User
       "
-    user: "0:0"
+    # user: "0:0"
 
   airflow-cli:
     <<: *airflow-common
@@ -288,12 +288,12 @@ services:
       - ./streamlit_app:/app
       - ./creds:/app/creds
     environment:
-      - DOCKER_CONTAINER=true
-      - GOOGLE_APPLICATION_CREDENTIALS_PATH=${GOOGLE_APPLICATION_CREDENTIALS_PATH}
-      - BQ_PROJECT_ID=${BQ_PROJECT_ID}
-      - BQ_DATASET=${BQ_DATASET}
-      - BQ_TABLE=${BQ_TABLE}
-      - BQ_SUMMARY_TABLE=${BQ_SUMMARY_TABLE}
+      DOCKER_CONTAINER: "true"
+      GOOGLE_APPLICATION_CREDENTIALS: /app/creds/gcp_service_account.json
+      BQ_PROJECT_ID: ${BQ_PROJECT_ID}
+      BQ_DATASET: ${BQ_DATASET}
+      BQ_TABLE: ${BQ_TABLE}
+      BQ_SUMMARY_TABLE: ${BQ_SUMMARY_TABLE}
 
 volumes:
   postgres-db-volume:

@@ -27,12 +27,29 @@ def build_csv_filename_from_config() -> str:
     months = config.SETTINGS["data_config"]["months"]
     return f"yellow_tripdata_{year}_m{min(months)}to{max(months)}_cleaned.csv"
 
+def ensure_dataset_exists(client):
+    dataset_id = f"{config.PROJECT_ID}.{config.DATASET_ID}"
+
+    try:
+        client.get_dataset(dataset_id)
+        logger.info(f"Dataset already exists: {dataset_id}")
+    except Exception:
+        logger.info(f"Dataset not found, creating: {dataset_id}")
+        dataset = bigquery.Dataset(dataset_id)
+        # dataset.location = config.LOCATION
+        dataset.location = "EU"
+        client.create_dataset(dataset)
+        logger.info(f"Dataset created: {dataset_id}")
+
 def upload_csv_to_bq():
     """Upload a local csv file to BigQuery."""
     assert config.TABLE_NAME != config.SUMMARY_TABLE_NAME, \
            "TABLE_NAME and SUMMARY_TABLE_NAME must be different!"
 
     client = get_bigquery_client()
+
+    # Make sure the GCP BigQuery dataset is created if it doesn't exist
+    ensure_dataset_exists(client)
 
     # Construct file path
     csv_file = build_csv_filename_from_config()
@@ -85,3 +102,4 @@ def run_upload_to_bq():
 
 if __name__ == "__main__":
     run_upload_to_bq()
+    
