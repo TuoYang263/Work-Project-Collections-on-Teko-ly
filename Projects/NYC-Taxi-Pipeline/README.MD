@@ -57,6 +57,8 @@ Each layer has a clear responsibility, which simplifies debugging, testing, and 
 5. **Visualization with Streamlit**  
    A Streamlit dashboard queries BigQuery directly to visualize trends and zone-level activity.
 
+---
+
 ### Live Demo (Streamlit Cloud)
 
 The Streamlit dashboard is deployed on Streamlit Cloud and connects directly to BigQuery.
@@ -69,6 +71,8 @@ No local credentials or Docker setup are required to access the dashboard.
 
 This project is primarily intended as a portfolio and demo system.
 The live dashboard represents the main entry point for reviewers.
+
+---
 
 ### Local Setup
 
@@ -128,6 +132,8 @@ Make sure the following are installed:
      *(username/password: `airflow` / `airflow`)
    - **Streamlit Dashboard**: [http://localhost:8700](http://localhost:8700)
 
+---
+
 ### Configuration Overview
 
 The project separates configuration into two layers:
@@ -139,6 +145,8 @@ The project separates configuration into two layers:
   Used for pipeline parameters such as time range, Spark settings, and target tables.
 
 This separation keeps sensitive values out of source control while allowing the pipeline behavior to be adjusted without code changes.
+
+---
 
 ### Containerization and CI
 
@@ -180,6 +188,8 @@ Make sure:
 
 This is a lightweight way to test the core features without spinning up Docker.
 
+---
+
 ### Deployment Pitfalls and Design Decisions
 
 Several design decisions were made during development to reduce operational risk and simplify deployment:
@@ -192,6 +202,8 @@ Several design decisions were made during development to reduce operational risk
 
 - **Local vs cloud execution**  
   The pipeline runs fully in Docker for local reproducibility, while the Streamlit Cloud deployment relies on managed secrets and direct BigQuery access.
+
+---
 
 ### Project Structure
 
@@ -269,6 +281,8 @@ pyproject.toml                   # Python project metadata
 README.md                        # This documentation
 ```
 
+---
+ 
 ### Possible Extensions
 
 - Incremental loading using partitioned BigQuery tables
