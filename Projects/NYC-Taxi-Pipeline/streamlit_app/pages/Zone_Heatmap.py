@@ -41,7 +41,7 @@ def load_zone_summary(location_type):
 
 # ---------- UI ----------
 st.set_page_config(page_title="Zone Heatmap", layout="wide")
-st.title("🗺️ NYC Yellow Taxi Zone Heatmap")
+st.title("NYC Yellow Taxi Zone Heatmap")
 
 st.markdown("""
 Explore average fare, tip, trip volume and other metrics for each NYC taxi zone.
@@ -64,7 +64,7 @@ min_day = zone_df["date"].min().to_pydatetime()
 max_day = zone_df["date"].max().to_pydatetime()
 
 if view_mode == "Raw":
-    selected_day = st.slider("📅 Select a day",
+    selected_day = st.slider("Select a day",
         min_value=min_day,
         max_value=max_day,
         value=min_day,
@@ -72,7 +72,7 @@ if view_mode == "Raw":
     df_day = zone_df[zone_df["date"] == selected_day].copy()
     title_suffix = selected_day.strftime("%Y-%m-%d")
 else:
-    date_range = st.slider("📆 Select date range",
+    date_range = st.slider("Select date range",
         min_value=min_day,
         max_value=max_day,
         value=(min_day, max_day),
@@ -111,9 +111,9 @@ fig = px.choropleth_mapbox(
 
 st.plotly_chart(fig, use_container_width=True)
 
-st.caption("💾 Data exported as .csv – includes zone name, metric values")
+st.caption("Data exported as .csv – includes zone name, metric values")
 st.download_button(
-    label="⬇️ Export CSV",
+    label="Export CSV",
     data=df_day.to_csv(index=False),
     file_name=f"zone_{location_type}_{selected_metric}_{view_mode.lower()}.csv",
     mime="text/csv"

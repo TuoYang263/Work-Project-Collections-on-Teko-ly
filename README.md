@@ -12,9 +12,9 @@ This repository highlights the projects that best represent my current focus.
 
 ---
 
-## ⭐ Featured Project — Primary Focus
+## Featured Project — Primary Focus
 
-### 🚕 NYC Yellow Taxi Data Engineering Pipeline  
+### NYC Yellow Taxi Data Engineering Pipeline  
 **End-to-end batch data pipeline with analytics and visualization**
 
 This project covers the full path from ingestion to consumption:
@@ -28,12 +28,12 @@ This project covers the full path from ingestion to consumption:
 **Tech stack:**  
 PySpark · BigQuery · Airflow · Docker · Streamlit · SQL
 
-👉 View pipeline design, code, and usage details:  
+View pipeline design, code, and usage details:  
 [`NYC-Taxi-Pipeline`](./Projects/NYC-Taxi-Pipeline)
 
 ---
 
-## ☁️ Cloud & Infrastructure — Supporting Project
+## Cloud & Infrastructure — Supporting Project
 
 ### Terraform on AWS with GitHub OIDC
 
@@ -46,12 +46,12 @@ A compact infrastructure project with an emphasis on security and repeatability:
 **Tech stack:**  
 Terraform · AWS · GitHub Actions
 
-👉 View infrastructure setup and CI/CD configuration:  
+View infrastructure setup and CI/CD configuration:  
 [`Cloud-IaC-Terraform-AWS-OIDC`](./Projects/Cloud-IaC-Terraform-AWS-OIDC)
 
 ---
 
-## 📊 Analytics & Data Science Background
+## Analytics & Data Science Background
 
 Before moving into data engineering, I worked on analytics and modeling projects.  
 That background still informs how I design pipelines — especially around data meaning, correctness, and business context.
@@ -63,21 +63,21 @@ Selected examples include:
 - Used Cars Price Prediction (regression and feature engineering)
 - Power BI Sales Dashboard (business reporting and KPI tracking)
 
-👉 Related analytics and modeling projects are available under the `Projects/` directory.
+Related analytics and modeling projects are available under the `Projects/` directory.
 
 ---
 
-## 🧪 Archived / Learning Projects
+## Archived / Learning Projects
 
 This repository also includes earlier projects in machine learning, computer vision, and NLP from coursework and self-study.
 
 They are kept for reference, but they are not the focus of my current work.
 
-👉 Archived projects are available under the `Projects/` directory for reference.
+Archived projects are available under the `Projects/` directory for reference.
 
 ---
 
-## 🧰 Core Skills & Tools
+## Core Skills & Tools
 
 - **Languages:** Python, SQL  
 - **Data Engineering:** PySpark, BigQuery, Airflow, Docker  
@@ -87,7 +87,7 @@ They are kept for reference, but they are not the focus of my current work.
 
 ---
 
-## 📫 Contact
+## Contact
 
 If you are reviewing this repository as part of a job application,  
 the **NYC Yellow Taxi pipeline** is the best place to start.

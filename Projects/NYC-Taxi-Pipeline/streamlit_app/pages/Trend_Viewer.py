@@ -28,14 +28,14 @@ def load_summary_table():
 
 # ---------- UI Layout ----------
 st.set_page_config(page_title="Trend Viewer", layout="wide")
-st.title("📈 NYC Yellow Taxi Trend Viewer")
+st.title("NYC Yellow Taxi Trend Viewer")
 
 st.markdown("""
 This chart shows the evolution of key metrics such as trip count, fare, tip, and more, aggregated by hourly, daily or weekly level.
 """)
 
-granularity = st.selectbox("⏱️ Choose time granularity:", config.DEFAULT_GRANULARITIES)
-metrics = st.multiselect("📊 Select metrics to display:", [
+granularity = st.selectbox("Choose time granularity:", config.DEFAULT_GRANULARITIES)
+metrics = st.multiselect("Select metrics to display:", [
     "trip_count", "avg_fare", "avg_tip", "total_passengers", "avg_distance"
 ], default=["trip_count"])
 
@@ -64,7 +64,7 @@ max_time = pd.to_datetime(df_grouped["time"].max()).to_pydatetime()
 
 if granularity == "Hourly":
     slider_value = st.slider(
-        "🗓️ Select time range:",
+        "Select time range:",
         min_value=min_time,
         max_value=max_time,
         value=(min_time, max_time),
@@ -72,7 +72,7 @@ if granularity == "Hourly":
     )
 else:
     slider_value = st.slider(
-        "🗓️ Select time range:",
+        "Select time range:",
         min_value=min_time,
         max_value=max_time,
         value=(min_time, max_time),
@@ -91,7 +91,7 @@ df_grouped = df_grouped[
 # ---------- Chart Drawing ----------
 metric_names = [m.replace('_', ' ').title() for m in metrics]
 
-st.markdown(f"### 📈 {' & '.join(metric_names)} over Time ({granularity})")
+st.markdown(f"### {' & '.join(metric_names)} over Time ({granularity})")
 
 for metric in metrics:
     fig = px.line(

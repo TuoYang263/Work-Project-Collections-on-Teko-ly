@@ -1,9 +1,9 @@
 
-# Maven Market Sales Dashboard 📊
+# Maven Market Sales Dashboard
 
 This Power BI project showcases an end-to-end business intelligence solution built on a fictional retail dataset provided by Maven Analytics. The goal was to explore sales performance across products, regions, and time while enabling decision-makers to track KPIs and uncover key trends.
 
-## 🚀 Project Overview
+## Project Overview
 
 This dashboard was built to analyze the sales and return activity of a fictional retail chain called **Maven Market**, covering the years 1997 and 1998. It helps answer important business questions such as:
 
@@ -12,10 +12,10 @@ This dashboard was built to analyze the sales and return activity of a fictional
 - Are there any seasonal trends or spikes in returns?
 - Which stores or regions are underperforming?
 
-## 📁 Project Structure
+## Project Structure
 
 ```
-📂 Maven Market Project
+Maven Market Project
 ├── MavenMarket_Report.pbix                # Power BI dashboard file
 ├── Maven_Market.png                       # The icon of Maven Market 
 ├── MavenMarket_Dashboard.png  	         # Screenshot of the final dashboard
@@ -24,7 +24,7 @@ This dashboard was built to analyze the sales and return activity of a fictional
 ├── Maven+Market+CSV+Files/                # Supporting datasets (Products, Customers, Stores, etc.)
 ```
 
-## 🔧 Key Features & Steps
+## Key Features & Steps
 
 - **Data Cleaning**: Combined multiple CSV files (transactions, customers, returns, etc.) and ensured consistency in date formats and fields.
 - **Data Modeling**: Built a star schema data model with clear relationships between dimension and fact tables.
@@ -35,22 +35,22 @@ This dashboard was built to analyze the sales and return activity of a fictional
   - Monthly trend analysis with slicers
 - **Visual Design**: Focused on clarity and usability. Used cards, bar charts, maps, and trend lines to convey insights.
 
-## 🖼️ Sample Dashboard
+## Sample Dashboard
 
 ![Dashboard Preview](MavenMarket_Dashboard.png)
 
-## 🎬 Demo Video
+## Demo Video
 
 A short demo video is included (`Power BI Demo Video.mp4`) to walk through the dashboard functionality and how it supports business decision-making.
 
-## 🧠 What I Learned
+## What I Learned
 
 - Structuring complex datasets for analytical modeling
 - Using DAX for custom KPIs and conditional formatting
 - Designing clean and functional business dashboards
 - Best practices for data storytelling with Power BI
 
-## 📌 Tools Used
+## Tools Used
 
 - Power BI Desktop
 - Microsoft Excel (for quick data inspection)

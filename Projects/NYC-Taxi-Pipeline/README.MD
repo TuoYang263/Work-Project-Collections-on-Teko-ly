@@ -1,73 +1,76 @@
-# NYC Yellow Taxi Data Pipeline 🚕📊
+# NYC Yellow Taxi Data Pipeline
 
-This project demonstrates a complete data pipeline built for NYC Yellow Taxi trip data.  
-It covers real-world ELT steps: downloading raw data, cleaning it with PySpark, uploading to BigQuery, and visualizing trends via Streamlit.
+This project implements a production-style data pipeline for NYC Yellow Taxi trip data.
 
-Everything runs locally in Docker, but cloud operations (like storage and querying) are delegated to GCP services like BigQuery.  
-The pipeline is also fully orchestrated using Airflow, with container builds automated through GitHub Actions.
+It ingests raw trip records, transforms them using PySpark, stores analytics-ready tables in BigQuery, and exposes key metrics through a Streamlit dashboard.
 
-The pipeline has recently been refactored towards a **Medallion architecture (Bronze → Silver → Gold)** using **Delta Lake** and orchestrated by **Airflow**.  
-At present, the core modules are implemented, and testing/debugging is ongoing.
+The system is fully containerized and orchestrated with Airflow.  
+Data processing, orchestration, and visualization are intentionally separated so that each layer can evolve or be migrated independently.
 
----
+The pipeline follows a Medallion architecture **(Bronze → Silver → Gold)**.
 
-### 🔧 Tech Stack
+Raw data is ingested into a Bronze layer, cleaned and standardized in Silver, and aggregated into analytics-ready Gold tables.
 
-- **Docker** – Isolates each service (Airflow, Streamlit, etc.) for portability and reproducibility  
-- **PySpark** – Cleans and transforms Parquet datasets at scale  
-- **Delta Lake** – Storage format for Bronze/Silver/Gold layers
-- **Google BigQuery** – Cloud-based warehouse for analytics-ready storage  
-- **Airflow** – Automates the pipeline via DAG scheduling  
-- **Streamlit** – Provides a simple dashboard to visualize daily and hourly metrics  
-- **Pandas & SQLAlchemy** – Used for lightweight querying and quick data previews  
-  *(SQLAlchemy acts as a connector layer, making it easier to write to BigQuery from Python code.)*
+This structure makes the pipeline easier to reason about, extend, and migrate to managed platforms if needed.
 
 ---
 
-## 📂 Current Progress
+### Tech Stack
 
-- ✅ Bronze ingestion implemented (`delta_medallion_pipeline.py`)  
-- ✅ Silver transformation implemented (reusing `transform_trip_data_spark.py`)  
-- ✅ Gold aggregation logic (hourly summary, pickup/dropoff by zone) written and tested  
-- ✅ Streamlit dashboard (Trend Viewer & Zone Heatmap) connected to Gold layer  
-- 🚧 BigQuery export to analytics tables (partially tested)  
-- 🚧 Databricks dashboard (planned – will visualize Gold KPIs like trip volume & avg fare) 
+- **Docker** – Isolates Airflow and Streamlit as independent services  
+- **PySpark** – Handles data cleaning and transformation beyond notebook scale  
+- **Delta Lake** – Supports Bronze / Silver / Gold layering and schema evolution  
+- **Google BigQuery** – Serves as the analytics warehouse  
+- **Airflow** – Orchestrates the end-to-end pipeline
+- **Streamlit** – Provides a lightweight dashboard for key metrics
 
 ---
 
-### 🗂️ System Architecture
+### What Is Implemented
 
-The pipeline follows a modular design that separates raw data ingestion, cleaning, cloud storage, orchestration, and frontend rendering.
-The pipeline also supports Delta Lake storage with Medallion layers (Bronze/Silver/Gold), enabling schema evolution and time-travel queries.
+- End-to-end ELT pipeline from raw data to analytics tables
+- Medallion architecture with Bronze, Silver, and Gold layers
+- Airflow DAGs for orchestration and scheduling
+- BigQuery tables for aggregated analytics
+- Streamlit dashboard for trend analysis and zone-level insights
 
-1. **Download Raw Parquet Data**  
-   A Python script pulls NYC Yellow Taxi trip records from the TLC S3 repository.  
-   The download is customizable via environment variables for year/month selection.
+---
 
-2. **Clean & Process Locally with PySpark**  
-   Data is filtered and transformed locally using PySpark, including dropping invalid records, computing trip duration, and extracting hourly summaries.
+### System Architecture
 
-3. **Upload to BigQuery**  
-   The cleaned dataset is written to a BigQuery table using the `google-cloud-bigquery` Python client.
+The pipeline is designed as a set of loosely coupled layers.  
+Each layer has a clear responsibility, which simplifies debugging, testing, and future migration.
+
+1. **Raw Data Ingestion**  
+   Monthly NYC Yellow Taxi trip data is downloaded as Parquet files.  
+   The ingestion step is parameterized by year and month.
+
+2. **Transformation with PySpark**  
+   Data is cleaned and standardized using PySpark, including filtering invalid records and deriving time-based features.
+
+3. **Analytics Storage in BigQuery**  
+   Cleaned and aggregated datasets are written to BigQuery for downstream analytics.
 
 4. **Orchestration with Airflow**  
-   A DAG defines the pipeline steps (from download to upload).  
-   Each task runs inside containers defined via Docker Compose.
+   The full pipeline is orchestrated using Airflow DAGs, with each step running as an isolated task.
 
-5. **Streamlit Dashboard**  
-   A lightweight dashboard visualizes key metrics:  
-   - Average fare and tip rate  
-   - Trip volume by hour  
-   - Distance patterns  
-   - Passenger counts
+5. **Visualization with Streamlit**  
+   A Streamlit dashboard queries BigQuery directly to visualize trends and zone-level activity.
 
-6. **(Optional) GitHub Actions CI/CD**  
-   Docker images for Airflow and Streamlit are automatically built and pushed to Docker Hub upon each commit to `main` using GitHub Actions.  
-   This makes redeployment easier across environments.
+### Live Demo (Streamlit Cloud)
 
-> ⚙️ A diagram illustrating this system will be added later to this section.
+The Streamlit dashboard is deployed on Streamlit Cloud and connects directly to BigQuery.
 
-### 🧪 Local Setup
+Live demo:
+https://nyc-taxi-dashboard.streamlit.app/
+
+The deployment uses a read-only service account configured via Streamlit Secrets.  
+No local credentials or Docker setup are required to access the dashboard.
+
+This project is primarily intended as a portfolio and demo system.
+The live dashboard represents the main entry point for reviewers.
+
+### Local Setup
 
 This project was developed and tested on **Windows 11 using WSL2 (Ubuntu)**, which provides a Linux-compatible environment inside Windows.  
 If you're using **macOS** or **Linux**, you can skip WSL and run everything directly in your terminal.
@@ -76,7 +79,7 @@ All components—Airflow, PySpark, and Streamlit—are containerized using Docke
 
 ---
 
-#### ✅ Prerequisites
+#### Prerequisites
 
 Make sure the following are installed:
 
@@ -88,7 +91,7 @@ Make sure the following are installed:
 
 ---
 
-#### 🛠️ Setup Steps
+#### Setup Steps
 
 1. **Clone the repository**
 
@@ -125,89 +128,32 @@ Make sure the following are installed:
      *(username/password: `airflow` / `airflow`)
    - **Streamlit Dashboard**: [http://localhost:8700](http://localhost:8700)
 
+### Configuration Overview
 
-### ⚙️ Environment Configuration
+The project separates configuration into two layers:
 
-To keep credentials, configurations, and cloud settings organized, this project uses both a .env file and a YAML-based config file (`settings.yaml`).
+- **Environment variables**  
+  Used for secrets and runtime-specific values (e.g. GCP credentials).
 
-This separation allows environment-specific settings to be reused across Airflow, PySpark, and custom scripts.
+- **YAML configuration files**  
+  Used for pipeline parameters such as time range, Spark settings, and target tables.
 
-#### 🔐 `.env` File (For Secrets and Runtime Variables)
+This separation keeps sensitive values out of source control while allowing the pipeline behavior to be adjusted without code changes.
 
-This file contains sensitive information and environment runtime variables.
-You can start by copying the example file:
+### Containerization and CI
 
-```bash
-cp .env.example .env
-```
+Docker is used to ensure local reproducibility of the pipeline components.  
+Airflow and Streamlit run as isolated services via Docker Compose during development.
 
-Then edit `.env` to fill in your own values:
-
-```bash
-GCP_PROJECT=your-project-id
-BIGQUERY_DATASET=your_dataset
-BIGQUERY_TABLE=your_table
-BIGQUERY_SUMMARY_TABLE=your_summary_table
-GCP_SERVICE_ACCOUNT_KEY_PATH=./creds/gcp_service_account.json
-```
-
-The `.env` file is loaded automatically by Airflow, the BigQuery upload script, and the Streamlit dashboard.
-
-#### `settings.yaml` (Pipeline Parameters and Spark Config)
-
-The `settings.yaml` file stores pipeline-specific parameters in a structured and readable format.
-
-Example:
-```bash
-data_config:
-  year: 2023
-  months: [1, 2, 3]
-  output_prefix: "yellow_tripdata"
-
-spark_config:
-  app_name: "YellowTaxiCleaning"
-  master: "local[*]"
-
-bigquery_config:
-  project_id: ${BQ_PROJECT_ID}
-  dataset: ${BQ_DATASET}
-  table: ${BQ_TABLE}
-  summary_table: ${BQ_SUMMARY_TABLE}
-```
-
-This file allows flexible control over:
-   - The year and months of data to download
-   - Spark cluster settings (e.g., `local[*]`)
-   - Target BigQuery table names
-
-It’s especially useful when triggering Airflow DAGs with dynamic inputs.
-
-#### 🐳 Docker Image
-
-This project includes a prebuilt Docker image hosted on Docker Hub.
-To use it directly without building locally, follow the steps below.
-
-📦 **Pull the images manually (optional)**
-```bash
-docker pull bravo634/nyc-taxi-airflow:latest
-docker pull bravo634/nyc-taxi-app:latest
-```
-This is optional but recommended if you want to avoid building the image locally when running docker-compose up for the first time.
-
-🛠️ Configure your environment
-Make sure your .env or .env.example file contains:
-```bash
-DOCKER_IMAGE_PREFIX=bravo634
-```
-This will ensure all services (Airflow, Streamlit, etc.) use my public Docker images.
+Optional CI workflows are included to support image builds, but containerization is primarily used as a development and testing tool.
 
 ---
 
-### ▶️ Local Run (Optional Quick Start Without Docker)
+### Local Run (Optional Quick Start Without Docker)
 
 If you want to run parts of the pipeline locally without Docker (for quick testing or debugging), here’s how:
 
-#### 🌀 Run Airflow DAG Components
+#### Run Airflow DAG Components
 
 You can run and debug individual DAG steps directly using:
 
@@ -219,7 +165,7 @@ Make sure you have:
 - Installed all dependencies from `airflow_pipeline/requirements.txt`
 - Set up `.env` and `settings.yaml` in the `airflow_pipeline/config/ directory`
 
-#### 📊 Run Streamlit Dashboard
+#### Run Streamlit Dashboard
 To launch the Streamlit dashboard independently:
 
 ```bash
@@ -234,12 +180,25 @@ Make sure:
 
 This is a lightweight way to test the core features without spinning up Docker.
 
-### 📁 Project Structure
+### Deployment Pitfalls and Design Decisions
+
+Several design decisions were made during development to reduce operational risk and simplify deployment:
+
+- **Credential handling**  
+  A single `GOOGLE_APPLICATION_CREDENTIALS` convention is used across Airflow and Streamlit to avoid container-specific path issues.
+
+- **Configuration strategy**  
+  Non-sensitive settings (such as dataset location) are defined in YAML files instead of environment variables to reduce runtime ambiguity.
+
+- **Local vs cloud execution**  
+  The pipeline runs fully in Docker for local reproducibility, while the Streamlit Cloud deployment relies on managed secrets and direct BigQuery access.
+
+### Project Structure
 
 The repository is organized to reflect a modular and production-like data engineering pipeline. Here's a quick overview of the main components:
 
 ```text
-📁 Project Structure
+Project Structure
 
 .github/workflows/                # CI setup for GitHub Actions (optional)
 ├── docker.yml                    # Auto-build Docker image and push on commit
@@ -310,48 +269,25 @@ pyproject.toml                   # Python project metadata
 README.md                        # This documentation
 ```
 
-### 📋 Future Improvements
+### Possible Extensions
 
-This project was designed as a lightweight, end-to-end data engineering demo. However, several areas could be further enhanced:
+- Incremental loading using partitioned BigQuery tables
+- Migration of transformation logic to Databricks
+- Managed orchestration with Cloud Composer
 
-- **Incremental Loads**  
-  Currently, the pipeline performs full refreshes. Future versions could use timestamps or partitioning to only load new or updated records.
-
-- **Data Validation**  
-  Integrating a library like [Great Expectations](https://greatexpectations.io/) or using SQL tests would help validate raw and cleaned data for quality assurance.
-
-- **Workflow Modularity**  
-  The current Airflow DAG uses Python functions for each step. Refactoring with task groups or external task triggers would improve scalability.
-
-- **Enhanced Visualizations**  
-  The Streamlit dashboard can be expanded with filters, comparison tools, or animated charts (e.g., via `Plotly` or `Altair`).
-
-- **Cloud Deployment**  
-  Although the pipeline was tested locally, deploying Airflow via **Cloud Composer**, and hosting the dashboard on **Streamlit Cloud** or **GCP App Engine** would make it production-ready.
-
-- **PySpark Optimization**  
-  PySpark logic could be tuned to support multi-node processing, and caching could be introduced to avoid redundant computations.
+The current structure was designed to support these extensions without major refactoring.
 
 ---
 
-### 🧠 Lessons Learned
+### Key Takeaways
 
-This project started as a simple data upload task, but it gradually grew into a full-stack data pipeline. Over the course of building it, I learned to:
-
-- Handle multiple moving parts in a data engineering stack (PySpark, Airflow, BigQuery, Streamlit)
-- Use Docker and `.env` files to isolate environments
-- Design modular code for orchestration and transformation
-- Translate Jupyter-based logic into robust pipeline steps
-- Troubleshoot real-world bugs like permission issues, timezone mismatches, and schema mismatches
-- Transitioning a pipeline from flat parquet → Delta Lake enables time travel, schema evolution, and transaction guarantees.
-- Using the Medallion architecture makes the pipeline modular and easier to extend.
-- Debugging Spark + Airflow locally requires careful management of imports and environment paths.
-
-The biggest takeaway: **engineering a data pipeline is not just about code—it’s about orchestration, visibility, and maintainability.**
+- Separating orchestration from transformation logic improves maintainability
+- Medallion architecture simplifies data quality control and extensibility
+- Local containerized development and cloud deployments require different assumptions
 
 ---
 
-### 🙌 Acknowledgements
+### Acknowledgements
 
 Special thanks to:
 
@@ -362,7 +298,7 @@ Special thanks to:
 
 ---
 
-### 📮 Contact
+### Contact
 
 Feel free to connect or share feedback:
 
