@@ -41,7 +41,10 @@ Maven Market Project
 
 ## Demo Video
 
-A short demo video is included (`Power BI Demo Video.mp4`) to walk through the dashboard functionality and how it supports business decision-making.
+A short walkthrough video demonstrating the dashboard features, filters, and key business insights:
+
+**Power BI Dashboard Demo (Google Drive)**  
+https://drive.google.com/drive/folders/1o8R1yguIgUmSgFlZKMJUp5IviH_VU6C0?usp=drive_link
 
 ## What I Learned
 

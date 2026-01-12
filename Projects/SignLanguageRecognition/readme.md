@@ -4,6 +4,12 @@
 ## Introductions
 In this sign language recognition project, I created a sign detector, which detects numbers from 0 to 9 that can easily be extended to cover many other signs and hand gestures, including the alphabet.
 
+## Demo Video
+A short demonstration video showing real-time digit sign recognition using the trained CNN model:
+
+**Project Demo (Google Drive)**  
+https://drive.google.com/drive/folders/1IiP8NMlp2cMVRbHQsAt6tKPn6WXK5cti?usp=sharing
+
 ## Dependicies
 The prerequisite software and libraries for the sign project are:
 -Python(3.7.4)
