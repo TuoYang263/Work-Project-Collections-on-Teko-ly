@@ -5,6 +5,15 @@
 This project aims to utilize deep learning algorithms to perform the video surveillance task using video sequence data collected by CCTV. The typical applications of deep surveillance are theft identification, violence detection,
 detection of the chances of explosion.
 
+## Demo Video
+
+A short demonstration video showing anomaly detection in surveillance footage using a spatio-temporal autoencoder.
+The video illustrates how abnormal events are identified based on reconstruction error between original and reconstructed frames.
+
+**Intelligent Video Surveillance Demo (Google Drive)**  
+https://drive.google.com/drive/folders/1haXLAUqa6n4AUO-POT6Lsi8pDH7RY3AJ?usp=drive_link
+
+
 ## Network architecture
 The deep neural network we use will be a 3-dimensional for learning spatio-temporal features of the video feed. 
 
