@@ -8,37 +8,69 @@ on:
 jobs:
   wake-app:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+
     steps:
-      - name: Ping Streamlit status API
+      - name: Wake backend via status API (stable)
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
-          BASE="https://nyc-taxi-dashboard.streamlit.app/api/v2/app/status"
-          TS=$(date +%s)
+          APP="nyc-taxi-dashboard"
+          STATUS_URL="https://${APP}.streamlit.app/api/v2/app/status"
+          TS="$(date +%s)"
 
-          echo "Wake ping started at: $(date)"
-          echo "Target: ${BASE}"
+          echo "Wake ping started at: $(date -u)"
+          echo "Target (status): ${STATUS_URL}"
 
-          for i in 1 2 3; do
-            STATUS=$(curl -sS \
+          # staggered retries to handle cold start / transient network
+          delays=(0 5 10 20)
+
+          for idx in "${!delays[@]}"; do
+            sleep "${delays[$idx]}"
+
+            code="$(curl -sS \
               --connect-timeout 10 \
               --max-time 20 \
               -H "Cache-Control: no-cache" \
-              -A "Mozilla/5.0" \
+              -H "Pragma: no-cache" \
+              -H "User-Agent: github-actions-wake/1.0" \
               -o /dev/null \
               -w "%{http_code}" \
-              "${BASE}?t=${TS}&try=${i}")
+              "${STATUS_URL}?t=${TS}&try=$((idx+1))" || true)"
 
-            echo "Attempt $i -> HTTP ${STATUS}"
+            echo "Attempt $((idx+1)) -> HTTP ${code}"
 
-            if [[ "$STATUS" == "200" ]]; then
-              echo "OK"
+            if [[ "${code}" == "200" ]]; then
+              echo "Backend OK"
               exit 0
             fi
-
-            sleep 6
           done
 
-          echo "Wake failed"
+          echo "Wake failed: status API never returned 200"
           exit 1
+
+      - name: Touch homepage (no redirect follow) - optional
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP="nyc-taxi-dashboard"
+          HOME_URL="https://${APP}.streamlit.app/?wake=$(date +%s)"
+
+          echo "Touch home (no redirects): ${HOME_URL}"
+
+          # IMPORTANT: do NOT use -L to avoid redirect loops
+          code="$(curl -sS \
+            --connect-timeout 10 \
+            --max-time 20 \
+            -H "Cache-Control: no-cache" \
+            -H "Pragma: no-cache" \
+            -H "User-Agent: github-actions-wake/1.0" \
+            -o /dev/null \
+            -w "%{http_code}" \
+            "${HOME_URL}" || true)"
+
+          echo "Home HTTP ${code} (200/3xx are acceptable here)"
+          exit 0
