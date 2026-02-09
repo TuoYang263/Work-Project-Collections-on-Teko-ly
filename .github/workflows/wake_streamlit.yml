@@ -2,16 +2,15 @@ name: Wake NYC Streamlit App
 
 on:
   schedule:
-  # Every 30 minutes
-  - cron: "*/30 * * * *"
+    - cron: "*/30 * * * *"   # every 30 minutes
   workflow_dispatch: {}
 
 jobs:
   wake-app:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Ping Streamlit app to keep it awake
+      - name: Ping Streamlit health endpoint
+        shell: bash
         run: |
           set -e
 
@@ -19,8 +18,7 @@ jobs:
           TS=$(date +%s)
 
           echo "Wake ping started at: $(date)"
-          
-          # try multiple times to handle cold start / transient failures
+
           for i in 1 2 3; do
             STATUS=$(curl -sS -L \
               --connect-timeout 10 \
@@ -30,18 +28,16 @@ jobs:
               -o /dev/null \
               -w "%{http_code}" \
               "${BASE}&t=${TS}&try=${i}")
-          
-          echo "Attempt $i -> HTTP ${STATUS}"
 
-          if [[ "STATUS" =~ ^[23] ]]; then
-            echo "OK"
-            exit 0
-          fi
+            echo "Attempt $i -> HTTP ${STATUS}"
 
-          sleep 6
-        done
+            if [[ "$STATUS" =~ ^[23] ]]; then
+              echo "OK"
+              exit 0
+            fi
 
-        echo "Wake failed"
-        exit 1
+            sleep 6
+          done
 
-          
+          echo "Wake failed"
+          exit 1
