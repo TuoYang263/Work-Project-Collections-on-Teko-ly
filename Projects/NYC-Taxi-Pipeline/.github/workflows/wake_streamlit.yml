@@ -1,8 +1,8 @@
 name: Wake NYC Streamlit App
 
 on:
-  schedule:
-    - cron: "*/20 * * * *"  # every 20 minutes
+  #schedule:
+  #  - cron: "*/20 * * * *"  # every 20 minutes
   workflow_dispatch: {}
 
 jobs:
@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - name: Wake backend via status API (stable)
+      - name: Wake backend via status API
         shell: bash
         run: |
           set -euo pipefail
@@ -50,7 +50,7 @@ jobs:
           echo "Wake failed: status API never returned 200"
           exit 1
 
-      - name: Touch homepage (no redirect follow) - optional
+      - name: Touch homepage (trigger session path)
         if: always()
         shell: bash
         run: |
@@ -59,9 +59,9 @@ jobs:
           APP="nyc-taxi-dashboard"
           HOME_URL="https://${APP}.streamlit.app/?wake=$(date +%s)"
 
-          echo "Touch home (no redirects): ${HOME_URL}"
+          echo "Touch home: ${HOME_URL}"
 
-          # IMPORTANT: do NOT use -L to avoid redirect loops
+          # No -L (avoid redirect loops), but accept 200/302/303 as success signals.
           code="$(curl -sS \
             --connect-timeout 10 \
             --max-time 20 \
@@ -72,5 +72,13 @@ jobs:
             -w "%{http_code}" \
             "${HOME_URL}" || true)"
 
-          echo "Home HTTP ${code} (200/3xx are acceptable here)"
+          echo "Home HTTP ${code}"
+
+          if [[ "${code}" == "200" || "${code}" == "302" || "${code}" == "303" ]]; then
+            echo "Homepage touched OK (session path likely triggered)"
+            exit 0
+          fi
+
+          # Don't fail the workflow just because home returned something odd.
+          echo "Homepage touch returned unexpected code, but backend wake already attempted."
           exit 0

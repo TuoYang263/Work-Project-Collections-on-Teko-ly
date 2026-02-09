@@ -1,5 +1,4 @@
 # app.py
-import sys
 import streamlit as st
 from datetime import datetime
 
@@ -7,15 +6,6 @@ st.set_page_config(
     page_title="NYC Yellow Taxi Dashboard",
     layout="wide"
 )
-
-# kill switch via query param
-if st.query_params.get("sleep") == "1":
-    st.write("Forcing app to exit for cold-start test")
-    sys.exit(1)
-
-if "health" in st.query_params:
-    st.write("ok")
-    st.stop()
 
 st.title("NYC Yellow Taxi Analytics Dashboard")
 
