@@ -19,10 +19,15 @@ jobs:
 
           echo "Wake ping started at: $(date)"
 
+          echo "---- redirect debug ----"
+          curl -sS -I -v --max-redirs 10 "${BASE}" 2>&1 | sed -n '1,80p'
+          echo "------------------------"
+
           for i in 1 2 3; do
-            STATUS=$(curl -sS -L \
+            STATUS=$(curl -sS -I \
               --connect-timeout 10 \
               --max-time 20 \
+              --max-redirs 3 \
               -H "Cache-Control: no-cache" \
               -A "Mozilla/5.0" \
               -o /dev/null \
