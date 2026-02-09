@@ -8,6 +8,10 @@ st.set_page_config(
     layout="wide"
 )
 
+if "health" in st.query_params:
+    st.write("ok")
+    st.stop()
+
 st.title("NYC Yellow Taxi Analytics Dashboard")
 
 st.markdown("""

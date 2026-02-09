@@ -1,0 +1,47 @@
+name: Wake NYC Streamlit App
+
+on:
+  schedule:
+  # Every 30 minutes
+  - cron: "*/30 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  wake-app:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping Streamlit app to keep it awake
+        run: |
+          set -e
+
+          BASE="https://nyc-taxi-dashboard.streamlit.app/?health=1"
+          TS=$(date +%s)
+
+          echo "Wake ping started at: $(date)"
+          
+          # try multiple times to handle cold start / transient failures
+          for i in 1 2 3; do
+            STATUS=$(curl -sS -L \
+              --connect-timeout 10 \
+              --max-time 20 \
+              -H "Cache-Control: no-cache" \
+              -A "Mozilla/5.0" \
+              -o /dev/null \
+              -w "%{http_code}" \
+              "${BASE}&t=${TS}&try=${i}")
+          
+          echo "Attempt $i -> HTTP ${STATUS}"
+
+          if [[ "STATUS" =~ ^[23] ]]; then
+            echo "OK"
+            exit 0
+          fi
+
+          sleep 6
+        done
+
+        echo "Wake failed"
+        exit 1
+
+          
