@@ -74,6 +74,33 @@ The live dashboard represents the main entry point for reviewers.
 
 ---
 
+### Operational note - Streamlit Cloud cold start and auto wake
+
+This dashboard is deployed on Streamlit Cloud.
+
+Inactive apps may go to sleep automatically. When that happens, the first request can be slower because the backend container needs
+to start again.
+
+To keep the public demo reasonably responsive, a small Github Actions workflow is included to ping the app on a schedule.
+
+What the workflow does:
+
+- runs on a simple cron schedule
+- calls the Streamlit status endpoint (`/api/v2/app/status`)
+- uses a few staggered retries to handle cold start cases
+- sends one additional homepage request without redirect-follow
+- treats 200 / 302 / 303 as acceptable responses
+
+Typical behavior:
+
+- if the app is already running -> returns 200 quickly
+- if the app is sleeping -> first ping triggers backend startup
+- retries continue until the backend responds OK
+
+This setup is intentionally minimal and only used to stablize the public demo. No external uptime or monitoring service is used.
+
+---
+
 ### Local Setup
 
 This project was developed and tested on **Windows 11 using WSL2 (Ubuntu)**, which provides a Linux-compatible environment inside Windows.  
@@ -214,6 +241,7 @@ Project Structure
 
 .github/workflows/                # CI setup for GitHub Actions (optional)
 ├── docker.yml                    # Auto-build Docker image and push on commit
+├── wake_streamlit.yml            # Periodic ping to Streamlit Cloud app, it helps wake the app if it goes to sleep 
 
 .streamlit/                       # Streamlit UI configuration
 ├── config.toml                   # Custom theme and layout settings
