@@ -2,7 +2,7 @@ name: Wake NYC Streamlit App
 
 on:
   schedule:
-    - cron: "*/10 * * * *"  # every 20 minutes
+    - cron: "*/10 * * * *"  # every 10 minutes
   workflow_dispatch: {}
 
 jobs:
@@ -50,7 +50,7 @@ jobs:
           echo "Wake failed: status API never returned 200"
           exit 1
 
-      - name: Touch homepage (browser-like)
+      - name: Touch homepage (detect Zzzz and retry)
         if: always()
         shell: bash
         run: |
@@ -59,29 +59,40 @@ jobs:
           APP="nyc-taxi-dashboard"
           HOME_URL="https://${APP}.streamlit.app/?wake=$(date +%s)"
 
-          echo "Touch home (follow limited redirects): ${HOME_URL}"
+          echo "Touch home: ${HOME_URL}"
 
-          touch_once() {
-            curl -sS \
+          fetch_once () {
+            # -L follow redirects, save body
+            body="$(curl -sS -L \
               --connect-timeout 10 \
               --max-time 30 \
-              --location \
-              --max-redirs 5 \
               -H "Cache-Control: no-cache" \
               -H "Pragma: no-cache" \
-              -H "Accept: text/html" \
               -H "User-Agent: github-actions-wake/1.0" \
-              -o /dev/null \
-              -w "%{http_code}" \
-              "${HOME_URL}" || true
+              "${HOME_URL}" || true)"
+
+            # keep a small snippet for logs (optional)
+            echo "Body length: ${#body}"
+
+            # Detect Streamlit sleep page signals
+            if echo "$body" | grep -qiE "Zzzz|gone to sleep|get this app back up"; then
+              echo "Detected Zzzz sleep page"
+              return 1
+            fi
+
+            echo "Homepage seems awake (no Zzzz text found)"
+            return 0
           }
 
-          code1="$(touch_once)"
-          echo "Home attempt 1 -> HTTP ${code1}"
+          # Try multiple times (wake can take time)
+          delays=(0 10 20 40)
+          for d in "${delays[@]}"; do
+            sleep "$d"
+            if fetch_once; then
+              exit 0
+            fi
+            echo "Not awake yet, retrying..."
+          done
 
-          sleep 10
-
-          code2="$(touch_once)"
-          echo "Home attempt 2 -> HTTP ${code2}"
-
+          echo "Still Zzzz after retries (will rely on external monitor / next schedule)"
           exit 0
