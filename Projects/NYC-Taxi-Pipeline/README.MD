@@ -74,30 +74,32 @@ The live dashboard represents the main entry point for reviewers.
 
 ---
 
-### Operational note - Streamlit Cloud cold start and auto wake
+### Operational note – Streamlit Cloud cold start and auto wake
 
 This dashboard is deployed on Streamlit Cloud.
 
-Inactive apps may go to sleep automatically. When that happens, the first request can be slower because the backend container needs
-to start again.
+Inactive apps may go to sleep automatically. When that happens, the first request can be slower because the backend container needs to start again.
 
-To keep the public demo reasonably responsive, a small Github Actions workflow is included to ping the app on a schedule.
+To keep the public demo reasonably responsive, two lightweight measures are used:
 
-What the workflow does:
+- a small GitHub Actions workflow that pings the app on a schedule
+- an external uptime monitor that periodically checks the public URL
+
+What the GitHub Actions workflow does:
 
 - runs on a simple cron schedule
 - calls the Streamlit status endpoint (`/api/v2/app/status`)
 - uses a few staggered retries to handle cold start cases
-- sends one additional homepage request without redirect-follow
+- sends one additional homepage request
 - treats 200 / 302 / 303 as acceptable responses
 
 Typical behavior:
 
-- if the app is already running -> returns 200 quickly
-- if the app is sleeping -> first ping triggers backend startup
+- if the app is already running -> returns quickly
+- if the app is sleeping -> the first ping triggers backend startup
 - retries continue until the backend responds OK
 
-This setup is intentionally minimal and only used to stablize the public demo. No external uptime or monitoring service is used.
+This setup is intentionally minimal and only aims to reduce cold-start friction for reviewers, not to guarantee high availability.
 
 ---
 
