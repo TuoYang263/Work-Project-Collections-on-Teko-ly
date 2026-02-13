@@ -55,36 +55,40 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           APP="nyc-taxi-dashboard"
-          HOME_URL="https://${APP}.streamlit.app/?wake=$(date +%s)"
-
-          echo "Touch home: ${HOME_URL}"
 
           fetch_once () {
-            # -L follow redirects, save body
-            body="$(curl -sS -L \
+            ts="$(date +%s)"
+            url="https://${APP}.streamlit.app/?wake=${ts}"
+
+            echo "GET ${url}"
+
+            # get ：body + http_code + final_url at the same time
+            tmp="$(mktemp)"
+            meta="$(curl -sS -L \
               --connect-timeout 10 \
               --max-time 30 \
               -H "Cache-Control: no-cache" \
               -H "Pragma: no-cache" \
               -H "User-Agent: github-actions-wake/1.0" \
-              "${HOME_URL}" || true)"
+              -o "${tmp}" \
+              -w "HTTP=%{http_code} FINAL_URL=%{url_effective}\n" \
+              "${url}" || true)"
 
-            # keep a small snippet for logs (optional)
-            echo "Body length: ${#body}"
+            body_len="$(wc -c < "${tmp}" | tr -d ' ')"
+            echo "${meta}BODY_LEN=${body_len}"
 
-            # Detect Streamlit sleep page signals
-            if echo "$body" | grep -qiE "Zzzz|gone to sleep|get this app back up"; then
+            if grep -qiE "Zzzz|gone to sleep|get this app back up" "${tmp}"; then
               echo "Detected Zzzz sleep page"
+              rm -f "${tmp}"
               return 1
             fi
 
             echo "Homepage seems awake (no Zzzz text found)"
+            rm -f "${tmp}"
             return 0
           }
 
-          # Try multiple times (wake can take time)
           delays=(0 10 20 40)
           for d in "${delays[@]}"; do
             sleep "$d"
