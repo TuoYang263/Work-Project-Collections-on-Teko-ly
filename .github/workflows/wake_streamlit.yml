@@ -50,38 +50,38 @@ jobs:
           echo "Wake failed: status API never returned 200"
           exit 1
 
-        - name: Touch homepage (browser-like)
-          if: always()
-          shell: bash
-          run: |
-            set -euo pipefail
+      - name: Touch homepage (browser-like)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
 
-            APP="nyc-taxi-dashboard"
-            HOME_URL="https://${APP}.streamlit.app/?wake=$(date +%s)"
+          APP="nyc-taxi-dashboard"
+          HOME_URL="https://${APP}.streamlit.app/?wake=$(date +%s)"
 
-            echo "Touch home (follow limited redirects): ${HOME_URL}"
+          echo "Touch home (follow limited redirects): ${HOME_URL}"
 
-            touch_once() {
-              curl -sS \
-                --connect-timeout 10 \
-                --max-time 30 \
-                --location \
-                --max-redirs 5 \
-                -H "Cache-Control: no-cache" \
-                -H "Pragma: no-cache" \
-                -H "Accept: text/html" \
-                -H "User-Agent: github-actions-wake/1.0" \
-                -o /dev/null \
-                -w "%{http_code}" \
-                "${HOME_URL}" || true
-            }
+          touch_once() {
+            curl -sS \
+              --connect-timeout 10 \
+              --max-time 30 \
+              --location \
+              --max-redirs 5 \
+              -H "Cache-Control: no-cache" \
+              -H "Pragma: no-cache" \
+              -H "Accept: text/html" \
+              -H "User-Agent: github-actions-wake/1.0" \
+              -o /dev/null \
+              -w "%{http_code}" \
+              "${HOME_URL}" || true
+          }
 
-            code1="$(touch_once)"
-            echo "Home attempt 1 -> HTTP ${code1}"
+          code1="$(touch_once)"
+          echo "Home attempt 1 -> HTTP ${code1}"
 
-            sleep 10
+          sleep 10
 
-            code2="$(touch_once)"
-            echo "Home attempt 2 -> HTTP ${code2}"
+          code2="$(touch_once)"
+          echo "Home attempt 2 -> HTTP ${code2}"
 
-            exit 0
+          exit 0
