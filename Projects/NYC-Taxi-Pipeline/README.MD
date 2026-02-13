@@ -17,11 +17,11 @@ This structure makes the pipeline easier to reason about, extend, and migrate to
 
 ### Tech Stack
 
-- **Docker** – Isolates Airflow and Streamlit as independent services  
+- **Docker** – Isolates Airflow and Streamlit as independent services
+- **Airflow** – Orchestrates the end-to-end pipeline  
 - **PySpark** – Handles data cleaning and transformation beyond notebook scale  
 - **Delta Lake** – Supports Bronze / Silver / Gold layering and schema evolution  
-- **Google BigQuery** – Serves as the analytics warehouse  
-- **Airflow** – Orchestrates the end-to-end pipeline
+- **Google BigQuery** – Serves as the analytics warehouse
 - **Streamlit** – Provides a lightweight dashboard for key metrics
 
 ---
@@ -61,7 +61,7 @@ Each layer has a clear responsibility, which simplifies debugging, testing, and 
 
 ### Live Demo (Streamlit Cloud)
 
-The Streamlit dashboard is deployed on Streamlit Cloud and connects directly to BigQuery.
+The Streamlit dashboard is deployed on Streamlit Cloud and connects directly to BigQuery. The dashboard is backed by preprocessed summary tables rather than raw trip-level data to keep queries fast and costs predictable.
 
 Live demo:
 https://nyc-taxi-dashboard.streamlit.app/
@@ -99,7 +99,7 @@ Typical behavior:
 - if the app is sleeping -> the first ping triggers backend startup
 - retries continue until the backend responds OK
 
-This setup is intentionally minimal and only aims to reduce cold-start friction for reviewers, not to guarantee high availability.
+This setup is intentionally minimal and only aims to reduce cold-start friction for reviewers, not to guarantee high availability. This behavior is platform-level and not fully controllable from application code.
 
 ---
 
@@ -243,7 +243,7 @@ Project Structure
 
 .github/workflows/                # CI setup for GitHub Actions (optional)
 ├── docker.yml                    # Auto-build Docker image and push on commit
-├── wake_streamlit.yml            # Periodic ping to Streamlit Cloud app, it helps wake the app if it goes to sleep 
+├── wake_streamlit.yml            # Scheduled lightweight ping to reduce Streamlit Cloud cold-start delay
 
 .streamlit/                       # Streamlit UI configuration
 ├── config.toml                   # Custom theme and layout settings
