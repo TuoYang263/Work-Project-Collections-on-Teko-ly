@@ -74,32 +74,26 @@ The live dashboard represents the main entry point for reviewers.
 
 ---
 
-### Operational note – Streamlit Cloud cold start and auto wake
+### Operational note – Render free instance cold start
 
-This dashboard is deployed on Streamlit Cloud.
+This dashboard is hosted on Render using a free instance.
 
-Inactive apps may go to sleep automatically. When that happens, the first request can be slower because the backend container needs to start again.
+Free instances may spin down after a period of inactivity. When this happens, the next incoming request can take longer while the container starts again.
 
-To keep the public demo reasonably responsive, two lightweight measures are used:
+To reduce cold-start delays during demos or reviews, a lightweight keep-alive mechanism is configured:
 
-- a small GitHub Actions workflow that pings the app on a schedule
-- an external uptime monitor that periodically checks the public URL
+- a scheduled GitHub Actions workflow periodically sends an HTTP request to the public URL
+- an external uptime monitor performs additional periodic checks
 
-What the GitHub Actions workflow does:
-
-- runs on a simple cron schedule
-- calls the Streamlit status endpoint (`/api/v2/app/status`)
-- uses a few staggered retries to handle cold start cases
-- sends one additional homepage request
-- treats 200 / 302 / 303 as acceptable responses
+These requests do not modify application state. They simply ensure the container is started in advance of interactive use.
 
 Typical behavior:
 
-- if the app is already running -> returns quickly
-- if the app is sleeping -> the first ping triggers backend startup
-- retries continue until the backend responds OK
+- if the service is already running, requests return immediately
+- if the service has spun down, the request triggers container startup
+- once started, normal response times resume
 
-This setup is intentionally minimal and only aims to reduce cold-start friction for reviewers, not to guarantee high availability. This behavior is platform-level and not fully controllable from application code.
+This setup is intentionally minimal and intended to improve responsiveness for demonstration purposes. Availability characteristics ultimately depend on the hosting platform.
 
 ---
 
