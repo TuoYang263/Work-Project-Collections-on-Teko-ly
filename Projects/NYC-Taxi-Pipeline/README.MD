@@ -64,7 +64,7 @@ Each layer has a clear responsibility, which simplifies debugging, testing, and 
 The Streamlit dashboard is deployed on Streamlit Cloud and connects directly to BigQuery. The dashboard is backed by preprocessed summary tables rather than raw trip-level data to keep queries fast and costs predictable.
 
 Live demo:
-https://nyc-taxi-dashboard.streamlit.app/
+https://nyc-taxi-dashboard-render-deploy.onrender.com
 
 The deployment uses a read-only service account configured via Streamlit Secrets.  
 No local credentials or Docker setup are required to access the dashboard.
