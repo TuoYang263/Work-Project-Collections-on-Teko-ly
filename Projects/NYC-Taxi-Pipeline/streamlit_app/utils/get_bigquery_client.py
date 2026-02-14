@@ -9,7 +9,7 @@ from google.oauth2 import service_account
 def get_bigquery_client():
     """
     Priority:
-    1) Streamlit Community Cloud -> use st.secrets["gcp_service_account"]
+    1) Streamlit Community Cloud / Render -> use st.secrets["gcp_service_account"]
     2) Local dev -> use SERVICE_ACCOUNT_PATH if exists
     3) Fallback -> Application Default Credentials (ADC)
     """

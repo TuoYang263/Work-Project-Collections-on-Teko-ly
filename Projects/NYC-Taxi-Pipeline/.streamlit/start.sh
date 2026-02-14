@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Write service account JSON to file
-echo "$GCP_SA_JSON" > /tmp/gcp_sa.json
-
-# Export credential path
-export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp_sa.json
+# Use Render Secret File if provided; fallback to default secret path.
+export GOOGLE_APPLICATION_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS:-/etc/secrets/gcp-sa.json}"
 
 # Start Streamlit on Render port
 exec streamlit run app.py \
