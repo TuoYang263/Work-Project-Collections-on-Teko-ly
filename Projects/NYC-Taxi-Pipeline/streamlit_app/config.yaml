@@ -2,7 +2,7 @@
 # BigQuery Upload
 # ------------------------------------------------
 bigquery_config:
-  project_id: balmy-nuance-468118-g4
+  project_id: precise-antenna-461516-u3
   dataset: nyc_taxi
   table: yellow_tripdata_cleaned
   summary_table: trip_summary_hourly
