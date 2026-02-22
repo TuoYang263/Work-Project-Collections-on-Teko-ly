@@ -33,6 +33,25 @@ View pipeline design, code, and usage details:
 
 ---
 
+### Public Transport Telemetry Pipeline  
+**Production-style telemetry pipeline with operational metrics and pipeline health monitoring**
+
+This project models how telemetry and external signals can be ingested, aggregated, and monitored in a layered data pipeline:
+
+- Implemented Bronze → Silver → Gold telemetry architecture
+- Unified telemetry and weather observations into a shared event model
+- Built event-time windowed aggregation for operational metrics
+- Modeled pipeline observability metrics (freshness, lag, duplicates, volume)
+- Structured for migration to managed environments such as Azure Databricks
+
+**Tech stack:**  
+PySpark · Delta Lake · SQL · Databricks-ready design
+
+View pipeline design and implementation:  
+[`Public-Transport-Telemetry-Pipeline`](./Projects/Public-Transport-Telemetry-Pipeline)
+
+---
+
 ## Cloud & Infrastructure — Supporting Project
 
 ### Terraform on AWS with GitHub OIDC
