@@ -153,7 +153,8 @@ This MVP runs in micro-batch mode but is structured for future streaming migrati
 
 Current structure:
 
-- `public_transport_telemetry_pipeline.ipynb` — complete pipeline implementation  
+- `public_transport_telemetry_pipeline.ipynb` — complete pipeline implementation
+- `public_transport_telemetry_pipeline.py` — script version of the pipeline (for easier inspection if notebook preview fails)  
 - `docs/architecture.png` — pipeline architecture diagram  
 - `README.md` — project documentation  
 
