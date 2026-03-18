@@ -1,0 +1,53 @@
+name: Refresh Telemetry Parquet
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"   # running once per hour
+
+jobs:
+  refresh-parquet:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install dependencies
+        run: |
+          cd Projects/Public-Transport-Telemetry-Pipeline
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run pipeline
+        run: |
+          cd Projects/Public-Transport-Telemetry-Pipeline
+          python scripts/run_pipeline.py
+
+      - name: Export gold outputs
+        run: |
+          cd Projects/Public-Transport-Telemetry-Pipeline
+          python scripts/export_gold.py
+
+      - name: Upload parquet outputs to Azure Blob
+        env:
+          AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+          AZURE_BLOB_CONTAINER: ${{ secrets.AZURE_BLOB_CONTAINER }}
+        run: |
+          cd Projects/Public-Transport-Telemetry-Pipeline
+          python scripts/upload_outputs_to_blob.py
