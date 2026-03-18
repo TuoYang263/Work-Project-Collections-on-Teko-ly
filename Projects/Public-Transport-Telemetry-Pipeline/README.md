@@ -1,8 +1,12 @@
 # Public Transport Telemetry & Weather Impact Pipeline (MVP)
 
-Production-oriented telemetry pipeline using a layered Bronze → Silver → Gold architecture.
+A minimal data pipeline focused on reliability, observability, and pragmatic design trade-offs.
 
-It ingests operational telemetry events and weather observations into a unified event model and aggregates them into monitoring-ready operational metrics.
+Telemetry pipeline that unifies operational events and external signals (weather) into a single event stream and transforms them into monitoring-ready metrics.
+
+Designed to demonstrate reliable data pipeline patterns: append-only ingestion, event-time aggregation, and table-based observability.
+
+Implemented as a modular, script-driven system with a path toward production environments.
 
 This MVP focuses on data modeling, aggregation, and pipeline observability. Predictive modeling and accuracy optimization are intentionally out of scope.
 
@@ -23,6 +27,24 @@ The goal is to model a realistic telemetry pipeline structure that supports oper
 The pipeline follows a layered Bronze → Silver → Gold architecture, separating raw ingestion, operational aggregation, and monitoring-ready outputs.
 
 ![Pipeline architecture](docs/architecture.png)
+
+---
+
+## Design decisions (pragmatic trade-offs)
+
+- Append-only Bronze:
+  avoids mutation complexity and ensures reproducibility of historical data
+
+- Unified event model:
+  simplifies cross-source aggregation at the cost of stricter schema discipline
+
+- Micro-batch instead of streaming:
+  chosen to reduce infrastruture complexity while keeping a migration path open
+
+- Observability as tables:
+  makes pipeline health queryable instead of replying on logs
+
+---
 
 ### Layers (high-level)
 
@@ -139,13 +161,14 @@ In scope:
 - operational KPI modeling  
 - pipeline observability metrics  
 
-Out of scope:
+Limitations:
 
-- predictive modeling or machine learning  
-- geospatial enrichment  
-- real-time streaming infrastructure  
+- No real-time streaming ingestion (micro-batch used for simplicity)  
+- Simulated telemetry data (not production-grade ingestion)  
+- No geospatial enrichment yet (route-level analysis only)
+- Limited backfill and reprocessing logic
 
-This MVP runs in micro-batch mode but is structured for future streaming migration.
+These trade-offs were made to keep the system lightweight and focused on core pipeline design.
 
 ---
 
@@ -153,28 +176,74 @@ This MVP runs in micro-batch mode but is structured for future streaming migrati
 
 Current structure:
 
-- `public_transport_telemetry_pipeline.ipynb` — complete pipeline implementation
-- `public_transport_telemetry_pipeline.py` — script version of the pipeline (for easier inspection if notebook preview fails)  
-- `docs/architecture.png` — pipeline architecture diagram  
-- `README.md` — project documentation  
+```bash
+scripts/
+  run_pipeline.py        # pipeline runner
 
-The pipeline is intentionally implemented as a single notebook to keep the full data flow transparent and easy to inspect.
+src/pipeline/
+  config.py             # configuration
+  setup.py              # spark session setup
+  bronze.py             # ingestion layer
+  silver.py             # aggregation layer
+  gold.py               # KPI and observability layer
+  validation.py         # data quality checks
+  storage.py            # I/O abstraction
 
-In production environments, ingestion, aggregation, and monitoring would typically run as independent jobs.
+streamlit_app/          # optional dashboard layer
+
+tests/
+  inspect_bronze.py
+  inspect_silver.py
+  inspect_gold.py       # lightweight validation and inspection scripts
+
+docs/
+  architecture.png      # pipeline architecture diagram
+
+README.md               # project documentation
+```  
+
+---
+
+## Implementation approach
+
+The pipeline is implemented as a modular, script-driven system:
+
+- Each layer (Bronze, Silver, Gold) is isolated into its own module
+- A single runner orchestrates execution for reproducibility
+- The structure is designed to support future migration to scheduled jobs or cloud environments
+
+The notebook version is retained only for initial exploration and reference.
 
 ---
 
 ## How to run
 
-1. Configure environment (API access and storage location)
+Run the full pipeline:
 
-2. Run ingestion cells in the notebook to populate Bronze tables
+```bash
+python scripts/run_pipeline.py --layer full
+```
 
-3. Run aggregation cells to generate Silver metrics
+Run individual layers for debugging:
+```bash
+python scripts/run_pipeline.py --layer bronze
+python scripts/run_pipeline.py --layer silver
+python scripts/run_pipeline.py --layer gold
+```
 
-4. Run KPI and health metric cells to generate Gold outputs
+Inspect outputs:
+```bash
+python tests/inspect_bronze.py
+python tests/inspect_silver.py
+python tests/inspect_gold.py
+```
 
-The pipeline is designed to remain platform-agnostic and portable.
+Notes:
+- Bronze ingestion currently runs in append mode during normal execution
+- Full runs rebuild downstream Silver and Gold tables after Bronze ingestion
+- Weather-related outputs are expected to remain empty until FMI ingestion is connected to the main runner
+
+The pipeline is designed to remain platform-agnostic and migration-ready.
 
 ---
 

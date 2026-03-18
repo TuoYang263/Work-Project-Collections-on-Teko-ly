@@ -1,0 +1,57 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.env
+
+# =========================
+# Local logs
+# =========================
+*.log
+streamlit.log
+
+# =========================
+# Spark / local metastore
+# =========================
+metastore_db/
+derby.log
+spark-warehouse/
+
+# =========================
+# Data (IMPORTANT)
+# =========================
+
+# ignore all output data
+data/output/
+data/processed/
+data/tmp/
+
+# !data/output/demo.parquet
+
+# =========================
+# Notebook checkpoints
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# IDE
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# Secrets (VERY IMPORTANT)
+# =========================
+secrets.toml
+.env
+*.env
