@@ -38,12 +38,16 @@ jobs:
         run: |
           cd Projects/Public-Transport-Telemetry-Pipeline
           export PYTHONPATH=$(pwd)
+          mkdir -p /tmp/spark-tmp
+          export SPARK_LOCAL_DIRS=/tmp/spark-tmp
           python scripts/run_pipeline.py
 
       - name: Export gold outputs
         run: |
           cd Projects/Public-Transport-Telemetry-Pipeline
           export PYTHONPATH=$(pwd)
+          mkdir -p /tmp/spark-tmp
+          export SPARK_LOCAL_DIRS=/tmp/spark-tmp
           python scripts/export_gold.py
 
       - name: Upload parquet outputs to Azure Blob

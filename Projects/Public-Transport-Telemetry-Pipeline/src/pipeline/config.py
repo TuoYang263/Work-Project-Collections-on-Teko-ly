@@ -122,7 +122,7 @@ SPARK_WAREHOUSE_DIR = os.getenv(
 
 SPARK_LOCAL_DIR = os.getenv(
     "SPARK_LOCAL_DIR",
-    "/root/spark-tmp"
+    "/tmp/spark-tmp"
 )
 
 SPARK_DATABASE_LOCATION = os.getenv(
