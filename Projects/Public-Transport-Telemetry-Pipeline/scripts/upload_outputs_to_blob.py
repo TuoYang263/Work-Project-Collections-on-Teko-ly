@@ -2,16 +2,67 @@ from pathlib import Path
 import os
 from azure.storage.blob import BlobServiceClient
 
-def upload_file(blob_service_client: BlobServiceClient,
-                container_name: str,
-                local_path: Path,
-                blob_name: str) -> None:
-    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+def upload_single_file(
+        blob_service_client: BlobServiceClient,
+        container_name: str,
+        local_file: Path,
+        blob_name: str,
+) -> None:
+    blob_client = blob_service_client.get_blob_client(
+        container=container_name,
+        blob=blob_name,
+    )
 
-    with open(local_path, "rb") as data:
+    with open(local_file, "rb") as data:
         blob_client.upload_blob(data, overwrite=True)
 
-    print(f"Uploaded: {local_path} -> {container_name}/{blob_name}")
+    print(f"Uploaded: {local_file} -> {container_name}/{blob_name}")
+
+def upload_path(
+        blob_service_client: BlobServiceClient,
+        container_name: str,
+        local_path: Path,
+        blob_prefix: str,
+) -> None:
+    if local_path.is_file():
+        upload_single_file(
+            blob_service_client=blob_service_client,
+            container_name=container_name,
+            local_file=local_path,
+            blob_name=blob_prefix,
+        )
+        return
+    
+    if local_path.is_dir():
+
+        # rglob("*"): recursively list all files under the directory (including nested ones)
+        # filter with is_file() to exclude subdirectories
+        files = sorted([p for p in local_path.rglob("*") if p.is_file()])
+
+        if not files:
+            raise FileNotFoundError(f"No files found inside directory: {local_path}")
+        
+        for file_path in files:
+
+            # relative_to(local_path): get path relative to the parquet directory root
+            # e.g. /data/.../gold.parquet/part-0000.parquet -> part-0000.parquet
+            relative_path = file_path.relative_to(local_path)
+
+            # as_posix(): convert path to POSIX format (use '/' as separator)
+            # ensures compatibility with cloud storage paths (Blob/S3)
+            blob_name = f"{blob_prefix}/{relative_path.as_posix()}"
+
+            print(f"[DEBUG] Uploading {file_path} -> {blob_name}")
+
+            upload_single_file(
+                blob_service_client=blob_service_client,
+                container_name=container_name,
+                local_file=file_path,
+                blob_name=blob_name,
+            )
+        return
+
+    raise FileNotFoundError(f"Expected file or directory not found: {local_path}")
 
 def main() -> None:
     connection_string = os.environ["AZURE_STORAGE_CONNECTION_STRING"]
@@ -20,7 +71,7 @@ def main() -> None:
     project_root = Path(__file__).resolve().parents[1]
     output_dir = project_root / "data" / "output"
 
-    files_to_upload = [
+    outputs_to_upload = [
         "gold_route_daily.parquet",
         "gold_route_window.parquet",
         "pipeline_metrics.parquet",
@@ -28,16 +79,16 @@ def main() -> None:
 
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
 
-    for filename in files_to_upload:
-        local_path = output_dir / filename
+    for name in outputs_to_upload:
+        local_path = output_dir / name
         if not local_path.exists():
-            raise FileNotFoundError(f"Expected output file not found: {local_path}")
+            raise FileNotFoundError(f"Expected output path not found: {local_path}")
         
-        upload_file(
+        upload_path(
             blob_service_client=blob_service_client,
             container_name=container_name,
             local_path=local_path,
-            blob_name=f"telemetry/{filename}",
+            blob_prefix=f"telemetry/{name}",
         )
 
 if __name__ == "__main__":
