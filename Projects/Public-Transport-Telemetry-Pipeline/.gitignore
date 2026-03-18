@@ -26,9 +26,8 @@ spark-warehouse/
 # =========================
 
 # ignore all output data
-data/output/
-data/processed/
-data/tmp/
+data/*
+*.pdf
 
 # !data/output/demo.parquet
 

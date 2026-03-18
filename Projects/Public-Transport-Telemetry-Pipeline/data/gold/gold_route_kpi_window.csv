@@ -1,4 +1,0 @@
-route_id,avg_delay_seconds,avg_delay_minutes,delayed_events,total_events
-550,120.0,2.0,1,1
-7B,45.0,0.75,0,1
-M1,10.0,0.1666666666666666,0,1

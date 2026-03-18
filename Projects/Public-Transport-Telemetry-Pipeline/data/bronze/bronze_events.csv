@@ -1,4 +1,0 @@
-event_time,vehicle_id,route_id,delay_seconds,temperature_c
-2026-03-12 08:00:00,tram_001,7B,45,-3.2
-2026-03-12 08:05:00,bus_1201,550,120,-2.8
-2026-03-12 08:10:00,metro_003,M1,10,-2.5
