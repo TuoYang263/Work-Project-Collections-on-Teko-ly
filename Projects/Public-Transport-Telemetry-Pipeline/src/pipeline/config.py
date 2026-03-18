@@ -117,7 +117,7 @@ SIM_DEFAULT_BATCH_SIZE = 200
 # -----------------------------------------------------------------------------
 SPARK_WAREHOUSE_DIR = os.getenv(
     "SPARK_WAREHOUSE_DIR",
-    "file:/root/spark-warehouse/telemetry"
+    "file:/tmp/spark-warehouse/telemetry"
 )
 
 SPARK_LOCAL_DIR = os.getenv(

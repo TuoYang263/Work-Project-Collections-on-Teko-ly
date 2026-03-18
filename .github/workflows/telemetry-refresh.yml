@@ -40,6 +40,7 @@ jobs:
           export PYTHONPATH=$(pwd)
           mkdir -p /tmp/spark-tmp
           export SPARK_LOCAL_DIRS=/tmp/spark-tmp
+          export SPARK_WAREHOUSE_DIR=file:/tmp/spark-warehouse/telemetry
           python scripts/run_pipeline.py
 
       - name: Export gold outputs
@@ -48,6 +49,7 @@ jobs:
           export PYTHONPATH=$(pwd)
           mkdir -p /tmp/spark-tmp
           export SPARK_LOCAL_DIRS=/tmp/spark-tmp
+          export SPARK_WAREHOUSE_DIR=file:/tmp/spark-warehouse/telemetry
           python scripts/export_gold.py
 
       - name: Upload parquet outputs to Azure Blob
