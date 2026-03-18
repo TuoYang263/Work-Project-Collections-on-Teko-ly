@@ -54,6 +54,9 @@ data/raw/*
 # pdf
 *.pdf
 
+# requirements-dev.txt
+/requirements-dev.txt
+
 # !data/output/demo.parquet
 
 # =========================

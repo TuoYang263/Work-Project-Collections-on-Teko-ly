@@ -37,11 +37,13 @@ jobs:
       - name: Run pipeline
         run: |
           cd Projects/Public-Transport-Telemetry-Pipeline
+          export PYTHONPATH=$(pwd)
           python scripts/run_pipeline.py
 
       - name: Export gold outputs
         run: |
           cd Projects/Public-Transport-Telemetry-Pipeline
+          export PYTHONPATH=$(pwd)
           python scripts/export_gold.py
 
       - name: Upload parquet outputs to Azure Blob
@@ -50,4 +52,5 @@ jobs:
           AZURE_BLOB_CONTAINER: ${{ secrets.AZURE_BLOB_CONTAINER }}
         run: |
           cd Projects/Public-Transport-Telemetry-Pipeline
+          export PYTHONPATH=$(pwd)
           python scripts/upload_outputs_to_blob.py
