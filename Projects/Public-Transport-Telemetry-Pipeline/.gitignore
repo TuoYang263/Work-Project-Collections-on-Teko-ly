@@ -25,8 +25,33 @@ spark-warehouse/
 # Data (IMPORTANT)
 # =========================
 
-# ignore all output data
+# ignore all data content
 data/*
+
+
+# keep folder structure
+!data/.gitkeep
+!data/bronze/
+!data/silver/
+!data/gold/
+!data/output/
+!data/raw/
+
+# inside folders, still ignore files
+data/bronze/*
+data/silver/*
+data/gold/*
+data/output/*
+data/raw/*
+
+# keep empty placeholder
+!data/bronze/.gitkeep
+!data/silver/.gitkeep
+!data/gold/.gitkeep
+!data/output/.gitkeep
+!data/raw/.gitkeep
+
+# pdf
 *.pdf
 
 # !data/output/demo.parquet
