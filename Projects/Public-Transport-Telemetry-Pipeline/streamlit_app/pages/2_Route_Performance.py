@@ -1,12 +1,9 @@
+import time
 import streamlit as st
 import pandas as pd
 from utils.load_data import load_route_window, load_route_daily
 
-st.set_page_config(
-    page_title="Public Transport Telemetry Pipeline",
-    layout="wide"
-)
-
+start_time = time.time()
 st.title("Route Performance")
 
 def safe_mean(series: pd.Series, decimals: int = 2):
@@ -16,8 +13,9 @@ def safe_mean(series: pd.Series, decimals: int = 2):
     return round(series.mean(), decimals)
 
 # ===== Load data =====
-df_window = load_route_window()
-df_daily = load_route_daily()
+with st.spinner("Loading route performance data..."):
+    df_window = load_route_window()
+    df_daily = load_route_daily()
 
 # ===== Basic guard =====
 if df_window is None or df_window.empty:
@@ -88,6 +86,7 @@ else:
 
 # ===== Daily summary =====
 st.subheader("Daily Summary")
+st.caption("Daily aggregated metrics per route")
 
 if df_daily_filtered.empty:
     st.info("No daily summary data available.")
@@ -104,9 +103,11 @@ else:
         "dq_flag",
     ]
 
-    available_cols = [col for col in display_cols if col in df_daily_filtered.columns]
-    st.caption("Daily aggregated metrics per route")
-    st.dataframe(df_daily_filtered[available_cols],
-                 use_container_width=True,
-                 height=300
-    )
+    available_cols = [col for col in display_cols if col in df_daily_filtered.columns]    
+    with st.expander("Inspect underlying daily metrics"):
+        st.dataframe(df_daily_filtered[available_cols],
+                    use_container_width=True,
+                    height=300
+        )
+
+st.caption(f"Page rendered in {time.time() - start_time:.2f}s")
