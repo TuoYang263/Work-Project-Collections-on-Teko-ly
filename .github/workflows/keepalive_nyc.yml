@@ -1,4 +1,4 @@
-name: Keepalive Render App
+name: Keepalive NYC Dashboard
 
 on:
   schedule:
