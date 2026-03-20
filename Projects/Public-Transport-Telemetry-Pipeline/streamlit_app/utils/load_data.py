@@ -65,19 +65,19 @@ def _read_local_parquet_dataset(dataset_name: str) -> pd.DataFrame:
 
 # Cache the function result to avoid reloading data on every rerun.
 # ttl=900 means the cache is valid for 900 seconds (15 minutes).
-@st.cache_data(ttl=900)
+@st.cache_data(ttl=120)
 def load_route_window():
     if USE_BLOB:
         return _read_parquet_dataset_from_blob("telemetry/gold_route_window.parquet/")
     return _read_local_parquet_dataset("gold_route_window.parquet")
 
-@st.cache_data(ttl=900)
+@st.cache_data(ttl=120)
 def load_route_daily():
     if USE_BLOB:
         return _read_parquet_dataset_from_blob("telemetry/gold_route_daily.parquet/")
     return _read_local_parquet_dataset("gold_route_daily.parquet")
 
-@st.cache_data(ttl=900)
+@st.cache_data(ttl=120)
 def load_pipeline_metrics():
     if USE_BLOB:
         return _read_parquet_dataset_from_blob("telemetry/pipeline_metrics.parquet/")
