@@ -2,6 +2,24 @@ from pathlib import Path
 import os
 from azure.storage.blob import BlobServiceClient
 
+def delete_existing_blobs(
+        blob_service_client: BlobServiceClient,
+        container_name: str,
+        blob_prefix: str,
+) -> None:
+    container_client = blob_service_client.get_container_client(container_name)
+    blobs = list(container_client.list_blobs(name_starts_with=blob_prefix))
+
+    if not blobs:
+        print(f"No existing blobs found under prefix: {blob_prefix}")
+        return
+
+    for blob in blobs:
+        print(f"[DEBUG] Deleting existing blob: {blob.name}")
+        container_client.delete_blob(blob.name)
+
+    print(f"Deleted {len(blobs)} existing blobs under prefix: {blob_prefix}")
+
 def upload_single_file(
         blob_service_client: BlobServiceClient,
         container_name: str,
@@ -84,11 +102,19 @@ def main() -> None:
         if not local_path.exists():
             raise FileNotFoundError(f"Expected output path not found: {local_path}")
         
+        blob_prefix = f"telemetry/{name}"
+
+        delete_existing_blobs(
+            blob_service_client=blob_service_client,
+            container_name=container_name,
+            blob_prefix=blob_prefix,
+        )
+        
         upload_path(
             blob_service_client=blob_service_client,
             container_name=container_name,
             local_path=local_path,
-            blob_prefix=f"telemetry/{name}",
+            blob_prefix=blob_prefix,
         )
 
 if __name__ == "__main__":
