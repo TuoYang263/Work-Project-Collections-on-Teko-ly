@@ -35,6 +35,8 @@ jobs:
           pip install -r requirements.txt
       
       - name: Run pipeline
+        env:
+          DIGITRANSIT_KEY: ${{ secrets.DIGITRANSIT_KEY }}
         run: |
           cd Projects/Public-Transport-Telemetry-Pipeline
           export PYTHONPATH=$(pwd)
@@ -44,6 +46,8 @@ jobs:
           python scripts/run_pipeline.py
 
       - name: Export gold outputs
+        env:
+          DIGITRANSIT_KEY: ${{ secrets.DIGITRANSIT_KEY }}
         run: |
           cd Projects/Public-Transport-Telemetry-Pipeline
           export PYTHONPATH=$(pwd)
