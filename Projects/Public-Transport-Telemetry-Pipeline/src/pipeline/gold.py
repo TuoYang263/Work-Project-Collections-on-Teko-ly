@@ -2,8 +2,12 @@
 Gold-layer KPI and operational metrics builders.
 """
 import logging
+import pandas as pd
+from pathlib import Path
 from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 from src.pipeline.setup import use_database
+from src.pipeline.hsl import build_hsl_map_outputs
 
 from .config import (
     GOLD_PIPELINE_METRICS_TABLE,
@@ -12,6 +16,119 @@ from .config import (
     SILVER_TRANSIT_TABLE,
     SILVER_WEATHER_TABLE,
 )
+
+def build_gold_weather_station_outputs(spark: SparkSession, logger: logging.Logger) -> None:
+    """
+    Build lightweight weather-station map output for Streamlit.
+
+    Output:
+        data/gold/weather/weather_stations_latest.parquet
+
+    Strategy:
+    - read FMI weather events from Bronze
+    - keep the latest observation per station and metric
+    - pivot metrics into one row per station
+    """
+    project_root = Path(__file__).resolve().parents[2]
+    data_dir = project_root / "data"
+    output_dir = data_dir / "gold" / "weather"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    df = spark.table("bronze_events").filter(F.col("source") == "fmi_weather")
+
+    if df.rdd.isEmpty():
+        empty_df = pd.DataFrame(
+            columns=[
+                "station_id",
+                "station_name",
+                "lat",
+                "lon",
+                "observation_time",
+                "temperature",
+                "precipitation",
+            ]
+        )
+        empty_df.to_parquet(output_dir / "weather_stations_latest.parquet", index=False)
+        logger.info("No FMI weather rows found; wrote empty weather station output.")
+        return
+
+    station_df = (
+        df.select(
+            F.col("entity_id").alias("station_id"),
+            F.col("attrs.station_name").alias("station_name"),
+            F.col("attrs.lat").cast("double").alias("lat"),
+            F.col("attrs.lon").cast("double").alias("lon"),
+            F.col("metric"),
+            F.col("value"),
+            F.col("event_time_ts"),
+        )
+        .filter(F.col("lat").isNotNull() & F.col("lon").isNotNull())
+    )
+
+    # Keep latest observation per station + metric
+    latest_ts = (
+        station_df.groupBy("station_id", "metric")
+        .agg(F.max("event_time_ts").alias("event_time_ts"))
+    )
+
+    latest_df = (
+        station_df.alias("s")
+        .join(
+            latest_ts.alias("m"),
+            on=[
+                F.col("s.station_id") == F.col("m.station_id"),
+                F.col("s.metric") == F.col("m.metric"),
+                F.col("s.event_time_ts") == F.col("m.event_time_ts"),
+            ],
+            how="inner",
+        )
+        .select(
+            F.col("s.station_id"),
+            F.col("s.station_name"),
+            F.col("s.lat"),
+            F.col("s.lon"),
+            F.col("s.metric"),
+            F.col("s.value"),
+            F.col("s.event_time_ts"),
+        )
+    )
+
+    # Pivot metrics into map-ready columns
+    weather_wide = (
+        latest_df.groupBy("station_id", "station_name", "lat", "lon")
+        .pivot("metric", ["t2m", "r_1h"])
+        .agg(F.first("value"))
+    )
+
+    obs_time = (
+        latest_df.groupBy("station_id")
+        .agg(F.max("event_time_ts").alias("observation_time"))
+    )
+
+    result_df = (
+        weather_wide.join(obs_time, on="station_id", how="left")
+        .withColumnRenamed("t2m", "temperature")
+        .withColumnRenamed("r_1h", "precipitation")
+        .select(
+            "station_id",
+            "station_name",
+            "lat",
+            "lon",
+            "observation_time",
+            "temperature",
+            "precipitation",
+        )
+        .orderBy("station_name")
+    )
+
+    pdf = result_df.toPandas()
+    pdf.to_parquet(output_dir / "weather_stations_latest.parquet", index=False)
+
+    logger.info("Weather station gold output written to data/gold/weather/")
+    logger.info(f"Weather station output directory: {output_dir}")
+    logger.info(f"Weather station rows: {len(pdf)}")
+
+
 
 def run_gold_layer(spark: SparkSession, logger: logging.Logger) -> None:
     logger.info("Gold layer started")
@@ -25,6 +142,12 @@ def run_gold_layer(spark: SparkSession, logger: logging.Logger) -> None:
 
     build_gold_pipeline_metrics_window(spark)
     logger.info(f"Gold pipeline metrics table updated: {GOLD_PIPELINE_METRICS_TABLE}")
+
+    build_gold_hsl_map_outputs(logger)
+    logger.info("HSL map gold outputs updated")
+
+    build_gold_weather_station_outputs(spark, logger)
+    logger.info("Weather station gold outputs updated")
 
     logger.info(f"Gold route window row count: {spark.table(GOLD_ROUTE_WINDOW_TABLE).count()}")
     logger.info(f"Gold route daily row count: {spark.table(GOLD_ROUTE_DAILY_TABLE).count()}")
@@ -144,3 +267,35 @@ def build_gold_pipeline_metrics_window(spark: SparkSession) -> None:
            AND t.window_end = w.window_end
         """
     )
+
+def build_gold_hsl_map_outputs(logger: logging.Logger) -> None:
+    """
+    Build lightweight HSL map-ready outputs for Streamlit map visualization
+    These outputs are stored as parquet files rather than delta tables.
+    """
+    project_root = Path(__file__).resolve().parents[2]
+    DATA_DIR = project_root / "data"
+
+    gtfs_dir = DATA_DIR / "external" / "gtfs_hsl"
+    output_dir = DATA_DIR / "gold"/ "hsl"
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    outputs = build_hsl_map_outputs(
+        gtfs_dir=gtfs_dir,
+        mode="all",
+        route="all",
+        lookback_minutes=30,
+    )
+
+    outputs["df_map"].to_parquet(output_dir / "hsl_df_map.parquet", index=False)
+    outputs["route_options"].to_parquet(output_dir / "hsl_route_options.parquet", index=False)
+    outputs["map_points"].to_parquet(output_dir / "hsl_map_points.parquet", index=False)
+    outputs["paths"].to_parquet(output_dir / "hsl_route_paths.parquet", index=False)
+
+    logger.info("HSL gold map outputs written to data/gold/hsl/")
+    logger.info(f"HSL gold output directory: {output_dir}")
+    logger.info(f"HSL df_map rows: {len(outputs['df_map'])}")
+    logger.info(f"HSL route_options rows: {len(outputs['route_options'])}")
+    logger.info(f"HSL map_points rows: {len(outputs['map_points'])}")
+    logger.info(f"HSL paths rows: {len(outputs['paths'])}")

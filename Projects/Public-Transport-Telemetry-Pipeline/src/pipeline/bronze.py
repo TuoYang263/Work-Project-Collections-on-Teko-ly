@@ -31,6 +31,13 @@ from .config import (
     SIM_TIME_SPAN_MINUTES,
 )
 
+def infer_unit(metric: str) -> str:
+    if metric == "t2m":
+        return "C"
+    if metric in {"r_1h", "precipitation", "r1_10min"}:
+        return "mm"
+    return "unknown"
+
 def run_bronze_layer(
     spark: SparkSession,
     logger: logging.Logger,
@@ -45,10 +52,28 @@ def run_bronze_layer(
         batch_id=0,
         n=SIM_DEFAULT_BATCH_SIZE,
     )
+    logger.info("Simulated transit batch appended to Bronze.")
+
+    try:
+        ingest_fmi_weather(
+            spark=spark,
+            place=FMI_DEFAULT_PLACE,
+            params=FMI_DEFAULT_PARAMS,
+            minutes=FMI_DEFAULT_LOOKBACK_MINUTES,
+        )
+        logger.info(
+            "FMI weather ingest completed "
+            f"(place={FMI_DEFAULT_PLACE}, "
+            f"params={FMI_DEFAULT_PARAMS}, "
+            f"minutes={FMI_DEFAULT_LOOKBACK_MINUTES})."
+        )
+    except Exception:
+        logger.exception("FMI weather ingest failed.")
+        raise
 
     bronze_count = spark.table(BRONZE_EVENTS_TABLE).count()
     logger.info(f"Bronze table updated: {BRONZE_EVENTS_TABLE}")
-    logger.info(f"Bronze row count after transit ingest: {bronze_count}")
+    logger.info(f"Bronze row count after transit + weather ingest: {bronze_count}")
 
 # -----------------------------------------------------------------------------
 # Transit simulation
@@ -133,7 +158,6 @@ def fetch_fmi_timevaluepair(
     response.raise_for_status()
     return response.text
 
-
 def parse_fmi_events(xml_text: str, place: str = FMI_DEFAULT_PLACE) -> List[Dict]:
     """
     Parse FMI WFS XML into Bronze-compatible event rows.
@@ -207,7 +231,7 @@ def parse_fmi_events(xml_text: str, place: str = FMI_DEFAULT_PLACE) -> List[Dict
                     "entity_id": fmisid or place,
                     "metric": metric,
                     "value": v_float,
-                    "unit": "C",
+                    "unit": infer_unit(metric),
                     "attrs": {
                         "place": place,
                         "station_name": station_name,
@@ -222,7 +246,6 @@ def parse_fmi_events(xml_text: str, place: str = FMI_DEFAULT_PLACE) -> List[Dict
 
     return events
 
-
 def ingest_fmi_weather(
     spark: SparkSession,
     place: str = FMI_DEFAULT_PLACE,
@@ -232,14 +255,17 @@ def ingest_fmi_weather(
     """
     Fetch, parse, and append FMI weather events to Bronze.
     """
-    xml_text = fetch_fmi_timevaluepair(place=place, params=params, minutes=minutes)
+    xml_text = fetch_fmi_timevaluepair(
+        place=place,
+        params=params,
+        minutes=minutes,
+    )
     rows = parse_fmi_events(xml_text, place=place)
 
-    member_count = xml_text.count("<wfs:member")
     if not rows:
         print(
-            f"No FMI rows parsed (place={place}, params={params}, minutes={minutes}). "
-            f"WFS members found: {member_count}."
+            f"No FMI rows parsed "
+            f"(place={place}, params={params}, minutes={minutes})."
         )
         return
 

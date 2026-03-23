@@ -1,84 +1,67 @@
-# =========================
 # Python
-# =========================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.egg-info/
+
+# Env
 .env
+.venv/
+venv/
 
-# =========================
-# Local logs
-# =========================
-*.log
-streamlit.log
-
-# =========================
-# Spark / local metastore
-# =========================
-metastore_db/
-derby.log
-spark-warehouse/
-
-# =========================
-# Data (IMPORTANT)
-# =========================
-
-# ignore all data content
-data/*
-
-
-# keep folder structure
-!data/.gitkeep
-!data/bronze/
-!data/silver/
-!data/gold/
-!data/output/
-!data/raw/
-
-# inside folders, still ignore files
-data/bronze/*
-data/silver/*
-data/gold/*
-data/output/*
-data/raw/*
-
-# keep empty placeholder
-!data/bronze/.gitkeep
-!data/silver/.gitkeep
-!data/gold/.gitkeep
-!data/output/.gitkeep
-!data/raw/.gitkeep
-
-# pdf
-*.pdf
-
-# requirements-dev.txt
-/requirements-dev.txt
-
-# !data/output/demo.parquet
-
-# =========================
-# Notebook checkpoints
-# =========================
+# Notebook
 .ipynb_checkpoints/
 
-# =========================
-# OS files
-# =========================
-.DS_Store
-Thumbs.db
+# Logs
+logs/
+*.log
 
-# =========================
-# IDE
-# =========================
-.vscode/
-.idea/
+# Spark / Derby / local runtime
+spark-warehouse/
+metastore_db/
+derby.log
 
-# =========================
-# Secrets (VERY IMPORTANT)
-# =========================
-secrets.toml
-.env
-*.env
+# Temp
+tmp/
+.temp/
+*.tmp
+*.crc
+
+# Data pipeline runtime artifacts
+data/bronze/*.csv
+data/silver/*.csv
+data/output/
+data/raw/
+data/logs/
+
+# Generated gold tables you do NOT want versioned
+data/gold/*.csv
+data/gold/*.parquet
+data/gold/**/*.csv
+data/gold/**/*.parquet
+
+# Re-allow only curated demo artifacts
+!data/gold/hsl/
+!data/gold/hsl/*.parquet
+!data/gold/weather/
+!data/gold/weather/*.parquet
+
+# External GTFS: keep folder placeholder only, not raw huge txt/zip
+data/external/gtfs_hsl/*
+!data/external/gtfs_hsl/.gitkeep
+
+# Notebook-side GTFS dumps
+notebooks/mvp/gtfs_hsl/
+notebooks/**/.ipynb_checkpoints/
+
+# Archives
+*.zip
+*.tar
+*.gz
+*.7z
+
+# Keep placeholders
+!.gitkeep
+
+# Dev files
+requirements-dev.txt

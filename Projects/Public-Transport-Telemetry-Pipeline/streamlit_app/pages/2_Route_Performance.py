@@ -5,6 +5,7 @@ from utils.load_data import load_route_window, load_route_daily
 
 start_time = time.time()
 st.title("Route Performance")
+st.caption("Route-level KPIs derived from exported Gold-layer aggregates.")
 
 def safe_mean(series: pd.Series, decimals: int = 2):
     series = series.dropna()
@@ -25,20 +26,22 @@ if df_window is None or df_window.empty:
 if df_daily is None:
     df_daily = pd.DataFrame()
 
-# ===== Filter =====
+# ===== Sidebar filter =====
 routes = ["All"] + sorted(df_window["route_id"].dropna().unique().tolist())
-selected_route = st.selectbox("Select Route", routes)
+selected_route = st.sidebar.selectbox("Select Route", routes)
 
 if selected_route != "All":
     df_window_filtered = df_window[df_window["route_id"] == selected_route].copy()
-    df_daily_filtered = df_daily[df_daily["route_id"] == selected_route].copy() if not df_daily.empty else pd.DataFrame()
+    df_daily_filtered = (
+        df_daily[df_daily["route_id"] == selected_route].copy()
+        if not df_daily.empty else pd.DataFrame()
+    )
 else:
     df_window_filtered = df_window.copy()
     df_daily_filtered = df_daily.copy()
 
 # ===== KPI =====
 col1, col2, col3 = st.columns(3)
-
 col1.metric("Avg Delay (s)", safe_mean(df_window_filtered["avg_delay_sec"]))
 col2.metric("Avg Occupancy (%)", safe_mean(df_window_filtered["avg_occupancy_pct"]))
 col3.metric("Late Rate", safe_mean(df_window_filtered["late_rate_delay"]))
@@ -63,6 +66,10 @@ else:
                 st.info("No route comparison data available.")
             else:
                 st.bar_chart(route_rank.set_index("route_id")["avg_delay_sec"])
+                st.caption(
+                    "Daily route ranking is based on exported Gold-layer daily summaries. "
+                    "The current KPI source primarily reflects the simulated telemetry pipeline."
+                )
     else:
         st.subheader("Delay Trend")
 
@@ -75,14 +82,19 @@ else:
         if trend_df.empty:
             st.info("No delay trend data available for the selected route.")
         else:
-            trend_df["window_start"] = pd.to_datetime(trend_df["window_start"], errors="coerce")
+            trend_df["window_start"] = pd.to_datetime(
+                trend_df["window_start"], errors="coerce"
+            )
             trend_df = trend_df.dropna(subset=["window_start"]).sort_values("window_start")
 
             if trend_df.empty:
                 st.info("No delay trend data available for the selected route.")
             else:
                 st.line_chart(trend_df.set_index("window_start")["avg_delay_sec"])
-                st.caption("Current trend is based on simulated telemetry windows, so coverage may be sparse or discontinuous.")
+                st.caption(
+                    "Window-level route KPIs are exported from Gold-layer aggregates. "
+                    "The current default route metrics are driven by the simulated telemetry pipeline."
+                )
 
 # ===== Daily summary =====
 st.subheader("Daily Summary")
@@ -103,11 +115,12 @@ else:
         "dq_flag",
     ]
 
-    available_cols = [col for col in display_cols if col in df_daily_filtered.columns]    
+    available_cols = [col for col in display_cols if col in df_daily_filtered.columns]
     with st.expander("Inspect underlying daily metrics"):
-        st.dataframe(df_daily_filtered[available_cols],
-                    use_container_width=True,
-                    height=300
+        st.dataframe(
+            df_daily_filtered[available_cols],
+            use_container_width=True,
+            height=300,
         )
 
 st.caption(f"Page rendered in {time.time() - start_time:.2f}s")
