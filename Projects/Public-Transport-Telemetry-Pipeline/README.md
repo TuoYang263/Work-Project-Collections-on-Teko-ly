@@ -55,7 +55,7 @@ Each layer has a clear responsibility:
 
 Recent operational snapshot showing ingestion delay trends and pipeline health metrics.
 
-![Pipeline Overview](docs/dashboard_pipeline_overview.png)
+![Pipeline Overview](docs/dashboard_pipeline_overview.jpg)
 
 ---
 
@@ -63,7 +63,7 @@ Recent operational snapshot showing ingestion delay trends and pipeline health m
 
 Route-level KPIs and daily summaries derived from aggregated Gold-layer outputs.
 
-![Route Performance](docs/dashboard_route_performance.png)
+![Route Performance](docs/dashboard_route_performance.jpg)
 
 ---
 
@@ -71,7 +71,7 @@ Route-level KPIs and daily summaries derived from aggregated Gold-layer outputs.
 
 Route geometry, sampled vehicle points, and optional weather context (FMI).
 
-![Map View](docs/dashboard_map_view.png)
+![Map View](docs/dashboard_map_view.jpg)
 
 ---
 
