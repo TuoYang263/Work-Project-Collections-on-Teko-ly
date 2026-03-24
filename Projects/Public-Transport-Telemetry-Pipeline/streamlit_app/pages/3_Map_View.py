@@ -7,25 +7,18 @@ import streamlit as st
 from utils.maps import build_map_bundle
 from utils.data_access import load_weather_stations
 
-
-def format_latest_timestamp(df: pd.DataFrame, columns: list[str]) -> str:
-    if df is None or df.empty:
-        return "N/A"
-
-    for column in columns:
-        if column in df.columns:
-            ts = pd.to_datetime(df[column], errors="coerce").max()
-            if pd.notna(ts):
-                return ts.strftime("%Y-%m-%d %H:%M")
-    return "N/A"
-
-
 def compute_dynamic_view_state(points_df, paths_df, is_all_routes: bool):
+    """
+    Compute a lightweight dynamic map center and zoom.
+
+    - All routes: use a fixed Helsinki-centered overview
+    - Selected route: prefer route path geometry for centering
+    """
     if is_all_routes:
         return {
             "lat": 60.1699,
             "lon": 24.9384,
-            "zoom": 11.3,
+            "zoom": 11.5,
         }
 
     lats = []
@@ -45,7 +38,7 @@ def compute_dynamic_view_state(points_df, paths_df, is_all_routes: bool):
             lons.extend(points_df["lon"].astype(float).tolist())
 
     if not lats or not lons:
-        return {"lat": 60.1699, "lon": 24.9384, "zoom": 11.3}
+        return {"lat": 60.1699, "lon": 24.9384, "zoom": 11.5}
 
     lat_min, lat_max = min(lats), max(lats)
     lon_min, lon_max = min(lons), max(lons)
@@ -86,25 +79,20 @@ st.markdown(
 )
 
 st.title("Map View")
-st.caption("Recent route paths, sampled vehicle points, and optional FMI weather context.")
+st.caption("HSL realtime vehicles, GTFS route shapes, and FMI weather context")
 
-@st.cache_data(show_spinner=False, ttl=300, max_entries=4)
+
+@st.cache_data(show_spinner="Loading HSL map data...")
+def load_bundle(selected_route: str | None):
+    return build_map_bundle(selected_route=selected_route)
+
+
+@st.cache_data(show_spinner="Loading FMI weather data...")
 def load_weather():
     return load_weather_stations()
 
-def get_cached_bundle(selected_route: str | None):
-    cache_key = selected_route or "__all__"
-    if "map_bundle_cache" not in st.session_state:
-        st.session_state["map_bundle_cache"] = {}
-    bundle_cache = st.session_state["map_bundle_cache"]
 
-    if cache_key not in bundle_cache:
-        with st.spinner("Loading map data..."):
-            bundle_cache[cache_key] = build_map_bundle(selected_route=selected_route)
-    return bundle_cache[cache_key]
-
-
-initial_bundle = get_cached_bundle(None)
+initial_bundle = build_map_bundle(selected_route=None)
 route_options = initial_bundle["routes"]
 
 selected_route = st.sidebar.selectbox(
@@ -113,49 +101,34 @@ selected_route = st.sidebar.selectbox(
     index=0,
 )
 
+show_weather = st.sidebar.checkbox("Show weather context", value=True)
+
+max_points = st.sidebar.slider(
+    "Max points in overview",
+    min_value=100,
+    max_value=1000,
+    value=400,
+    step=100,
+)
+
 selected_route_value = None if selected_route == "All" else selected_route
 is_all_routes = selected_route_value is None
 
-if is_all_routes:
-    st.sidebar.checkbox(
-        "Show vehicle points",
-        value=False,
-        disabled=True,
-        help="Overview mode keeps vehicle points disabled to reduce memory pressure on free-tier hosting.",
-    )
-    show_vehicle_points = False
-else:
-    show_vehicle_points = st.sidebar.checkbox(
-        "Show vehicle points",
-        value=True,
-        help="Enabled for selected routes only.",
-    )
-
-show_weather = st.sidebar.checkbox(
-    "Show weather context",
-    value=False,
-)
-
-max_points = st.sidebar.slider(
-    "Max rendered points",
-    min_value=50,
-    max_value=300,
-    value=100,
-    step=50,
-)
-
-bundle = get_cached_bundle(selected_route_value)
+bundle = load_bundle(selected_route_value)
 
 points_df = bundle["points"]
 paths_df = bundle["paths"]
 weather_df = load_weather() if show_weather else pd.DataFrame()
 
+# -----------------------------
+# Final pydeck-safe dataframes
+# -----------------------------
 safe_points_df = points_df.copy()
 safe_paths_df = paths_df.copy()
 safe_weather_df = weather_df.copy()
 
 if not safe_points_df.empty:
-    keep_cols = ["lon", "lat", "route_label", "event_time", "event_time_raw", "observation_time"]
+    keep_cols = ["lon", "lat", "route_label"]
     existing_cols = [c for c in keep_cols if c in safe_points_df.columns]
     safe_points_df = safe_points_df[existing_cols].copy()
 
@@ -163,22 +136,14 @@ if not safe_points_df.empty:
     safe_points_df["lat"] = safe_points_df["lat"].astype(float)
     safe_points_df["route_label"] = safe_points_df["route_label"].astype(str)
 
-    safe_points_df["point_timestamp"] = pd.NaT
-    for candidate in ["event_time", "event_time_raw", "observation_time"]:
-        if candidate in safe_points_df.columns:
-            candidate_ts = pd.to_datetime(safe_points_df[candidate], errors="coerce", utc=True)
-            safe_points_df["point_timestamp"] = safe_points_df["point_timestamp"].fillna(candidate_ts)
-
-    safe_points_df["point_time_display"] = safe_points_df["point_timestamp"].dt.strftime("%Y-%m-%d %H:%M")
-    safe_points_df["point_time_display"] = safe_points_df["point_time_display"].fillna("N/A")
-
     safe_points_df["lat_display"] = safe_points_df["lat"].round(4)
     safe_points_df["lon_display"] = safe_points_df["lon"].round(4)
 
+    # Unified tooltip fields for HSL points
     safe_points_df["tooltip_title"] = "Route: " + safe_points_df["route_label"]
     safe_points_df["tooltip_line_1"] = "Lat: " + safe_points_df["lat_display"].astype(str)
     safe_points_df["tooltip_line_2"] = "Lon: " + safe_points_df["lon_display"].astype(str)
-    safe_points_df["tooltip_line_3"] = "Updated: " + safe_points_df["point_time_display"]
+    safe_points_df["tooltip_line_3"] = "HSL vehicle point"
 
 if not safe_paths_df.empty:
     keep_cols = ["path", "route_label"]
@@ -240,6 +205,7 @@ if not safe_weather_df.empty:
     else:
         safe_weather_df["observation_display"] = ""
 
+    # Unified tooltip fields for weather points
     safe_weather_df["tooltip_title"] = safe_weather_df["station_name"]
     safe_weather_df["tooltip_line_1"] = (
         "Temp: " + safe_weather_df["temp_display"].astype(str) + " °C"
@@ -251,23 +217,14 @@ if not safe_weather_df.empty:
         "Observed: " + safe_weather_df["observation_display"].astype(str)
     )
 
-latest_vehicle_ts = format_latest_timestamp(
-    safe_points_df, ["point_timestamp", "event_time", "event_time_raw", "observation_time"]
-)
-latest_weather_ts = format_latest_timestamp(
-    safe_weather_df, ["observation_time"]
-)
-
-st.caption(
-    f"Latest vehicle point: {latest_vehicle_ts} · "
-    f"Latest weather observation: {latest_weather_ts if show_weather else 'hidden'}"
-)
-
+# -----------------------------
+# Metrics
+# -----------------------------
 m1, m2, m3, m4 = st.columns(4)
 with m1:
     st.metric("Selected route", selected_route if selected_route_value else "All")
 with m2:
-    st.metric("Vehicles / points", len(safe_points_df) if show_vehicle_points else 0)
+    st.metric("Vehicles / points", len(safe_points_df))
 with m3:
     if is_all_routes:
         skeleton_count = (
@@ -281,6 +238,9 @@ with m3:
 with m4:
     st.metric("Weather stations", len(safe_weather_df) if show_weather else 0)
 
+# -----------------------------
+# Legend
+# -----------------------------
 st.markdown(
     """
     <div style="display:flex; gap:24px; align-items:center; font-size:14px; margin-bottom:8px;">
@@ -301,10 +261,13 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# -----------------------------
+# Layers
+# -----------------------------
 layers = []
 
 render_points_df = safe_points_df.copy()
-if len(render_points_df) > max_points:
+if is_all_routes and len(render_points_df) > max_points:
     render_points_df = render_points_df.sample(n=max_points, random_state=42).copy()
 
 render_weather_df = safe_weather_df.copy()
@@ -328,6 +291,19 @@ if is_all_routes:
                 pickable=False,
             )
         )
+
+    if not render_points_df.empty:
+        layers.append(
+            pdk.Layer(
+                "ScatterplotLayer",
+                data=render_points_df,
+                get_position="[lon, lat]",
+                get_radius=20,
+                get_fill_color=[40, 120, 255],
+                opacity=0.85,
+                pickable=True,
+            )
+        )
 else:
     if not safe_paths_df.empty and "path" in safe_paths_df.columns:
         layers.append(
@@ -342,16 +318,16 @@ else:
             )
         )
 
-    if show_vehicle_points and not render_points_df.empty:
+    if not render_points_df.empty:
         layers.append(
             pdk.Layer(
                 "ScatterplotLayer",
                 data=render_points_df,
                 get_position="[lon, lat]",
-                get_radius=34,
+                get_radius=45,
                 get_fill_color=[30, 120, 255],
                 pickable=True,
-                opacity=0.92,
+                opacity=0.95,
             )
         )
 
@@ -372,6 +348,9 @@ if show_weather and not render_weather_df.empty:
         )
     )
 
+# -----------------------------
+# View state
+# -----------------------------
 view_cfg = compute_dynamic_view_state(render_points_df, safe_paths_df, is_all_routes)
 
 view_state = pdk.ViewState(
@@ -406,6 +385,12 @@ st.pydeck_chart(
     height=650,
 )
 
-st.caption(
-    "Overview mode keeps vehicle rendering lightweight by default to stay within free-tier hosting limits."
-)
+with st.expander("Debug preview"):
+    st.write("Selected route:", selected_route_value)
+    st.write("Original points shape:", safe_points_df.shape)
+    st.write("Rendered points shape:", render_points_df.shape)
+    st.write("Paths shape:", safe_paths_df.shape)
+    st.write("Weather shape:", safe_weather_df.shape)
+    st.dataframe(render_points_df.head(20), use_container_width=True)
+    st.dataframe(safe_paths_df.head(10), use_container_width=True)
+    st.dataframe(safe_weather_df.head(10), use_container_width=True)

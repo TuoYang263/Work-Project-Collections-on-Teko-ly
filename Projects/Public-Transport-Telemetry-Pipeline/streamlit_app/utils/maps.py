@@ -22,6 +22,7 @@ from utils.data_access import (
     load_hsl_df_map,
     load_hsl_map_points,
     load_hsl_route_paths,
+    load_hsl_route_paths_overview,
     load_hsl_route_options,
 )
 
@@ -83,6 +84,21 @@ def load_map_parquets() -> Dict[str, pd.DataFrame]:
     }
 
     for key in ["df_map", "map_points", "paths", "route_options"]:
+        if key in loaded and loaded[key] is not None and not loaded[key].empty:
+            loaded[key] = _rename_to_standard(loaded[key])
+            loaded[key] = _coerce_numeric(loaded[key], ["lat", "lon", "seq"])
+
+    return loaded
+
+
+@st.cache_data(show_spinner=False, ttl=300, max_entries=4)
+def load_map_overview_parquets() -> Dict[str, pd.DataFrame]:
+    loaded: Dict[str, pd.DataFrame] = {
+        "paths": load_hsl_route_paths_overview(),
+        "route_options": load_hsl_route_options(),
+    }
+
+    for key in ["paths", "route_options"]:
         if key in loaded and loaded[key] is not None and not loaded[key].empty:
             loaded[key] = _rename_to_standard(loaded[key])
             loaded[key] = _coerce_numeric(loaded[key], ["lat", "lon", "seq"])

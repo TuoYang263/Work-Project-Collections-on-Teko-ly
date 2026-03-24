@@ -95,6 +95,13 @@ def load_hsl_route_paths() -> pd.DataFrame:
     return _read_local_hsl_dataset("hsl_route_paths.parquet")
 
 
+
+
+def load_hsl_route_paths_overview() -> pd.DataFrame:
+    if USE_BLOB:
+        return _read_parquet_file_from_blob("telemetry/hsl/hsl_route_paths_overview.parquet")
+    return _read_local_hsl_dataset("hsl_route_paths_overview.parquet")
+
 def load_hsl_route_options() -> pd.DataFrame:
     if USE_BLOB:
         return _read_parquet_file_from_blob("telemetry/hsl/hsl_route_options.parquet")

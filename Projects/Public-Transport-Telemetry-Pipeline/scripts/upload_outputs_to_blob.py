@@ -110,6 +110,7 @@ def main() -> None:
         ("telemetry/hsl/hsl_df_map.parquet", hsl_dir / "hsl_df_map.parquet"),
         ("telemetry/hsl/hsl_map_points.parquet", hsl_dir / "hsl_map_points.parquet"),
         ("telemetry/hsl/hsl_route_paths.parquet", hsl_dir / "hsl_route_paths.parquet"),
+        ("telemetry/hsl/hsl_route_paths_overview.parquet", hsl_dir / "hsl_route_paths_overview.parquet"),
         ("telemetry/hsl/hsl_route_options.parquet", hsl_dir / "hsl_route_options.parquet"),
         ("telemetry/weather/weather_stations_latest.parquet", weather_dir / "weather_stations_latest.parquet"),
     ]

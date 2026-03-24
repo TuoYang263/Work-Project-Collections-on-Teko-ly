@@ -293,9 +293,26 @@ def build_gold_hsl_map_outputs(logger: logging.Logger) -> None:
     outputs["map_points"].to_parquet(output_dir / "hsl_map_points.parquet", index=False)
     outputs["paths"].to_parquet(output_dir / "hsl_route_paths.parquet", index=False)
 
+    # lightweight overview paths for All routes
+    overview_paths = outputs["paths"].copy()
+
+    if not overview_paths.empty and "route_label" in overview_paths.columns:
+        overview_paths = (
+            overview_paths.sort_values("route_label")
+            .groupby("route_label", as_index=False)
+            .head(1)
+            .copy()
+        )
+
+    overview_paths.to_parquet(
+        output_dir / "hsl_route_paths_overview.parquet",
+        index=False,
+    )
+
     logger.info("HSL gold map outputs written to data/gold/hsl/")
     logger.info(f"HSL gold output directory: {output_dir}")
     logger.info(f"HSL df_map rows: {len(outputs['df_map'])}")
     logger.info(f"HSL route_options rows: {len(outputs['route_options'])}")
     logger.info(f"HSL map_points rows: {len(outputs['map_points'])}")
     logger.info(f"HSL paths rows: {len(outputs['paths'])}")
+    logger.info(f"HSL overview paths rows: {len(overview_paths)}")
