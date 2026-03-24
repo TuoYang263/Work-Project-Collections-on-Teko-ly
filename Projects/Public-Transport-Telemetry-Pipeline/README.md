@@ -84,52 +84,6 @@ The map layer is enriched with **HSL GTFS route reference data**, providing real
 
 ---
 
-## Architecture
-
-The pipeline follows a layered structure:
-
-**Bronze → Silver → Gold → Serving → Dashboard**
-
-Each layer has a clear responsibility:
-
-- **Bronze** — append-only ingestion and raw event storage  
-- **Silver** — windowed aggregation and data quality handling  
-- **Gold** — KPI modeling and pipeline health metrics  
-- **Serving** — exported parquet + Azure Blob Storage  
-- **Dashboard** — Streamlit-based visualization layer  
-
-![Pipeline architecture](docs/architecture.png)
-
----
-
-## Dashboard preview
-
-### Pipeline Overview
-
-Recent operational snapshot showing ingestion delay trends and pipeline health metrics.
-
-![Pipeline Overview](docs/dashboard_pipeline_overview.jpg)
-
----
-
-### Route Performance
-
-Route-level KPIs and daily summaries derived from aggregated Gold-layer outputs.
-
-![Route Performance](docs/dashboard_route_performance.jpg)
-
----
-
-### Map View
-
-Route geometry, sampled vehicle points, and optional weather context (FMI).
-
-The map layer is enriched with **HSL GTFS route reference data**, providing realistic route geometry and spatial context.
-
-![Map View](docs/dashboard_map_view.jpg)
-
----
-
 ## Serving & Deployment
 
 The pipeline follows a decoupled serving design:
