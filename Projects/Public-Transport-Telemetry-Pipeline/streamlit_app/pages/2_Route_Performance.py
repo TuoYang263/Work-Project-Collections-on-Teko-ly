@@ -1,8 +1,8 @@
 import time
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 from utils.load_data import load_route_window, load_route_daily
-
 
 def format_latest_timestamp(df: pd.DataFrame, column: str) -> str:
     if df is None or df.empty or column not in df.columns:
@@ -61,8 +61,8 @@ else:
     df_window_filtered = df_window.copy()
     df_daily_filtered = df_daily.copy()
 
-latest_route_ts = format_latest_timestamp(df_window_filtered, "window_end")
-st.caption(f"Latest available route window end: {latest_route_ts}")
+now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+st.caption(f"Last updated: {now_str}")
 
 if "window_end" in df_window_filtered.columns and df_window_filtered["window_end"].notna().any():
     latest_window_end = df_window_filtered["window_end"].max()

@@ -4,6 +4,7 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
+from datetime import datetime
 from utils.maps import build_map_bundle
 from utils.data_access import load_weather_stations
 
@@ -80,6 +81,9 @@ st.markdown(
 
 st.title("Map View")
 st.caption("HSL realtime vehicles, GTFS route shapes, and FMI weather context")
+
+now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+st.caption(f"Last updated: {now_str}")
 
 
 @st.cache_data(show_spinner="Loading HSL map data...")

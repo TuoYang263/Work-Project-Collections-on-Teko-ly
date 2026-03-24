@@ -2,7 +2,7 @@ import time
 import streamlit as st
 import pandas as pd
 from utils.load_data import load_pipeline_metrics
-
+from datetime import datetime
 
 def format_latest_timestamp(df: pd.DataFrame, column: str) -> str:
     if df is None or df.empty or column not in df.columns:
@@ -30,8 +30,8 @@ for col in ["window_start", "window_end"]:
     if col in df.columns:
         df[col] = pd.to_datetime(df[col], errors="coerce")
 
-latest_pipeline_ts = format_latest_timestamp(df, "window_end")
-st.caption(f"Latest available pipeline window end: {latest_pipeline_ts}")
+now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+st.caption(f"Last updated: {now_str}")
 
 if "window_end" in df.columns and df["window_end"].notna().any():
     latest_window_end = df["window_end"].max()
