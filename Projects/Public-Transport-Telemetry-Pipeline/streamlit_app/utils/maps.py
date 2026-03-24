@@ -165,6 +165,7 @@ def get_map_center(*dfs: pd.DataFrame) -> Tuple[float, float]:
         if "lat" in df.columns and "lon" in df.columns:
             tmp = df[["lat", "lon"]].dropna()
             if not tmp.empty:
+                # 这里不直接全部灌进 Python list，先轻量采样
                 if len(tmp) > 500:
                     tmp = tmp.sample(n=500, random_state=42)
                 lats.extend(tmp["lat"].astype(float).tolist())
@@ -279,6 +280,7 @@ def prepare_points_for_pydeck(points_df: pd.DataFrame, max_points: int = 400) ->
 
     out = df[keep_cols].copy()
 
+    # 只保留最近一部分点，防止 map 页面把 Render 内存吃爆
     sort_col = None
     for candidate in ["event_time", "observation_time", "event_time_raw", "seq"]:
         if candidate in out.columns:
@@ -296,17 +298,16 @@ def prepare_points_for_pydeck(points_df: pd.DataFrame, max_points: int = 400) ->
 
     return out
 
-
 def build_map_bundle(selected_route: Optional[str]) -> Dict[str, Any]:
-    """
-    Lightweight per-route bundle for Map View.
-    Do not cache this whole bundle here to avoid large per-route cache objects.
-    """
     data = load_map_parquets()
 
     df_map = data.get("df_map", pd.DataFrame())
     map_points = data.get("map_points", pd.DataFrame())
     paths = data.get("paths", pd.DataFrame())
+    route_options_df = data.get("route_options", pd.DataFrame())
+
+    fallback_df = df_map if not df_map.empty else map_points
+    routes = get_route_options(route_options_df, fallback_df=fallback_df)
 
     filtered_points = filter_by_route(map_points, selected_route)
     filtered_paths = filter_by_route(paths, selected_route)
@@ -317,6 +318,7 @@ def build_map_bundle(selected_route: Optional[str]) -> Dict[str, Any]:
     center_lat, center_lon = get_map_center(points_layer_df, filtered_points, df_map)
 
     return {
+        "routes": routes,
         "points": points_layer_df,
         "paths": path_layer_df,
         "center": {

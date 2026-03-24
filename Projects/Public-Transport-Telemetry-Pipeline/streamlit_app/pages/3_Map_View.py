@@ -8,7 +8,7 @@ import pydeck as pdk
 import streamlit as st
 
 from utils.data_access import load_weather_stations
-from utils.maps import build_map_bundle, load_route_options_only
+from utils.maps import build_map_bundle
 
 
 def compute_dynamic_view_state(points_df: pd.DataFrame, paths_df: pd.DataFrame):
@@ -112,9 +112,11 @@ def load_weather():
 
 
 # -----------------------------
-# Route selection (lightweight)
+# Route selection
 # -----------------------------
-route_options = load_route_options_only()
+with st.spinner("Loading route options..."):
+    initial_bundle = build_map_bundle(None)
+    route_options = initial_bundle.get("routes", [])
 
 if not route_options:
     st.warning("No route options available.")
@@ -130,14 +132,13 @@ show_weather = st.sidebar.checkbox("Show weather context", value=False)
 
 # -----------------------------
 # Main bundle
-# Do not cache here again.
 # -----------------------------
 with st.spinner("Loading route map data..."):
     bundle = build_map_bundle(selected_route)
 
 points_df = bundle["points"]
 paths_df = bundle["paths"]
-weather_df = load_weather() if show_weather else pd.DataFrame()
+weather_df = load_weather()
 
 # -----------------------------
 # Final pydeck-safe dataframes
@@ -162,6 +163,7 @@ if points_df is not None and not points_df.empty:
 else:
     safe_points_df = pd.DataFrame(columns=["lon", "lat", "route_label"])
 
+
 if paths_df is not None and not paths_df.empty:
     keep_cols = [c for c in ["path", "route_label"] if c in paths_df.columns]
     safe_paths_df = paths_df[keep_cols].copy()
@@ -171,7 +173,8 @@ if paths_df is not None and not paths_df.empty:
 else:
     safe_paths_df = pd.DataFrame(columns=["path", "route_label"])
 
-if show_weather and weather_df is not None and not weather_df.empty:
+
+if weather_df is not None and not weather_df.empty:
     keep_cols = [
         "station_id",
         "station_name",
@@ -230,8 +233,30 @@ if show_weather and weather_df is not None and not weather_df.empty:
     safe_weather_df["tooltip_line_3"] = (
         "Observed: " + safe_weather_df["observation_display"].astype(str)
     )
+    safe_weather_df["tooltip_line_4"] = ""
 else:
     safe_weather_df = pd.DataFrame()
+
+
+# -----------------------------
+# Enrich vehicle tooltip with city weather summary
+# -----------------------------
+if not safe_points_df.empty:
+    city_temp_text = "City temp: N/A"
+    city_rain_text = "City rain: N/A"
+
+    if not safe_weather_df.empty:
+        if "temp_display" in safe_weather_df.columns and safe_weather_df["temp_display"].notna().any():
+            city_temp = safe_weather_df["temp_display"].dropna().iloc[0]
+            city_temp_text = f"City temp: {city_temp} °C"
+
+        if "precip_display" in safe_weather_df.columns and safe_weather_df["precip_display"].notna().any():
+            city_rain = safe_weather_df["precip_display"].dropna().iloc[0]
+            city_rain_text = f"City rain: {city_rain} mm"
+
+    safe_points_df["tooltip_line_3"] = city_temp_text
+    safe_points_df["tooltip_line_4"] = city_rain_text
+
 
 # -----------------------------
 # Metrics
@@ -329,6 +354,7 @@ tooltip = {
         <div>{tooltip_line_1}</div>
         <div>{tooltip_line_2}</div>
         <div>{tooltip_line_3}</div>
+        <div>{tooltip_line_4}</div>
     </div>
     """,
     "style": {"backgroundColor": "white", "color": "black"},
@@ -343,7 +369,7 @@ deck = pdk.Deck(
         pitch=0,
     ),
     tooltip=tooltip,
-    map_style="mapbox://styles/mapbox/light-v9",
+    map_style=None,
 )
 
 st.pydeck_chart(deck, use_container_width=True)
