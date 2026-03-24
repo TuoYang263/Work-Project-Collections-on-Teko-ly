@@ -60,6 +60,12 @@ notebooks/**/.ipynb_checkpoints/
 *.gz
 *.7z
 
+# Pdf
+*.pdf
+
+# Picture
+*.png
+
 # Keep placeholders
 !.gitkeep
 
