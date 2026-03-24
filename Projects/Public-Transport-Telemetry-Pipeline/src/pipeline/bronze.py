@@ -28,7 +28,7 @@ from .config import (
     FMI_WFS_URL,
     SIM_DEFAULT_BATCH_SIZE,
     SIM_ROUTE_IDS,
-    SIM_TIME_SPAN_MINUTES,
+    SIM_RECENT_SPAN_MINUTES,
 )
 
 def infer_unit(metric: str) -> str:
@@ -88,7 +88,8 @@ def make_simulated_event(route_ids: List[str] | None = None) -> Dict:
     metric = random.choice(["delay_sec", "occupancy"])
     value = random.randint(-30, 600) if metric == "delay_sec" else random.randint(0, 80)
 
-    offset_sec = random.randint(0, SIM_TIME_SPAN_MINUTES * 60)
+    # keep simulated events recent so event-to-ingest gap looks more realistic
+    offset_sec = random.randint(0, SIM_RECENT_SPAN_MINUTES * 60)
     event_epoch = int(time.time()) - offset_sec
     event_time_raw = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(event_epoch))
 

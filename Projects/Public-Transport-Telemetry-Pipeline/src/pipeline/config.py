@@ -111,6 +111,7 @@ FMI_WFS_URL = "https://opendata.fmi.fi/wfs"
 SIM_ROUTE_IDS = ["M1", "M2", "T1", "R10", "B1", "B2", "X3", "X7"]
 SIM_TIME_SPAN_MINUTES = 60
 SIM_DEFAULT_BATCH_SIZE = 200
+SIM_RECENT_SPAN_MINUTES = 5
 
 # -----------------------------------------------------------------------------
 # Spark local runtime settings (WSL / local development)
