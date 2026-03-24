@@ -3,15 +3,27 @@ import streamlit as st
 import pandas as pd
 from utils.load_data import load_route_window, load_route_daily
 
-start_time = time.time()
-st.title("Route Performance")
-st.caption("Route-level KPIs derived from exported Gold-layer aggregates.")
+
+def format_latest_timestamp(df: pd.DataFrame, column: str) -> str:
+    if df is None or df.empty or column not in df.columns:
+        return "N/A"
+
+    ts = pd.to_datetime(df[column], errors="coerce").max()
+    if pd.isna(ts):
+        return "N/A"
+    return ts.strftime("%Y-%m-%d %H:%M")
+
 
 def safe_mean(series: pd.Series, decimals: int = 2):
     series = series.dropna()
     if series.empty:
         return "N/A"
     return round(series.mean(), decimals)
+
+
+start_time = time.time()
+st.title("Route Performance")
+st.caption("Recent route-level KPIs derived from exported Gold-layer aggregates.")
 
 # ===== Load data =====
 with st.spinner("Loading route performance data..."):
@@ -23,8 +35,17 @@ if df_window is None or df_window.empty:
     st.warning("No route window data available.")
     st.stop()
 
+df_window = df_window.copy()
+for col in ["window_start", "window_end"]:
+    if col in df_window.columns:
+        df_window[col] = pd.to_datetime(df_window[col], errors="coerce")
+
 if df_daily is None:
     df_daily = pd.DataFrame()
+else:
+    df_daily = df_daily.copy()
+    if "date" in df_daily.columns:
+        df_daily["date"] = pd.to_datetime(df_daily["date"], errors="coerce")
 
 # ===== Sidebar filter =====
 routes = ["All"] + sorted(df_window["route_id"].dropna().unique().tolist())
@@ -40,11 +61,24 @@ else:
     df_window_filtered = df_window.copy()
     df_daily_filtered = df_daily.copy()
 
+latest_route_ts = format_latest_timestamp(df_window_filtered, "window_end")
+st.caption(f"Latest available route window end: {latest_route_ts}")
+
+if "window_end" in df_window_filtered.columns and df_window_filtered["window_end"].notna().any():
+    latest_window_end = df_window_filtered["window_end"].max()
+    latest_window_df = df_window_filtered[df_window_filtered["window_end"] == latest_window_end].copy()
+else:
+    latest_window_df = df_window_filtered.copy()
+
 # ===== KPI =====
 col1, col2, col3 = st.columns(3)
-col1.metric("Avg Delay (s)", safe_mean(df_window_filtered["avg_delay_sec"]))
-col2.metric("Avg Occupancy (%)", safe_mean(df_window_filtered["avg_occupancy_pct"]))
-col3.metric("Late Rate", safe_mean(df_window_filtered["late_rate_delay"]))
+col1.metric("Avg Delay (s)", safe_mean(latest_window_df["avg_delay_sec"]))
+col2.metric("Avg Occupancy (%)", safe_mean(latest_window_df["avg_occupancy_pct"]))
+col3.metric("Late Rate", safe_mean(latest_window_df["late_rate_delay"]))
+
+st.caption(
+    "KPIs above reflect the latest available exported route window, while the charts below show recent historical context."
+)
 
 # ===== Main chart =====
 if df_window_filtered.empty:
@@ -67,8 +101,7 @@ else:
             else:
                 st.bar_chart(route_rank.set_index("route_id")["avg_delay_sec"])
                 st.caption(
-                    "Daily route ranking is based on exported Gold-layer daily summaries. "
-                    "The current KPI source primarily reflects the simulated telemetry pipeline."
+                    "Route ranking is based on exported Gold-layer daily summaries and should be read as a recent analytical snapshot."
                 )
     else:
         st.subheader("Delay Trend")
@@ -82,18 +115,14 @@ else:
         if trend_df.empty:
             st.info("No delay trend data available for the selected route.")
         else:
-            trend_df["window_start"] = pd.to_datetime(
-                trend_df["window_start"], errors="coerce"
-            )
-            trend_df = trend_df.dropna(subset=["window_start"]).sort_values("window_start")
+            trend_df = trend_df.sort_values("window_start").tail(12)
 
             if trend_df.empty:
                 st.info("No delay trend data available for the selected route.")
             else:
                 st.line_chart(trend_df.set_index("window_start")["avg_delay_sec"])
                 st.caption(
-                    "Window-level route KPIs are exported from Gold-layer aggregates. "
-                    "The current default route metrics are driven by the simulated telemetry pipeline."
+                    "Window-level route KPIs are exported from Gold-layer aggregates over recent telemetry batches."
                 )
 
 # ===== Daily summary =====

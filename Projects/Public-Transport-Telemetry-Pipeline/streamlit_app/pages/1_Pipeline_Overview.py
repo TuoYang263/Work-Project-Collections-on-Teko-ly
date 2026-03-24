@@ -16,7 +16,7 @@ def format_latest_timestamp(df: pd.DataFrame, column: str) -> str:
 
 start_time = time.time()
 st.title("Pipeline Overview")
-st.caption("Operational summary based on exported Gold-layer pipeline metrics.")
+st.caption("Recent 60-minute operational snapshot based on exported Gold-layer pipeline metrics.")
 
 with st.spinner("Loading latest pipeline metrics..."):
     df = load_pipeline_metrics()
@@ -25,28 +25,43 @@ if df is None or df.empty:
     st.warning("No pipeline metrics available.")
     st.stop()
 
+df = df.copy()
+for col in ["window_start", "window_end"]:
+    if col in df.columns:
+        df[col] = pd.to_datetime(df[col], errors="coerce")
+
 latest_pipeline_ts = format_latest_timestamp(df, "window_end")
-st.caption(f"Latest pipeline window: {latest_pipeline_ts}")
+st.caption(f"Latest available pipeline window end: {latest_pipeline_ts}")
+
+if "window_end" in df.columns and df["window_end"].notna().any():
+    latest_window_end = df["window_end"].max()
+    latest_df = df[df["window_end"] == latest_window_end].copy()
+else:
+    latest_df = df.copy()
 
 # ===== KPI =====
 col1, col2, col3 = st.columns(3)
 
-avg_ingest_delay = df["transit_avg_ingest_delay_sec"].dropna().mean()
-total_transit_events = int(df["transit_total_events"].fillna(0).sum())
+avg_ingest_gap = latest_df["transit_avg_ingest_delay_sec"].dropna().mean()
+total_transit_events = int(latest_df["transit_total_events"].fillna(0).sum())
 
 col1.metric(
-    "Avg Ingest Delay (s)",
-    round(avg_ingest_delay, 2) if pd.notna(avg_ingest_delay) else "N/A",
+    "Avg Event-to-Ingest Gap (s)",
+    round(avg_ingest_gap, 2) if pd.notna(avg_ingest_gap) else "N/A",
 )
-col2.metric("Transit Events", total_transit_events)
-col3.metric("Pipeline Metric Rows", len(df))
+col2.metric("Transit Events (latest batch)", total_transit_events)
+col3.metric("Pipeline Metric Rows", len(latest_df))
+
+st.caption(
+    "The gap metric reflects recent simulated telemetry batches rather than a live streaming SLA."
+)
 
 # ===== Trend =====
 st.subheader("Pipeline Delay Trend")
 
-df_plot = df.copy()
-df_plot["window_start"] = pd.to_datetime(df_plot["window_start"], errors="coerce")
-df_plot = df_plot.dropna(subset=["window_start"]).sort_values("window_start")
+df_plot = df.dropna(subset=["window_start"]).sort_values("window_start").copy()
+if not df_plot.empty:
+    df_plot = df_plot.tail(12)
 
 if df_plot.empty:
     st.info("No pipeline trend data available.")
@@ -60,14 +75,14 @@ st.subheader("Delivered Scope")
 st.markdown(
     """
 - Gold-layer pipeline metrics exported for dashboard consumption
-- Delay-oriented operational summary for recent telemetry windows
+- Recent batch-oriented telemetry summary over the latest available 60-minute lookback
 - Lightweight, decoupled serving layer based on exported outputs
     """
 )
 
 st.caption(
-    "This page presents exported Gold-layer summaries intended for stable inspection "
-    "rather than live pipeline execution."
+    "This page is intended for stable inspection of recent exported pipeline outputs, "
+    "not for live pipeline monitoring."
 )
 
 st.caption(f"Page rendered in {time.time() - start_time:.2f}s")
