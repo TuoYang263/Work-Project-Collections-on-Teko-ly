@@ -88,20 +88,23 @@ st.markdown(
 st.title("Map View")
 st.caption("Recent route paths, sampled vehicle points, and optional FMI weather context.")
 
-@st.cache_data(show_spinner="Loading route options...", ttl=300, max_entries=8)
-def load_overview_bundle():
-    return build_map_bundle(selected_route=None)
-
-@st.cache_data(show_spinner="Loading HSL map data...", ttl=300, max_entries=32)
-def load_bundle(selected_route: str | None):
-    return build_map_bundle(selected_route=selected_route)
-
-@st.cache_data(show_spinner="Loading FMI weather data...", ttl=300, max_entries=4)
+@st.cache_data(show_spinner=False, ttl=300, max_entries=4)
 def load_weather():
     return load_weather_stations()
 
+def get_cached_bundle(selected_route: str | None):
+    cache_key = selected_route or "__all__"
+    if "map_bundle_cache" not in st.session_state:
+        st.session_state["map_bundle_cache"] = {}
+    bundle_cache = st.session_state["map_bundle_cache"]
 
-initial_bundle = load_overview_bundle()
+    if cache_key not in bundle_cache:
+        with st.spinner("Loading map data..."):
+            bundle_cache[cache_key] = build_map_bundle(selected_route=selected_route)
+    return bundle_cache[cache_key]
+
+
+initial_bundle = get_cached_bundle(None)
 route_options = initial_bundle["routes"]
 
 selected_route = st.sidebar.selectbox(
@@ -113,11 +116,20 @@ selected_route = st.sidebar.selectbox(
 selected_route_value = None if selected_route == "All" else selected_route
 is_all_routes = selected_route_value is None
 
-show_vehicle_points = st.sidebar.checkbox(
-    "Show vehicle points",
-    value=False if is_all_routes else True,
-    help="Disabled by default in overview mode to keep free-tier memory usage predictable.",
-)
+if is_all_routes:
+    st.sidebar.checkbox(
+        "Show vehicle points",
+        value=False,
+        disabled=True,
+        help="Overview mode keeps vehicle points disabled to reduce memory pressure on free-tier hosting.",
+    )
+    show_vehicle_points = False
+else:
+    show_vehicle_points = st.sidebar.checkbox(
+        "Show vehicle points",
+        value=True,
+        help="Enabled for selected routes only.",
+    )
 
 show_weather = st.sidebar.checkbox(
     "Show weather context",
@@ -127,20 +139,17 @@ show_weather = st.sidebar.checkbox(
 max_points = st.sidebar.slider(
     "Max rendered points",
     min_value=50,
-    max_value=500,
-    value=150,
+    max_value=300,
+    value=100,
     step=50,
 )
 
-bundle = load_overview_bundle() if is_all_routes else load_bundle(selected_route_value)
+bundle = get_cached_bundle(selected_route_value)
 
 points_df = bundle["points"]
 paths_df = bundle["paths"]
 weather_df = load_weather() if show_weather else pd.DataFrame()
 
-# -----------------------------
-# Final pydeck-safe dataframes
-# -----------------------------
 safe_points_df = points_df.copy()
 safe_paths_df = paths_df.copy()
 safe_weather_df = weather_df.copy()
@@ -254,9 +263,6 @@ st.caption(
     f"Latest weather observation: {latest_weather_ts if show_weather else 'hidden'}"
 )
 
-# -----------------------------
-# Metrics
-# -----------------------------
 m1, m2, m3, m4 = st.columns(4)
 with m1:
     st.metric("Selected route", selected_route if selected_route_value else "All")
@@ -275,9 +281,6 @@ with m3:
 with m4:
     st.metric("Weather stations", len(safe_weather_df) if show_weather else 0)
 
-# -----------------------------
-# Legend
-# -----------------------------
 st.markdown(
     """
     <div style="display:flex; gap:24px; align-items:center; font-size:14px; margin-bottom:8px;">
@@ -325,19 +328,6 @@ if is_all_routes:
                 pickable=False,
             )
         )
-
-    if show_vehicle_points and not render_points_df.empty:
-        layers.append(
-            pdk.Layer(
-                "ScatterplotLayer",
-                data=render_points_df,
-                get_position="[lon, lat]",
-                get_radius=18,
-                get_fill_color=[40, 120, 255],
-                opacity=0.82,
-                pickable=True,
-            )
-        )
 else:
     if not safe_paths_df.empty and "path" in safe_paths_df.columns:
         layers.append(
@@ -358,7 +348,7 @@ else:
                 "ScatterplotLayer",
                 data=render_points_df,
                 get_position="[lon, lat]",
-                get_radius=38,
+                get_radius=34,
                 get_fill_color=[30, 120, 255],
                 pickable=True,
                 opacity=0.92,

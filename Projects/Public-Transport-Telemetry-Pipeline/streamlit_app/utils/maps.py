@@ -26,8 +26,6 @@ from utils.data_access import (
 )
 
 
-# Column aliases used to normalize slightly different schemas
-# into a minimal internal format for the Streamlit layer.
 COL_ALIASES = {
     "route_id": ["route_id", "route", "line_id", "line", "short_name", "trip_route_id"],
     "route_label": ["route_label", "route_name", "label", "display_name", "route_short_name"],
@@ -39,9 +37,6 @@ COL_ALIASES = {
 
 
 def _first_existing_col(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
-    """
-    Return the first matching column from a list of candidates.
-    """
     for col in candidates:
         if col in df.columns:
             return col
@@ -49,13 +44,6 @@ def _first_existing_col(df: pd.DataFrame, candidates: List[str]) -> Optional[str
 
 
 def _rename_to_standard(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Rename columns to standardized internal names.
-
-    This is a best-effort normalization step. It does not fail if
-    a column is missing, which keeps the visualization layer tolerant
-    to minor schema differences.
-    """
     rename_map = {}
 
     for standard_col, candidates in COL_ALIASES.items():
@@ -70,11 +58,6 @@ def _rename_to_standard(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _coerce_numeric(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
-    """
-    Convert selected columns to numeric values.
-
-    Invalid values are coerced to NaN.
-    """
     for col in cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -82,11 +65,6 @@ def _coerce_numeric(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
 
 
 def _normalize_route_label(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Ensure that a stable route_label column exists for UI usage.
-
-    If route_label is missing, route_id is used as a fallback.
-    """
     if "route_label" not in df.columns:
         if "route_id" in df.columns:
             df["route_label"] = df["route_id"].astype(str)
@@ -94,14 +72,9 @@ def _normalize_route_label(df: pd.DataFrame) -> pd.DataFrame:
             df["route_label"] = "unknown"
     return df
 
-@st.cache_data(show_spinner=False)
-def load_map_parquets() -> Dict[str, pd.DataFrame]:
-    """
-    Load all map-related datasets into memory.
 
-    Data access is delegated to data_access.py so the map layer can stay
-    storage-agnostic (local or Azure Blob).
-    """
+@st.cache_data(show_spinner=False, ttl=300, max_entries=4)
+def load_map_parquets() -> Dict[str, pd.DataFrame]:
     loaded: Dict[str, pd.DataFrame] = {
         "df_map": load_hsl_df_map(),
         "map_points": load_hsl_map_points(),
@@ -121,13 +94,6 @@ def get_route_options(
     route_options_df: pd.DataFrame,
     fallback_df: Optional[pd.DataFrame] = None,
 ) -> List[str]:
-    """
-    Build route selector options for the map page.
-
-    Priority:
-    1) route_options dataset
-    2) fallback dataframe such as df_map or map_points
-    """
     if route_options_df is not None and not route_options_df.empty:
         df = _normalize_route_label(route_options_df.copy())
 
@@ -159,11 +125,6 @@ def get_route_options(
 
 
 def filter_by_route(df: pd.DataFrame, selected_route: Optional[str]) -> pd.DataFrame:
-    """
-    Filter a dataframe by the selected route.
-
-    Supports both route_label and route_id if available.
-    """
     if df is None or df.empty or not selected_route:
         return df
 
@@ -179,11 +140,6 @@ def filter_by_route(df: pd.DataFrame, selected_route: Optional[str]) -> pd.DataF
 
 
 def get_map_center(*dfs: pd.DataFrame) -> Tuple[float, float]:
-    """
-    Compute map center from available coordinate data.
-
-    Falls back to central Helsinki if no valid coordinates are found.
-    """
     lats: List[float] = []
     lons: List[float] = []
 
@@ -204,17 +160,6 @@ def get_map_center(*dfs: pd.DataFrame) -> Tuple[float, float]:
 
 
 def prepare_paths_for_pydeck(paths_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Prepare path data for pydeck PathLayer.
-
-    Supported input formats:
-    1) A pre-built geometry/path column already containing path coordinates
-    2) Row-based point records that need to be grouped into a path sequence
-
-    Output schema:
-    - path: [[lon, lat], [lon, lat], ...]
-    - route_label
-    """
     if paths_df is None or paths_df.empty:
         return pd.DataFrame(columns=["path", "route_label"])
 
@@ -269,15 +214,6 @@ def prepare_paths_for_pydeck(paths_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def prepare_points_for_pydeck(points_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Prepare point data for pydeck ScatterplotLayer.
-
-    Output columns include:
-    - lat
-    - lon
-    - route_label
-    - optional metadata columns if present
-    """
     if points_df is None or points_df.empty:
         return pd.DataFrame(columns=["lat", "lon", "route_label"])
 
@@ -300,6 +236,9 @@ def prepare_points_for_pydeck(points_df: pd.DataFrame) -> pd.DataFrame:
             "color",
             "transport_mode",
             "vehicle_id",
+            "event_time",
+            "event_time_raw",
+            "observation_time",
         ]
     ]
 
@@ -309,19 +248,8 @@ def prepare_points_for_pydeck(points_df: pd.DataFrame) -> pd.DataFrame:
     return df[keep_cols].copy()
 
 
-def build_map_bundle(
-    selected_route: Optional[str] = None,
-) -> Dict[str, Any]:
-    """
-    High-level entry point used by the Streamlit map page.
-
-    Returns:
-    - routes: list of route labels for the selector
-    - points: dataframe for pydeck ScatterplotLayer
-    - paths: dataframe for pydeck PathLayer
-    - center: dict containing map center coordinates
-    - raw: original loaded dataframes for debugging
-    """
+@st.cache_data(show_spinner=False, ttl=300, max_entries=32)
+def build_map_bundle(selected_route: Optional[str] = None) -> Dict[str, Any]:
     data = load_map_parquets()
 
     df_map = data.get("df_map", pd.DataFrame())
