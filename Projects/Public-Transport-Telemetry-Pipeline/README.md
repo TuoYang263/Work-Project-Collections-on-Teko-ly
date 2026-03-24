@@ -327,6 +327,9 @@ Projects/Public-Transport-Telemetry-Pipeline/
   notebooks/mvp/
   docs/
     architecture.png
+    dashboard_map_view.jpg
+    dashboard_pipeline_overview.jpg
+    dashboard_route_performance.jpg
 
 README.md
 requirements.txt
