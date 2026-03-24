@@ -7,53 +7,82 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
-from utils.maps import build_map_bundle
 from utils.data_access import load_weather_stations
+from utils.maps import build_map_bundle, load_route_options_only
 
 
-def compute_dynamic_view_state(points_df, paths_df):
-    """Compute a lightweight dynamic map center and zoom for a selected route."""
-    lats = []
-    lons = []
+def compute_dynamic_view_state(points_df: pd.DataFrame, paths_df: pd.DataFrame):
+    """
+    Lightweight dynamic view state.
+    Prefer points first. Only fall back to a small number of path coordinates.
+    """
+    if points_df is not None and not points_df.empty and {"lat", "lon"}.issubset(points_df.columns):
+        tmp = points_df[["lat", "lon"]].dropna()
+        if not tmp.empty:
+            lat_min = float(tmp["lat"].min())
+            lat_max = float(tmp["lat"].max())
+            lon_min = float(tmp["lon"].min())
+            lon_max = float(tmp["lon"].max())
 
-    if not paths_df.empty and "path" in paths_df.columns:
-        for path in paths_df["path"]:
+            lat_center = (lat_min + lat_max) / 2
+            lon_center = (lon_min + lon_max) / 2
+
+            lat_span = lat_max - lat_min
+            lon_span = lon_max - lon_min
+            max_span = max(lat_span, lon_span)
+
+            if max_span > 0.35:
+                zoom = 10.8
+            elif max_span > 0.18:
+                zoom = 11.4
+            elif max_span > 0.08:
+                zoom = 12.0
+            elif max_span > 0.03:
+                zoom = 12.8
+            else:
+                zoom = 13.5
+
+            return {"lat": lat_center, "lon": lon_center, "zoom": zoom}
+
+    if paths_df is not None and not paths_df.empty and "path" in paths_df.columns:
+        lats = []
+        lons = []
+
+        for path in paths_df["path"].head(2):
             if isinstance(path, list):
-                for coord in path:
-                    if isinstance(coord, list) and len(coord) == 2:
-                        lons.append(float(coord[0]))
-                        lats.append(float(coord[1]))
+                for coord in path[:300]:
+                    if isinstance(coord, list) and len(coord) >= 2:
+                        try:
+                            lons.append(float(coord[0]))
+                            lats.append(float(coord[1]))
+                        except Exception:
+                            continue
 
-    if not lats or not lons:
-        if not points_df.empty:
-            lats.extend(points_df["lat"].astype(float).tolist())
-            lons.extend(points_df["lon"].astype(float).tolist())
+        if lats and lons:
+            lat_min, lat_max = min(lats), max(lats)
+            lon_min, lon_max = min(lons), max(lons)
 
-    if not lats or not lons:
-        return {"lat": 60.1699, "lon": 24.9384, "zoom": 11.5}
+            lat_center = (lat_min + lat_max) / 2
+            lon_center = (lon_min + lon_max) / 2
 
-    lat_min, lat_max = min(lats), max(lats)
-    lon_min, lon_max = min(lons), max(lons)
+            lat_span = lat_max - lat_min
+            lon_span = lon_max - lon_min
+            max_span = max(lat_span, lon_span)
 
-    lat_center = (lat_min + lat_max) / 2
-    lon_center = (lon_min + lon_max) / 2
+            if max_span > 0.35:
+                zoom = 10.8
+            elif max_span > 0.18:
+                zoom = 11.4
+            elif max_span > 0.08:
+                zoom = 12.0
+            elif max_span > 0.03:
+                zoom = 12.8
+            else:
+                zoom = 13.5
 
-    lat_span = lat_max - lat_min
-    lon_span = lon_max - lon_min
-    max_span = max(lat_span, lon_span)
+            return {"lat": lat_center, "lon": lon_center, "zoom": zoom}
 
-    if max_span > 0.35:
-        zoom = 10.8
-    elif max_span > 0.18:
-        zoom = 11.4
-    elif max_span > 0.08:
-        zoom = 12.0
-    elif max_span > 0.03:
-        zoom = 12.8
-    else:
-        zoom = 13.5
-
-    return {"lat": lat_center, "lon": lon_center, "zoom": zoom}
+    return {"lat": 60.1699, "lon": 24.9384, "zoom": 11.5}
 
 
 st.markdown(
@@ -77,18 +106,15 @@ now_str = datetime.now(ZoneInfo("Europe/Helsinki")).strftime("%Y-%m-%d %H:%M")
 st.caption(f"Last updated: {now_str} (Helsinki time)")
 
 
-@st.cache_data(show_spinner="Loading route map data...")
-def load_bundle(selected_route: str):
-    return build_map_bundle(selected_route=selected_route)
-
-
-@st.cache_data(show_spinner="Loading FMI weather data...")
+@st.cache_data(show_spinner="Loading FMI weather data...", ttl=300, max_entries=2)
 def load_weather():
     return load_weather_stations()
 
 
-initial_bundle = load_bundle(selected_route=None)
-route_options = initial_bundle["routes"]
+# -----------------------------
+# Route selection (lightweight)
+# -----------------------------
+route_options = load_route_options_only()
 
 if not route_options:
     st.warning("No route options available.")
@@ -102,7 +128,12 @@ selected_route = st.sidebar.selectbox(
 
 show_weather = st.sidebar.checkbox("Show weather context", value=False)
 
-bundle = load_bundle(selected_route)
+# -----------------------------
+# Main bundle
+# Do not cache here again.
+# -----------------------------
+with st.spinner("Loading route map data..."):
+    bundle = build_map_bundle(selected_route)
 
 points_df = bundle["points"]
 paths_df = bundle["paths"]
@@ -111,11 +142,36 @@ weather_df = load_weather() if show_weather else pd.DataFrame()
 # -----------------------------
 # Final pydeck-safe dataframes
 # -----------------------------
-safe_points_df = points_df.copy()
-safe_paths_df = paths_df.copy()
-safe_weather_df = weather_df.copy()
+if points_df is not None and not points_df.empty:
+    keep_cols = [c for c in ["lon", "lat", "route_label"] if c in points_df.columns]
+    safe_points_df = points_df[keep_cols].copy()
+    safe_points_df["lon"] = pd.to_numeric(safe_points_df["lon"], errors="coerce")
+    safe_points_df["lat"] = pd.to_numeric(safe_points_df["lat"], errors="coerce")
+    safe_points_df = safe_points_df.dropna(subset=["lon", "lat"])
 
-if not safe_weather_df.empty:
+    if "route_label" not in safe_points_df.columns:
+        safe_points_df["route_label"] = str(selected_route)
+    else:
+        safe_points_df["route_label"] = safe_points_df["route_label"].astype(str)
+
+    safe_points_df["lat_display"] = safe_points_df["lat"].round(4)
+    safe_points_df["lon_display"] = safe_points_df["lon"].round(4)
+    safe_points_df["tooltip_title"] = "Route: " + safe_points_df["route_label"]
+    safe_points_df["tooltip_line_1"] = "Lat: " + safe_points_df["lat_display"].astype(str)
+    safe_points_df["tooltip_line_2"] = "Lon: " + safe_points_df["lon_display"].astype(str)
+else:
+    safe_points_df = pd.DataFrame(columns=["lon", "lat", "route_label"])
+
+if paths_df is not None and not paths_df.empty:
+    keep_cols = [c for c in ["path", "route_label"] if c in paths_df.columns]
+    safe_paths_df = paths_df[keep_cols].copy()
+
+    if "route_label" in safe_paths_df.columns:
+        safe_paths_df["route_label"] = safe_paths_df["route_label"].astype(str)
+else:
+    safe_paths_df = pd.DataFrame(columns=["path", "route_label"])
+
+if show_weather and weather_df is not None and not weather_df.empty:
     keep_cols = [
         "station_id",
         "station_name",
@@ -125,11 +181,12 @@ if not safe_weather_df.empty:
         "temperature",
         "precipitation",
     ]
-    existing_cols = [c for c in keep_cols if c in safe_weather_df.columns]
-    safe_weather_df = safe_weather_df[existing_cols].copy()
+    existing_cols = [c for c in keep_cols if c in weather_df.columns]
+    safe_weather_df = weather_df[existing_cols].copy()
 
-    safe_weather_df["lat"] = safe_weather_df["lat"].astype(float)
-    safe_weather_df["lon"] = safe_weather_df["lon"].astype(float)
+    safe_weather_df["lat"] = pd.to_numeric(safe_weather_df["lat"], errors="coerce")
+    safe_weather_df["lon"] = pd.to_numeric(safe_weather_df["lon"], errors="coerce")
+    safe_weather_df = safe_weather_df.dropna(subset=["lat", "lon"])
 
     if "station_name" in safe_weather_df.columns:
         safe_weather_df["station_name"] = safe_weather_df["station_name"].astype(str)
@@ -173,48 +230,8 @@ if not safe_weather_df.empty:
     safe_weather_df["tooltip_line_3"] = (
         "Observed: " + safe_weather_df["observation_display"].astype(str)
     )
-
-if not safe_points_df.empty:
-    keep_cols = ["lon", "lat", "route_label"]
-    existing_cols = [c for c in keep_cols if c in safe_points_df.columns]
-    safe_points_df = safe_points_df[existing_cols].copy()
-
-    safe_points_df["lon"] = safe_points_df["lon"].astype(float)
-    safe_points_df["lat"] = safe_points_df["lat"].astype(float)
-    safe_points_df["route_label"] = safe_points_df["route_label"].astype(str)
-
-    safe_points_df["lat_display"] = safe_points_df["lat"].round(4)
-    safe_points_df["lon_display"] = safe_points_df["lon"].round(4)
-
-    city_temp_text = "City temp: N/A"
-    city_rain_text = "City rain: N/A"
-
-    if not safe_weather_df.empty:
-        if "temp_display" in safe_weather_df.columns and safe_weather_df["temp_display"].notna().any():
-            city_temp = safe_weather_df["temp_display"].dropna().iloc[0]
-            city_temp_text = f"City temp: {city_temp} °C"
-
-        if "precip_display" in safe_weather_df.columns and safe_weather_df["precip_display"].notna().any():
-            city_rain = safe_weather_df["precip_display"].dropna().iloc[0]
-            city_rain_text = f"City rain: {city_rain} mm"
-
-    safe_points_df["tooltip_title"] = "Route: " + safe_points_df["route_label"]
-    safe_points_df["tooltip_line_1"] = "Lat: " + safe_points_df["lat_display"].astype(str)
-    safe_points_df["tooltip_line_2"] = "Lon: " + safe_points_df["lon_display"].astype(str)
-    safe_points_df["tooltip_line_3"] = city_temp_text
-    safe_points_df["tooltip_line_4"] = city_rain_text
-
-if not safe_paths_df.empty:
-    keep_cols = ["path", "route_label"]
-    existing_cols = [c for c in keep_cols if c in safe_paths_df.columns]
-    safe_paths_df = safe_paths_df[existing_cols].copy()
-
-    safe_paths_df["route_label"] = safe_paths_df["route_label"].astype(str)
-    safe_paths_df["path"] = safe_paths_df["path"].apply(
-        lambda p: [[float(x), float(y)] for x, y in p]
-        if isinstance(p, list)
-        else []
-    )
+else:
+    safe_weather_df = pd.DataFrame()
 
 # -----------------------------
 # Metrics
@@ -256,8 +273,6 @@ st.markdown(
 # Layers
 # -----------------------------
 layers = []
-render_points_df = safe_points_df.copy()
-render_weather_df = safe_weather_df.copy()
 
 if not safe_paths_df.empty and "path" in safe_paths_df.columns:
     layers.append(
@@ -272,11 +287,11 @@ if not safe_paths_df.empty and "path" in safe_paths_df.columns:
         )
     )
 
-if not render_points_df.empty:
+if not safe_points_df.empty:
     layers.append(
         pdk.Layer(
             "ScatterplotLayer",
-            data=render_points_df,
+            data=safe_points_df,
             get_position="[lon, lat]",
             get_radius=45,
             get_fill_color=[30, 120, 255],
@@ -285,11 +300,11 @@ if not render_points_df.empty:
         )
     )
 
-if show_weather and not render_weather_df.empty:
+if show_weather and not safe_weather_df.empty:
     layers.append(
         pdk.Layer(
             "ScatterplotLayer",
-            data=render_weather_df,
+            data=safe_weather_df,
             get_position="[lon, lat]",
             get_radius=70,
             get_fill_color=[255, 165, 0],
@@ -305,37 +320,44 @@ if show_weather and not render_weather_df.empty:
 # -----------------------------
 # View state
 # -----------------------------
-view_cfg = compute_dynamic_view_state(render_points_df, safe_paths_df)
-
-view_state = pdk.ViewState(
-    latitude=view_cfg["lat"],
-    longitude=view_cfg["lon"],
-    zoom=view_cfg["zoom"],
-    pitch=0,
-)
+view_cfg = compute_dynamic_view_state(safe_points_df, safe_paths_df)
 
 tooltip = {
     "html": """
-    <b>{tooltip_title}</b><br/>
-    {tooltip_line_1}<br/>
-    {tooltip_line_2}<br/>
-    {tooltip_line_3}<br/>
-    {tooltip_line_4}
+    <div style="font-size: 13px;">
+        <div><b>{tooltip_title}</b></div>
+        <div>{tooltip_line_1}</div>
+        <div>{tooltip_line_2}</div>
+        <div>{tooltip_line_3}</div>
+    </div>
     """,
-    "style": {
-        "backgroundColor": "#1f2c3a",
-        "color": "white",
-        "fontSize": "12px",
-    },
+    "style": {"backgroundColor": "white", "color": "black"},
 }
 
-st.pydeck_chart(
-    pdk.Deck(
-        map_style="light",
-        initial_view_state=view_state,
-        layers=layers,
-        tooltip=tooltip,
+deck = pdk.Deck(
+    layers=layers,
+    initial_view_state=pdk.ViewState(
+        latitude=view_cfg["lat"],
+        longitude=view_cfg["lon"],
+        zoom=view_cfg["zoom"],
+        pitch=0,
     ),
-    use_container_width=True,
-    height=650,
+    tooltip=tooltip,
+    map_style="mapbox://styles/mapbox/light-v9",
 )
+
+st.pydeck_chart(deck, use_container_width=True)
+
+# -----------------------------
+# Optional debug
+# -----------------------------
+with st.expander("Map debug info"):
+    st.write(
+        {
+            "selected_route": selected_route,
+            "n_points": int(len(safe_points_df)),
+            "n_paths": int(len(safe_paths_df)),
+            "n_weather": int(len(safe_weather_df)) if show_weather else 0,
+            "view_state": view_cfg,
+        }
+    )

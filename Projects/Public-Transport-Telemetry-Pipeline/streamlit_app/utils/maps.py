@@ -4,7 +4,7 @@ Map utilities for the Streamlit visualization layer.
 Responsibilities:
 - Load exported HSL map datasets through data_access.py
 - Normalize column names across heterogeneous map sources
-- Prepare point/path data for pydeck layers
+- Prepare lightweight point/path data for pydeck layers
 - Provide route filtering and map center calculation
 
 This module is intentionally storage-agnostic.
@@ -22,7 +22,6 @@ from utils.data_access import (
     load_hsl_df_map,
     load_hsl_map_points,
     load_hsl_route_paths,
-    load_hsl_route_paths_overview,
     load_hsl_route_options,
 )
 
@@ -74,7 +73,7 @@ def _normalize_route_label(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-@st.cache_data(show_spinner=False, ttl=300, max_entries=4)
+@st.cache_data(show_spinner=False, ttl=300, max_entries=2)
 def load_map_parquets() -> Dict[str, pd.DataFrame]:
     loaded: Dict[str, pd.DataFrame] = {
         "df_map": load_hsl_df_map(),
@@ -91,19 +90,16 @@ def load_map_parquets() -> Dict[str, pd.DataFrame]:
     return loaded
 
 
-@st.cache_data(show_spinner=False, ttl=300, max_entries=4)
-def load_map_overview_parquets() -> Dict[str, pd.DataFrame]:
-    loaded: Dict[str, pd.DataFrame] = {
-        "paths": load_hsl_route_paths_overview(),
-        "route_options": load_hsl_route_options(),
-    }
+@st.cache_data(show_spinner=False, ttl=300, max_entries=2)
+def load_route_options_only() -> List[str]:
+    data = load_map_parquets()
 
-    for key in ["paths", "route_options"]:
-        if key in loaded and loaded[key] is not None and not loaded[key].empty:
-            loaded[key] = _rename_to_standard(loaded[key])
-            loaded[key] = _coerce_numeric(loaded[key], ["lat", "lon", "seq"])
+    route_options_df = data.get("route_options", pd.DataFrame())
+    fallback_df = data.get("df_map", pd.DataFrame())
+    if fallback_df.empty:
+        fallback_df = data.get("map_points", pd.DataFrame())
 
-    return loaded
+    return get_route_options(route_options_df, fallback_df=fallback_df)
 
 
 def get_route_options(
@@ -141,7 +137,10 @@ def get_route_options(
 
 
 def filter_by_route(df: pd.DataFrame, selected_route: Optional[str]) -> pd.DataFrame:
-    if df is None or df.empty or not selected_route:
+    if df is None or df.empty:
+        return df
+
+    if not selected_route or str(selected_route).lower() == "all":
         return df
 
     candidate_cols = [col for col in ["route_label", "route_id"] if col in df.columns]
@@ -152,7 +151,7 @@ def filter_by_route(df: pd.DataFrame, selected_route: Optional[str]) -> pd.DataF
     for col in candidate_cols:
         mask = mask | (df[col].astype(str) == str(selected_route))
 
-    return df.loc[mask].copy()
+    return df.loc[mask]
 
 
 def get_map_center(*dfs: pd.DataFrame) -> Tuple[float, float]:
@@ -166,6 +165,8 @@ def get_map_center(*dfs: pd.DataFrame) -> Tuple[float, float]:
         if "lat" in df.columns and "lon" in df.columns:
             tmp = df[["lat", "lon"]].dropna()
             if not tmp.empty:
+                if len(tmp) > 500:
+                    tmp = tmp.sample(n=500, random_state=42)
                 lats.extend(tmp["lat"].astype(float).tolist())
                 lons.extend(tmp["lon"].astype(float).tolist())
 
@@ -175,26 +176,40 @@ def get_map_center(*dfs: pd.DataFrame) -> Tuple[float, float]:
     return 60.1699, 24.9384
 
 
-def prepare_paths_for_pydeck(paths_df: pd.DataFrame) -> pd.DataFrame:
+def prepare_paths_for_pydeck(paths_df: pd.DataFrame, max_paths: int = 2) -> pd.DataFrame:
     if paths_df is None or paths_df.empty:
         return pd.DataFrame(columns=["path", "route_label"])
 
-    df = paths_df.copy()
-    df = _rename_to_standard(df)
+    df = _rename_to_standard(paths_df)
     df = _normalize_route_label(df)
 
     geometry_col = _first_existing_col(df, ["path", "geometry", "coordinates"])
     if geometry_col:
-        out = df.copy()
+        keep_cols = [c for c in [geometry_col, "route_label", "route_id"] if c in df.columns]
+        out = df[keep_cols].copy()
+
         if geometry_col != "path":
             out = out.rename(columns={geometry_col: "path"})
 
         if "path" in out.columns:
-            out["path"] = out["path"].apply(
-                lambda p: [[float(coord) for coord in point] for point in p]
-                if isinstance(p, (list, tuple, np.ndarray))
-                else []
-            )
+            def _safe_path(p):
+                if not isinstance(p, (list, tuple, np.ndarray)):
+                    return []
+                cleaned = []
+                for point in p:
+                    if isinstance(point, (list, tuple, np.ndarray)) and len(point) >= 2:
+                        try:
+                            cleaned.append([float(point[0]), float(point[1])])
+                        except Exception:
+                            continue
+                return cleaned
+
+            out["path"] = out["path"].apply(_safe_path)
+            out = out[out["path"].map(len) > 1]
+
+        if "route_label" in out.columns:
+            out = out.drop_duplicates(subset=["route_label"])
+        out = out.head(max_paths)
 
         keep_cols = [col for col in ["path", "route_label", "route_id"] if col in out.columns]
         return out[keep_cols].copy()
@@ -213,7 +228,7 @@ def prepare_paths_for_pydeck(paths_df: pd.DataFrame) -> pd.DataFrame:
     group_col = "route_label" if "route_label" in df.columns else "route_id"
 
     grouped = (
-        df.groupby(group_col, dropna=False)
+        df.groupby(group_col, dropna=False, sort=False)
         .apply(
             lambda x: [
                 [float(lon), float(lat)]
@@ -226,15 +241,16 @@ def prepare_paths_for_pydeck(paths_df: pd.DataFrame) -> pd.DataFrame:
     if group_col != "route_label":
         grouped["route_label"] = grouped[group_col].astype(str)
 
+    grouped = grouped[grouped["path"].map(len) > 1].head(max_paths)
+
     return grouped[["path", "route_label"]].copy()
 
 
-def prepare_points_for_pydeck(points_df: pd.DataFrame) -> pd.DataFrame:
+def prepare_points_for_pydeck(points_df: pd.DataFrame, max_points: int = 400) -> pd.DataFrame:
     if points_df is None or points_df.empty:
         return pd.DataFrame(columns=["lat", "lon", "route_label"])
 
-    df = points_df.copy()
-    df = _rename_to_standard(df)
+    df = _rename_to_standard(points_df)
     df = _normalize_route_label(df)
     df = _coerce_numeric(df, ["lat", "lon", "seq"])
     df = df.dropna(subset=["lat", "lon"])
@@ -261,41 +277,50 @@ def prepare_points_for_pydeck(points_df: pd.DataFrame) -> pd.DataFrame:
     if not keep_cols:
         keep_cols = ["lat", "lon", "route_label"]
 
-    return df[keep_cols].copy()
+    out = df[keep_cols].copy()
+
+    sort_col = None
+    for candidate in ["event_time", "observation_time", "event_time_raw", "seq"]:
+        if candidate in out.columns:
+            sort_col = candidate
+            break
+
+    if sort_col is not None:
+        try:
+            out = out.sort_values(sort_col)
+        except Exception:
+            pass
+
+    if len(out) > max_points:
+        out = out.tail(max_points).copy()
+
+    return out
 
 
-@st.cache_data(show_spinner=False, ttl=300, max_entries=32)
-def build_map_bundle(selected_route: Optional[str] = None) -> Dict[str, Any]:
+def build_map_bundle(selected_route: Optional[str]) -> Dict[str, Any]:
+    """
+    Lightweight per-route bundle for Map View.
+    Do not cache this whole bundle here to avoid large per-route cache objects.
+    """
     data = load_map_parquets()
 
     df_map = data.get("df_map", pd.DataFrame())
     map_points = data.get("map_points", pd.DataFrame())
     paths = data.get("paths", pd.DataFrame())
-    route_options = data.get("route_options", pd.DataFrame())
-
-    fallback_df = df_map if not df_map.empty else map_points
-    routes = get_route_options(route_options, fallback_df=fallback_df)
 
     filtered_points = filter_by_route(map_points, selected_route)
     filtered_paths = filter_by_route(paths, selected_route)
 
-    points_layer_df = prepare_points_for_pydeck(filtered_points)
-    path_layer_df = prepare_paths_for_pydeck(filtered_paths)
+    points_layer_df = prepare_points_for_pydeck(filtered_points, max_points=400)
+    path_layer_df = prepare_paths_for_pydeck(filtered_paths, max_paths=2)
 
     center_lat, center_lon = get_map_center(points_layer_df, filtered_points, df_map)
 
     return {
-        "routes": routes,
         "points": points_layer_df,
         "paths": path_layer_df,
         "center": {
             "lat": center_lat,
             "lon": center_lon,
-        },
-        "raw": {
-            "df_map": df_map,
-            "map_points": map_points,
-            "paths": paths,
-            "route_options": route_options,
         },
     }
