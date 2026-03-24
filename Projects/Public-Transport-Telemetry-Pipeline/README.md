@@ -160,6 +160,8 @@ GitHub Actions is used for scheduling and execution instead of heavier orchestra
 
 This keeps the system simple while still supporting automation and reproducibility.
 
+---
+
 ## Handling imperfect data
 
 Real-world data sources rarely align perfectly.
