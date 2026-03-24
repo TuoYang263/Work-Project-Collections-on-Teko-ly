@@ -1,0 +1,39 @@
+name: Keepalive NYC Dashboard
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"  # every 10 minutes
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: HEAD render homepage
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          URL="https://nyc-taxi-dashboard-render-deploy.onrender.com/?keepalive=$(date +%s)"
+          echo "Ping: $URL"
+
+          # HEAD is enough to keep Render awake and is more compatible with monitors
+          code="$(curl -sS -I -L \
+            --connect-timeout 10 \
+            --max-time 20 \
+            -H "Cache-Control: no-cache" \
+            -H "Pragma: no-cache" \
+            -H "User-Agent: github-actions-keepalive/1.0" \
+            -o /dev/null \
+            -w "%{http_code}" \
+            "$URL" || true)"
+
+          echo "HTTP $code"
+
+          # treat 200/301/302/303 as success
+          if [[ "$code" =~ ^(200|301|302|303)$ ]]; then
+            exit 0
+          fi
+
+          exit 1

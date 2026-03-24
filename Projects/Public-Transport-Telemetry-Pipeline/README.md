@@ -1,204 +1,388 @@
-# Public Transport Telemetry & Weather Impact Pipeline (MVP)
+# Public Transport Telemetry & Weather Impact Pipeline
 
-Production-oriented telemetry pipeline using a layered Bronze → Silver → Gold architecture.
+## Live Demo
 
-It ingests operational telemetry events and weather observations into a unified event model and aggregates them into monitoring-ready operational metrics.
+Dashboard (Render):  
+https://transport-telemetry-dashboard.onrender.com
 
-This MVP focuses on data modeling, aggregation, and pipeline observability. Predictive modeling and accuracy optimization are intentionally out of scope.
+The dashboard reads precomputed parquet outputs and reflects recent pipeline runs.
+
+Tip:  
+Select a route and toggle weather context in the Map View to explore how external signals relate to transport behavior.
 
 ---
 
-## Problem
+## Summary
 
-Public transport operations are sensitive to external conditions such as weather, but telemetry signals and external observations are often processed separately or analyzed offline.
+A production-style telemetry pipeline that integrates transport signals and weather data into a unified event model, with a focus on reliability, observability, and simple deployment.
 
-This project demonstrates how event-based telemetry and weather observations can be ingested into a unified pipeline and transformed into operational monitoring signals.
+The system follows a layered architecture (Bronze → Silver → Gold → Serving → Dashboard) and delivers stable, queryable outputs for monitoring and analysis.
 
-The goal is to model a realistic telemetry pipeline structure that supports operational visibility, KPI reporting, and pipeline health monitoring.
+---
+
+## System Overview
+
+A lightweight, production-oriented data pipeline focused on:
+
+- reliable data integration  
+- simple and consistent aggregation logic  
+- stable outputs for downstream use  
+
+This project models a telemetry pipeline where operational signals and external data (weather) are integrated into a unified event flow, producing queryable metrics for monitoring and analysis.
+
+The goal is not complexity, but clarity, maintainability, and realistic engineering trade-offs.
 
 ---
 
 ## Architecture
 
-The pipeline follows a layered Bronze → Silver → Gold architecture, separating raw ingestion, operational aggregation, and monitoring-ready outputs.
+The pipeline follows a layered structure:
+
+**Bronze → Silver → Gold → Serving → Dashboard**
+
+Each layer has a clear responsibility:
+
+- **Bronze** — append-only ingestion and raw event storage  
+- **Silver** — windowed aggregation and data quality handling  
+- **Gold** — KPI modeling and pipeline health metrics  
+- **Serving** — exported parquet + Azure Blob Storage  
+- **Dashboard** — Streamlit-based visualization layer  
 
 ![Pipeline architecture](docs/architecture.png)
 
-### Layers (high-level)
+---
 
-- **Bronze**  
-  Append-only raw events (telemetry and weather) stored with minimal transformation.  
-  This layer acts as the immutable system of record.
+## Dashboard preview
 
-- **Silver**  
-  Windowed aggregations and curated operational signals using event-time processing.  
-  Produces consistent, validation-ready operational metrics.
+### Pipeline Overview
 
-- **Gold**  
-  Operational KPI tables and pipeline health metrics designed for dashboards and monitoring.
+Recent operational snapshot showing ingestion delay trends and pipeline health metrics.
 
-- **Ops / Health**  
-  Observability metrics such as ingestion freshness, event lag, duplicate ratios, and volume trends.
+![Pipeline Overview](docs/dashboard_pipeline_overview.jpg)
+
+---
+
+### Route Performance
+
+Route-level KPIs and daily summaries derived from aggregated Gold-layer outputs.
+
+![Route Performance](docs/dashboard_route_performance.jpg)
+
+---
+
+### Map View
+
+Visualizes route geometry, sampled vehicle positions, and optional weather context (FMI).
+
+- Route geometry is derived from HSL GTFS reference data
+- Weather observations are integrated from FMI API
+- Enables spatial exploration of operational signals and external conditions
+
+The map layer is enriched with **HSL GTFS route reference data**, providing realistic route geometry and spatial context.
+
+![Map View](docs/dashboard_map_view.jpg)
+
+---
+
+## Serving & Deployment
+
+The pipeline follows a decoupled serving design:
+
+GitHub Actions → export_gold → Azure Blob → Streamlit (Render)
+
+- Pipeline execution is scheduled via GitHub Actions
+- Gold outputs are exported as parquet files
+- Files are uploaded to Azure Blob Storage
+- The Streamlit dashboard reads precomputed outputs
+
+This design avoids direct database dependencies and ensures a stable, low-maintenance system. This reduces coupling between pipeline execution and data consumption.
+
+---
+
+## Design Decisions
+
+This project is intentionally designed to remain simple, predictable, and production-friendly.  
+The focus is on **clear trade-offs and operational stability**, rather than system complexity.
+
+
+### Append-only ingestion
+
+The pipeline uses an append-only ingestion strategy to ensure reproducibility and simplify debugging.
+
+This avoids mutation logic and keeps the data flow predictable across runs.
+
+
+### Unified event model
+
+All inputs (telemetry and weather) are normalized into a shared event schema.
+
+This simplifies downstream aggregation and processing, at the cost of stricter schema discipline and upfront modeling.
+
+
+### Micro-batch processing over streaming
+
+Micro-batch processing is chosen instead of real-time streaming to reduce infrastructure complexity.
+
+This keeps the system lightweight while preserving a clear migration path to structured streaming if needed.
+
+
+### Precomputed outputs (parquet)
+
+The dashboard reads precomputed parquet outputs rather than querying live systems.
+
+This improves reliability, removes runtime dependencies, and ensures consistent performance.
+
+
+### Decoupled serving layer
+
+The serving layer is separated from the pipeline using parquet outputs stored in Azure Blob Storage.
+
+This enables:
+
+- simple deployment  
+- low operational overhead  
+- clear separation between data production and consumption  
+
+
+### Observability as data
+
+Pipeline health signals (freshness, lag, volume, duplicates) are modeled as queryable tables instead of logs.
+
+This allows:
+
+- SQL-based inspection  
+- easier debugging  
+- consistent monitoring logic  
+
+### Lightweight orchestration
+
+GitHub Actions is used for scheduling and execution instead of heavier orchestration tools.
+
+This keeps the system simple while still supporting automation and reproducibility.
+
+---
+
+## Handling imperfect data
+
+Real-world data sources rarely align perfectly.
+
+For example:
+
+- telemetry and weather signals arrive at different times  
+- some aggregation windows contain only partial data  
+
+Instead of enforcing strict alignment upstream, mismatches are handled at the presentation layer.
+
+This keeps the pipeline logic simple while still producing usable and stable outputs.
 
 ---
 
 ## Data sources
 
-- **Simulated telemetry events**  
-  Operational signals such as delay, headway, and load metrics.
+- **Simulated telemetry data (synthetic transit signals)**  
+  Represents transport signals such as delay and occupancy  
 
 - **FMI Weather API**  
-  Observational weather data ingested into the same unified event model.
+  Provides real observational weather data  
 
-Telemetry is simulated in this MVP to focus on pipeline design, aggregation, and observability rather than data collection.
+- **HSL GTFS reference data**  
+  Used for route geometry and map context  
+
+Telemetry is simulated intentionally to focus on pipeline design rather than data collection.
 
 ---
 
 ## Event model
 
-All sources are normalized into a shared event schema.
+All inputs are transformed into a shared structure.
 
 Core fields:
 
-- `event_time` — timestamp when the event occurred  
-- `ingest_time` — timestamp when the event was ingested  
+- `event_time` — when the event occurred  
+- `ingest_time` — when the event was processed  
 - `source` — telemetry or weather  
-- `metric` — metric name (e.g., temperature, precipitation, delay_seconds)  
-- `value` and `unit` — numeric measurement  
-- `attrs` — extensible attribute map for schema evolution  
+- `metric` — type of measurement  
+- `value` — numeric value  
+- `unit` — measurement unit  
+- `attrs` — flexible metadata (e.g. route_id)  
 
-This unified model enables consistent aggregation, flexible schema evolution, and observability metrics such as ingestion lag and freshness.
-
----
-
-## Silver metrics (15-minute windows)
-
-The Silver layer aggregates events into fixed event-time windows.
-
-Example outputs:
-
-- `silver_weather_metrics`  
-  Aggregated weather observations per window
-
-- `silver_transit_metrics` (planned extension)  
-  Aggregated operational telemetry metrics per route and window
-
-Validation checks include:
-
-- row count sanity checks  
-- duplicate detection  
-- null and missing key checks  
-- event-time range validation  
+This enables consistent aggregation and simple schema evolution.
 
 ---
 
-## Gold outputs
+## Data layers
 
-The Gold layer provides monitoring-ready operational metrics.
+### Bronze
 
-These tables are designed for:
+- append-only raw events  
+- minimal transformation  
+- acts as the system of record  
 
-- dashboard visualization  
-- operational monitoring  
-- pipeline health analysis  
+### Silver
 
-Outputs include:
-
-- aggregated operational KPIs  
-- ingestion freshness metrics  
-- ingestion lag metrics  
-- duplicate ratios and volume tracking  
-
-These observability signals are stored as structured tables rather than logs.
-
----
-
-## Pipeline health and observability
-
-Pipeline health is treated as a first-class output.
-
-Tracked signals include:
-
-- ingestion freshness  
-- event-time lag  
-- event volume trends  
-- duplicate ratios  
-- missing key indicators  
-
-These metrics enable pipeline monitoring and troubleshooting.
-
----
-
-## Scope and limitations
-
-In scope:
-
-- append-only Bronze ingestion  
-- unified event schema  
 - event-time windowed aggregation  
-- operational KPI modeling  
-- pipeline observability metrics  
+- route-level and time-based metrics  
+- data quality checks (nulls, duplicates, counts)  
+- ingestion latency metrics  
 
-Out of scope:
+### Gold
 
-- predictive modeling or machine learning  
-- geospatial enrichment  
-- real-time streaming infrastructure  
+- final metrics for dashboards  
+- route KPIs (window + daily)
+- pipeline health metrics (freshness, lag, volume)  
 
-This MVP runs in micro-batch mode but is structured for future streaming migration.
+Outputs are exported as parquet files for stable downstream use.
 
 ---
 
-## Repo structure
+## Dashboard
 
-Current structure:
+The Streamlit dashboard provides three views:
 
-- `public_transport_telemetry_pipeline.ipynb` — complete pipeline implementation
-- `public_transport_telemetry_pipeline.py` — script version of the pipeline (for easier inspection if notebook preview fails)  
-- `docs/architecture.png` — pipeline architecture diagram  
-- `README.md` — project documentation  
+- **Pipeline Overview**  
+  pipeline health and ingestion delay trends  
 
-The pipeline is intentionally implemented as a single notebook to keep the full data flow transparent and easy to inspect.
+- **Route Performance**  
+  route-level KPIs and daily summaries  
 
-In production environments, ingestion, aggregation, and monitoring would typically run as independent jobs.
+- **Map View**  
+  route geometry, vehicle points, and weather context  
+
+The dashboard is designed for clarity and stability rather than heavy interactivity.
+
+---
+
+## Scheduling
+
+Pipeline execution is handled using GitHub Actions.
+
+Note:  
+Execution timing is best-effort and may vary depending on GitHub runner availability.
+
+Workflows:
+
+- `telemetry-refresh.yml` — pipeline execution  
+- `keepalive_telemetry.yml` — dashboard keepalive  
+- `keepalive_nyc.yml` — legacy project keepalive  
+
+Location:
+
+```bash
+.github/workflows/
+```
+
+---
+
+## Repository structure
+
+```bash
+.github/workflows/
+  telemetry-refresh.yml        # scheduled pipeline runs
+  keepalive_telemetry.yml     # keep Render service awake
+
+Projects/Public-Transport-Telemetry-Pipeline/
+
+  data/
+    bronze/
+      bronze_events.csv       # raw append-only events
+    silver/
+      silver_transit_metrics.csv  # aggregated metrics
+    gold/
+      hsl/                    # route geometry (GTFS)
+      weather/                # weather observations
+    output/
+      gold_route_daily.parquet
+      gold_route_window.parquet
+      pipeline_metrics.parquet
+    external/gtfs_hsl/        # GTFS reference data
+
+  src/pipeline/
+    bronze.py
+    silver.py
+    gold.py
+    hsl.py
+    config.py
+    setup.py
+
+  scripts/
+    run_pipeline.py
+    export_gold.py
+    upload_outputs_to_blob.py
+
+  streamlit_app/
+    Home.py
+    pages/
+      1_Pipeline_Overview.py
+      2_Route_Performance.py
+      3_Map_View.py
+    utils/
+      load_data.py
+      data_access.py
+      maps.py
+
+  tests/tools/
+    inspect_*.py
+    test_*.py
+
+  notebooks/mvp/
+  docs/
+    architecture.png
+    dashboard_map_view.jpg
+    dashboard_pipeline_overview.jpg
+    dashboard_route_performance.jpg
+
+README.md
+requirements.txt
+.gitignore
+```
 
 ---
 
 ## How to run
 
-1. Configure environment (API access and storage location)
+Run full pipeline:
 
-2. Run ingestion cells in the notebook to populate Bronze tables
+```bash
+python scripts/run_pipeline.py --layer full
+```
 
-3. Run aggregation cells to generate Silver metrics
+Run individual layers:
 
-4. Run KPI and health metric cells to generate Gold outputs
+```bash
+python scripts/run_pipeline.py --layer bronze
+python scripts/run_pipeline.py --layer silver
+python scripts/run_pipeline.py --layer gold
+```
 
-The pipeline is designed to remain platform-agnostic and portable.
+Inspect outputs:
+
+```bash
+python tests/tools/inspect_gold.py
+```
 
 ---
 
-## Roadmap
+## Scope
 
-Possible extensions:
+This project focuses on core data engineering patterns:
 
-- real telemetry integration  
-- streaming ingestion using Structured Streaming  
-- geospatial enrichment  
-- automated monitoring and alerting  
+- Data integration
+- Aggregation logic
+- Pipeline reliability
+- Monitoring outputs
+
+It intentionally avoids unnecessary complexity.
 
 ---
 
-## Portability
+## Possible Extensions
 
-The pipeline is structured to be migration-ready to managed environments such as Azure Databricks.
+Potential extensions include:
 
-Key design choices supporting portability:
-
-- unified event model  
-- append-only ingestion pattern  
-- clear layer separation  
-- event-time aggregation  
+- Structured streaming for lower latency
+- Backfill and reprocessing support
+- Automated alerting and anomaly detection
+- Additional external signals (e.g. traffic data)
 
 ---
 

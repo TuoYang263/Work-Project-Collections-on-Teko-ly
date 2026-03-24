@@ -2,53 +2,63 @@
 
 Hi, I’m Tuo.
 
-I build **reliable, end-to-end data pipelines** — from raw ingestion and transformation to analytics-ready tables and dashboards.
+I build **reliable, end-to-end data pipelines** — from raw ingestion and transformation to analytics-ready tables and lightweight dashboards.
 
-My background is in data science and analytics, which helps with data quality checks, business logic, and downstream use cases.
-  
-Over time, my work has shifted toward **data engineering and production systems**.
+My background is in data science and analytics, which helps with data quality checks, business logic, and downstream usability.
 
-This repository highlights the projects that best represent my current focus.
+Over time, my work has shifted toward **data engineering and production-oriented systems**.
+
+This repository highlights a small set of projects that best represent my current focus.
 
 ---
 
 ## Featured Project — Primary Focus
 
+### Public Transport Telemetry Pipeline  
+**Production-style data pipeline with observability, simple deployment, and practical engineering trade-offs**
+
+Live demo:  
+https://transport-telemetry-dashboard.onrender.com
+
+This project models a realistic telemetry pipeline where operational signals and external data (weather) are integrated into a unified data flow.
+
+- Implemented a Bronze → Silver → Gold architecture using Spark and Delta-style design
+- Unified telemetry and weather data into a shared event model
+- Built event-time windowed aggregation for operational metrics
+- Designed pipeline observability signals (freshness, lag, duplicates, volume)
+- Exported precomputed outputs (parquet) for stable downstream consumption
+- Deployed a lightweight dashboard reading from Azure Blob Storage
+- Automated pipeline execution and refresh using GitHub Actions
+
+The focus is on **clarity, stability, and realistic trade-offs**, rather than system complexity.
+
+**Tech stack:**  
+PySpark · Delta Lake · SQL · GitHub Actions · Azure Blob Storage · Streamlit
+
+View project details:  
+[`Public-Transport-Telemetry-Pipeline`](./Projects/Public-Transport-Telemetry-Pipeline)
+
+---
+
 ### NYC Yellow Taxi Data Engineering Pipeline  
-**End-to-end batch data pipeline with analytics and visualization**
+**End-to-end batch pipeline demonstrating core data engineering patterns**
+
+Live demo:  
+https://nyc-taxi-dashboard-render-deploy.onrender.com
 
 This project covers the full path from ingestion to consumption:
 
 - Designed a medallion-style data model (raw → cleaned → aggregated)
 - Implemented batch transformations using PySpark
 - Loaded analytics tables into BigQuery for downstream querying
-- Built interactive dashboards with Streamlit for exploration and reporting
-- Structured to be cloud-portable and migration-ready
+- Built dashboards with Streamlit for exploration and reporting
+- Structured to be cloud-portable and reproducible
 
 **Tech stack:**  
 PySpark · BigQuery · Airflow · Docker · Streamlit · SQL
 
-View pipeline design, code, and usage details:  
+View project details:  
 [`NYC-Taxi-Pipeline`](./Projects/NYC-Taxi-Pipeline)
-
----
-
-### Public Transport Telemetry Pipeline  
-**Production-style telemetry pipeline with operational metrics and pipeline health monitoring**
-
-This project models how telemetry and external signals can be ingested, aggregated, and monitored in a layered data pipeline:
-
-- Implemented Bronze → Silver → Gold telemetry architecture
-- Unified telemetry and weather observations into a shared event model
-- Built event-time windowed aggregation for operational metrics
-- Modeled pipeline observability metrics (freshness, lag, duplicates, volume)
-- Structured for migration to managed environments such as Azure Databricks
-
-**Tech stack:**  
-PySpark · Delta Lake · SQL · Databricks-ready design
-
-View pipeline design and implementation:  
-[`Public-Transport-Telemetry-Pipeline`](./Projects/Public-Transport-Telemetry-Pipeline)
 
 ---
 
@@ -56,43 +66,42 @@ View pipeline design and implementation:
 
 ### Terraform on AWS with GitHub OIDC
 
-A compact infrastructure project with an emphasis on security and repeatability:
+A compact infrastructure project focused on security and repeatability:
 
-- Provisioned resources using Terraform
-- Set up CI/CD with GitHub Actions OIDC (no static credentials)
-- Kept infrastructure and application logic separated
+- Provisioned infrastructure using Terraform
+- Implemented CI/CD with GitHub Actions OIDC (no static credentials)
+- Kept infrastructure and application concerns clearly separated
 
 **Tech stack:**  
 Terraform · AWS · GitHub Actions
 
-View infrastructure setup and CI/CD configuration:  
+View project details:  
 [`Cloud-IaC-Terraform-AWS-OIDC`](./Projects/Cloud-IaC-Terraform-AWS-OIDC)
 
 ---
 
 ## Analytics & Data Science Background
 
-Before moving into data engineering, I worked on analytics and modeling projects.  
-That background still informs how I design pipelines — especially around data meaning, correctness, and business context.
+Before moving into data engineering, I worked on analytics and modeling projects.
+
+That background still informs how I design pipelines — especially around data meaning, correctness, and downstream use.
 
 Selected examples include:
 
-- Stock Market Analysis (time series exploration and trend analysis)
-- Consumer Complaint Resolution (NLP-driven analysis)
+- Stock Market Analysis (time series exploration)
+- Consumer Complaint Resolution (NLP-based analysis)
 - Used Cars Price Prediction (regression and feature engineering)
 - Power BI Sales Dashboard (business reporting and KPI tracking)
 
-Related analytics and modeling projects are available under the `Projects/` directory.
+These projects are available under the `Projects/` directory.
 
 ---
 
 ## Archived / Learning Projects
 
-This repository also includes earlier projects in machine learning, computer vision, and NLP from coursework and self-study.
+This repository also includes earlier work in machine learning, computer vision, and NLP.
 
-They are kept for reference, but they are not the focus of my current work.
-
-Archived projects are available under the `Projects/` directory for reference.
+They are kept for reference, but are not the focus of my current work.
 
 ---
 
@@ -109,7 +118,7 @@ Archived projects are available under the `Projects/` directory for reference.
 ## Contact
 
 If you are reviewing this repository as part of a job application,  
-the **NYC Yellow Taxi pipeline** is the best place to start.
+the **Public Transport Telemetry Pipeline** is the best place to start.
 
 LinkedIn:  
 https://www.linkedin.com/in/tuo-yang-6b772b207/

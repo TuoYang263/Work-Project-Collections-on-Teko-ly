@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Env
+.env
+.venv/
+venv/
+
+# Notebook
+.ipynb_checkpoints/
+
+# Logs
+logs/
+*.log
+
+# Spark / Derby / local runtime
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Temp
+tmp/
+.temp/
+*.tmp
+*.crc
+
+# Data pipeline runtime artifacts
+data/bronze/*.csv
+data/silver/*.csv
+data/output/
+data/raw/
+data/logs/
+
+# Generated gold tables you do NOT want versioned
+data/gold/*.csv
+data/gold/*.parquet
+data/gold/**/*.csv
+data/gold/**/*.parquet
+
+# Re-allow only curated demo artifacts
+!data/gold/hsl/
+!data/gold/hsl/*.parquet
+!data/gold/weather/
+!data/gold/weather/*.parquet
+
+# External GTFS: keep folder placeholder only, not raw huge txt/zip
+data/external/gtfs_hsl/*
+!data/external/gtfs_hsl/.gitkeep
+
+# Notebook-side GTFS dumps
+notebooks/mvp/gtfs_hsl/
+notebooks/**/.ipynb_checkpoints/
+
+# Archives
+*.zip
+*.tar
+*.gz
+*.7z
+
+# Pdf
+*.pdf
+
+# Picture
+*.png
+
+# Keep placeholders
+!.gitkeep
+
+# Dev files
+requirements-dev.txt

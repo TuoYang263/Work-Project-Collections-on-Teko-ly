@@ -1,0 +1,44 @@
+name: Keepalive Telemetry Dashboard
+
+on:
+  schedule:
+    - cron: "5-59/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: GET render homepage
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          URL="https://transport-telemetry-dashboard.onrender.com/?keepalive=$(date +%s)"
+          echo "Ping: $URL"
+
+          code="$(curl -sS -L \
+            --connect-timeout 15 \
+            --max-time 90 \
+            -H "Cache-Control: no-cache" \
+            -H "Pragma: no-cache" \
+            -H "User-Agent: github-actions-keepalive/1.0" \
+            -o /dev/null \
+            -w "%{http_code}" \
+            "$URL" || true)"
+
+          echo "HTTP $code"
+
+          if [[ "$code" =~ ^(200|301|302|303)$ ]]; then
+            echo "Keepalive success"
+            exit 0
+          fi
+
+          if [[ "$code" == "000" ]]; then
+            echo "Render likely cold-started too slowly; tolerating timeout"
+            exit 0
+          fi
+
+          exit 1
