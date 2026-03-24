@@ -12,7 +12,15 @@ Select a route and toggle weather context in the Map View to explore how externa
 
 ---
 
-## Overview
+## Summary
+
+A production-style telemetry pipeline that integrates transport signals and weather data into a unified event model, with a focus on reliability, observability, and simple deployment.
+
+The system follows a layered architecture (Bronze → Silver → Gold → Serving → Dashboard) and delivers stable, queryable outputs for monitoring and analysis.
+
+---
+
+## System Overview
 
 A lightweight, production-oriented data pipeline focused on:
 
@@ -20,9 +28,59 @@ A lightweight, production-oriented data pipeline focused on:
 - simple and consistent aggregation logic  
 - stable outputs for downstream use  
 
-This project combines operational telemetry signals with external weather data into a unified event model, producing queryable metrics for monitoring and analysis.
+This project models a telemetry pipeline where operational signals and external data (weather) are integrated into a unified event flow, producing queryable metrics for monitoring and analysis.
 
 The goal is not complexity, but clarity, maintainability, and realistic engineering trade-offs.
+
+---
+
+## Architecture
+
+The pipeline follows a layered structure:
+
+**Bronze → Silver → Gold → Serving → Dashboard**
+
+Each layer has a clear responsibility:
+
+- **Bronze** — append-only ingestion and raw event storage  
+- **Silver** — windowed aggregation and data quality handling  
+- **Gold** — KPI modeling and pipeline health metrics  
+- **Serving** — exported parquet + Azure Blob Storage  
+- **Dashboard** — Streamlit-based visualization layer  
+
+![Pipeline architecture](docs/architecture.png)
+
+---
+
+## Dashboard preview
+
+### Pipeline Overview
+
+Recent operational snapshot showing ingestion delay trends and pipeline health metrics.
+
+![Pipeline Overview](docs/dashboard_pipeline_overview.jpg)
+
+---
+
+### Route Performance
+
+Route-level KPIs and daily summaries derived from aggregated Gold-layer outputs.
+
+![Route Performance](docs/dashboard_route_performance.jpg)
+
+---
+
+### Map View
+
+Visualizes route geometry, sampled vehicle positions, and optional weather context (FMI).
+
+- Route geometry is derived from HSL GTFS reference data
+- Weather observations are integrated from FMI API
+- Enables spatial exploration of operational signals and external conditions
+
+The map layer is enriched with **HSL GTFS route reference data**, providing realistic route geometry and spatial context.
+
+![Map View](docs/dashboard_map_view.jpg)
 
 ---
 
@@ -72,157 +130,75 @@ The map layer is enriched with **HSL GTFS route reference data**, providing real
 
 ---
 
-## Deployment and data flow
+## Serving & Deployment
 
-The project includes a simple but complete serving pipeline:
-
-1. Pipeline runs via GitHub Actions  
-2. Gold outputs are exported as parquet files  
-3. Files are uploaded to Azure Blob Storage (via GitHub Secrets)  
-4. Streamlit dashboard (Render) reads these parquet files  
-
-Flow: # Public Transport Telemetry & Weather Impact Pipeline
-
-## Live Demo
-
-Dashboard (Render):  
-https://transport-telemetry-dashboard.onrender.com
-
-The dashboard reads precomputed parquet outputs and reflects recent pipeline runs.
-
-Tip:  
-Select a route and toggle weather context in the Map View to explore how external signals relate to transport behavior.
-
----
-
-## Overview
-
-A lightweight, production-oriented data pipeline focused on:
-
-- reliable data integration  
-- simple and consistent aggregation logic  
-- stable outputs for downstream use  
-
-This project combines operational telemetry signals with external weather data into a unified event model, producing queryable metrics for monitoring and analysis.
-
-The goal is not complexity, but clarity, maintainability, and realistic engineering trade-offs.
-
----
-
-## Architecture
-
-The pipeline follows a layered structure:
-
-**Bronze → Silver → Gold → Serving → Dashboard**
-
-Each layer has a clear responsibility:
-
-- **Bronze** — append-only ingestion and raw event storage  
-- **Silver** — windowed aggregation and data quality handling  
-- **Gold** — KPI modeling and pipeline health metrics  
-- **Serving** — exported parquet + Azure Blob Storage  
-- **Dashboard** — Streamlit-based visualization layer  
-
-![Pipeline architecture](docs/architecture.png)
-
----
-
-## Dashboard preview
-
-### Pipeline Overview
-
-Recent operational snapshot showing ingestion delay trends and pipeline health metrics.
-
-![Pipeline Overview](docs/dashboard_pipeline_overview.jpg)
-
----
-
-### Route Performance
-
-Route-level KPIs and daily summaries derived from aggregated Gold-layer outputs.
-
-![Route Performance](docs/dashboard_route_performance.jpg)
-
----
-
-### Map View
-
-Route geometry, sampled vehicle points, and optional weather context (FMI).
-
-The map layer is enriched with **HSL GTFS route reference data**, providing realistic route geometry and spatial context.
-
-![Map View](docs/dashboard_map_view.jpg)
-
----
-
-## Deployment and data flow
-
-The project includes a simple but complete serving pipeline:
-
-1. Pipeline runs via GitHub Actions  
-2. Gold outputs are exported as parquet files  
-3. Files are uploaded to Azure Blob Storage (via GitHub Secrets)  
-4. Streamlit dashboard (Render) reads these parquet files  
-
-Flow:
+The pipeline follows a decoupled serving design:
 
 GitHub Actions → export_gold → Azure Blob → Streamlit (Render)
 
+- Pipeline execution is scheduled via GitHub Actions
+- Gold outputs are exported as parquet files
+- Files are uploaded to Azure Blob Storage
+- The Streamlit dashboard reads precomputed outputs
 
-This decoupled design avoids direct database dependencies and keeps the system stable and low-maintenance.
+This design avoids direct database dependencies and ensures a stable, low-maintenance system. This reduces coupling between pipeline execution and data consumption.
 
 ---
 
-## Key design decisions
+## Design Decisions
 
-This project intentionally avoids unnecessary complexity and focuses on practical trade-offs.
+This project is intentionally designed to remain simple, predictable, and production-friendly.  
+The focus is on **clear trade-offs and operational stability**, rather than system complexity.
+
+---
 
 ### Append-only ingestion
 
-Keeps data flow predictable and reproducible.  
-Avoids mutation logic and simplifies debugging.
+The pipeline uses an append-only ingestion strategy to ensure reproducibility and simplify debugging.
+
+This avoids mutation logic and keeps the data flow predictable across runs.
 
 ---
 
 ### Unified event model
 
-All inputs (telemetry + weather) are normalized into a shared schema.
+All inputs (telemetry and weather) are normalized into a shared event schema.
 
-This simplifies downstream processing, at the cost of stricter schema discipline.
+This simplifies downstream aggregation and processing, at the cost of stricter schema discipline and upfront modeling.
 
 ---
 
-### Micro-batch processing
+### Micro-batch processing over streaming
 
-Chosen over streaming to reduce infrastructure complexity.
+Micro-batch processing is chosen instead of real-time streaming to reduce infrastructure complexity.
 
-Keeps the system lightweight while preserving a migration path.
+This keeps the system lightweight while preserving a clear migration path to structured streaming if needed.
 
 ---
 
 ### Precomputed outputs (parquet)
 
-Dashboard reads static parquet instead of live queries.
+The dashboard reads precomputed parquet outputs rather than querying live systems.
 
-Improves reliability and removes runtime dependencies.
+This improves reliability, removes runtime dependencies, and ensures consistent performance.
 
 ---
 
 ### Decoupled serving layer
 
-Data is delivered via parquet + Azure Blob instead of direct database access.
+The serving layer is separated from the pipeline using parquet outputs stored in Azure Blob Storage.
 
 This enables:
 
 - simple deployment  
 - low operational overhead  
-- clear separation between pipeline and consumption  
+- clear separation between data production and consumption  
 
 ---
 
 ### Observability as data
 
-Pipeline health (freshness, lag, volume, duplicates) is modeled as tables, not logs.
+Pipeline health signals (freshness, lag, volume, duplicates) are modeled as queryable tables instead of logs.
 
 This allows:
 
@@ -234,9 +210,9 @@ This allows:
 
 ### Lightweight orchestration
 
-GitHub Actions is used instead of Airflow or Azure Data Factory.
+GitHub Actions is used for scheduling and execution instead of heavier orchestration tools.
 
-This keeps scheduling simple while still supporting automation.
+This keeps the system simple while still supporting automation and reproducibility.
 
 ---
 
@@ -244,20 +220,20 @@ This keeps scheduling simple while still supporting automation.
 
 Real-world data sources rarely align perfectly.
 
-Examples:
+For example:
 
-- telemetry and weather arrive at different times  
-- some windows contain only partial data  
+- telemetry and weather signals arrive at different times  
+- some aggregation windows contain only partial data  
 
-Instead of enforcing strict upstream alignment, this project handles mismatches at the presentation layer.
+Instead of enforcing strict alignment upstream, mismatches are handled at the presentation layer.
 
-This keeps the pipeline logic simple while still producing usable outputs.
+This keeps the pipeline logic simple while still producing usable and stable outputs.
 
 ---
 
 ## Data sources
 
-- **Simulated telemetry data**  
+- **Simulated telemetry data (synthetic transit signals)**  
   Represents transport signals such as delay and occupancy  
 
 - **FMI Weather API**  
@@ -443,31 +419,25 @@ python tests/tools/inspect_gold.py
 
 ## Scope
 
-In scope:
+This project focuses on core data engineering patterns:
 
-- data integration
-- aggregation logic
-- pipeline reliability
-- monitoring outputs
+- Data integration
+- Aggregation logic
+- Pipeline reliability
+- Monitoring outputs
 
-Out of scope:
-
-- real-time streaming
-- large-scale infrastructure
-- predictive modeling
+It intentionally avoids unnecessary complexity.
 
 ---
 
-## Possible extensions
+## Possible Extensions
 
-This project is intentionally scoped to remain simple.
+Potential extensions include:
 
-Potential next steps:
-
-- structured streaming for lower latency
-- backfill and reprocessing support
-- automated alerting and anomaly detection
-- additional external signals (e.g. traffic data)
+- Structured streaming for lower latency
+- Backfill and reprocessing support
+- Automated alerting and anomaly detection
+- Additional external signals (e.g. traffic data)
 
 ---
 
