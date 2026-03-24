@@ -216,8 +216,6 @@ This enables consistent aggregation and simple schema evolution.
 - minimal transformation  
 - acts as the system of record  
 
----
-
 ### Silver
 
 - event-time windowed aggregation  
@@ -225,12 +223,10 @@ This enables consistent aggregation and simple schema evolution.
 - data quality checks (nulls, duplicates, counts)  
 - ingestion latency metrics  
 
----
-
 ### Gold
 
 - final metrics for dashboards  
-- route KPIs (window + daily)  
+- route KPIs (window + daily)
 - pipeline health metrics (freshness, lag, volume)  
 
 Outputs are exported as parquet files for stable downstream use.
