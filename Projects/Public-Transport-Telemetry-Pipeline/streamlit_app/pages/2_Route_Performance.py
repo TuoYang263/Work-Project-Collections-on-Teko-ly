@@ -136,11 +136,12 @@ else:
     ]
 
     available_cols = [col for col in display_cols if col in df_daily_filtered.columns]
-    with st.expander("Inspect underlying daily metrics"):
+    with st.expander("Underlying daily metrics (for reference)"):
         st.dataframe(
             df_daily_filtered[available_cols],
             use_container_width=True,
             height=300,
         )
+    st.caption("This table reflects the exported Gold-layer daily aggregates per route.")
 
 st.caption(f"Page rendered in {time.time() - start_time:.2f}s")

@@ -373,17 +373,3 @@ deck = pdk.Deck(
 )
 
 st.pydeck_chart(deck, use_container_width=True)
-
-# -----------------------------
-# Optional debug
-# -----------------------------
-with st.expander("Map debug info"):
-    st.write(
-        {
-            "selected_route": selected_route,
-            "n_points": int(len(safe_points_df)),
-            "n_paths": int(len(safe_paths_df)),
-            "n_weather": int(len(safe_weather_df)) if show_weather else 0,
-            "view_state": view_cfg,
-        }
-    )
