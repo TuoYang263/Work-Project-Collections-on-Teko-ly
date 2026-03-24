@@ -104,7 +104,6 @@ This design avoids direct database dependencies and ensures a stable, low-mainte
 This project is intentionally designed to remain simple, predictable, and production-friendly.  
 The focus is on **clear trade-offs and operational stability**, rather than system complexity.
 
----
 
 ### Append-only ingestion
 
@@ -112,7 +111,6 @@ The pipeline uses an append-only ingestion strategy to ensure reproducibility an
 
 This avoids mutation logic and keeps the data flow predictable across runs.
 
----
 
 ### Unified event model
 
@@ -120,7 +118,6 @@ All inputs (telemetry and weather) are normalized into a shared event schema.
 
 This simplifies downstream aggregation and processing, at the cost of stricter schema discipline and upfront modeling.
 
----
 
 ### Micro-batch processing over streaming
 
@@ -128,7 +125,6 @@ Micro-batch processing is chosen instead of real-time streaming to reduce infras
 
 This keeps the system lightweight while preserving a clear migration path to structured streaming if needed.
 
----
 
 ### Precomputed outputs (parquet)
 
@@ -136,7 +132,6 @@ The dashboard reads precomputed parquet outputs rather than querying live system
 
 This improves reliability, removes runtime dependencies, and ensures consistent performance.
 
----
 
 ### Decoupled serving layer
 
@@ -148,7 +143,6 @@ This enables:
 - low operational overhead  
 - clear separation between data production and consumption  
 
----
 
 ### Observability as data
 
@@ -160,15 +154,11 @@ This allows:
 - easier debugging  
 - consistent monitoring logic  
 
----
-
 ### Lightweight orchestration
 
 GitHub Actions is used for scheduling and execution instead of heavier orchestration tools.
 
 This keeps the system simple while still supporting automation and reproducibility.
-
----
 
 ## Handling imperfect data
 
