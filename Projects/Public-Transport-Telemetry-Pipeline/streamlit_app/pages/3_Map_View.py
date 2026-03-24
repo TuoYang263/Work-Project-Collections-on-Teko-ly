@@ -5,6 +5,7 @@ import pydeck as pdk
 import streamlit as st
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from utils.maps import build_map_bundle
 from utils.data_access import load_weather_stations
 
@@ -82,7 +83,7 @@ st.markdown(
 st.title("Map View")
 st.caption("HSL realtime vehicles, GTFS route shapes, and FMI weather context")
 
-now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+now_str = datetime.now(ZoneInfo("Europe/Helsinki")).strftime("%Y-%m-%d %H:%M")
 st.caption(f"Last updated: {now_str}")
 
 
@@ -101,7 +102,7 @@ route_options = initial_bundle["routes"]
 
 selected_route = st.sidebar.selectbox(
     "Select route",
-    options=["All"] + route_options if route_options else ["All"],
+    options=route_options if route_options else [],
     index=0,
 )
 
@@ -115,8 +116,8 @@ max_points = st.sidebar.slider(
     step=100,
 )
 
-selected_route_value = None if selected_route == "All" else selected_route
-is_all_routes = selected_route_value is None
+selected_route_value = selected_route
+is_all_routes = False
 
 bundle = load_bundle(selected_route_value)
 
@@ -239,19 +240,11 @@ if not safe_weather_df.empty:
 # -----------------------------
 m1, m2, m3, m4 = st.columns(4)
 with m1:
-    st.metric("Selected route", selected_route if selected_route_value else "All")
+    st.metric("Selected route", selected_route)
 with m2:
     st.metric("Vehicles / points", 0 if is_all_routes else len(safe_points_df))
 with m3:
-    if is_all_routes:
-        skeleton_count = (
-            safe_paths_df["route_label"].nunique()
-            if not safe_paths_df.empty
-            else 0
-        )
-        st.metric("Overview routes", skeleton_count)
-    else:
-        st.metric("Route paths", len(safe_paths_df))
+    st.metric("Route paths", len(safe_paths_df))
 with m4:
     st.metric("Weather stations", len(safe_weather_df) if show_weather else 0)
 
@@ -289,51 +282,31 @@ if is_all_routes and len(render_points_df) > max_points:
 
 render_weather_df = safe_weather_df.copy()
 
-if is_all_routes:
-    skeleton_paths_df = (
-        safe_paths_df.groupby("route_label", as_index=False).head(2).copy()
-        if not safe_paths_df.empty
-        else safe_paths_df
+if not safe_paths_df.empty and "path" in safe_paths_df.columns:
+    layers.append(
+        pdk.Layer(
+            "PathLayer",
+            data=safe_paths_df,
+            get_path="path",
+            get_width=5,
+            get_color=[60, 150, 255],
+            pickable=False,
+            opacity=0.9,
+        )
     )
 
-    if not skeleton_paths_df.empty:
-        layers.append(
-            pdk.Layer(
-                "PathLayer",
-                data=skeleton_paths_df,
-                get_path="path",
-                get_width=3,
-                get_color=[120, 120, 120],
-                opacity=0.35,
-                pickable=False,
-            )
+if not render_points_df.empty:
+    layers.append(
+        pdk.Layer(
+            "ScatterplotLayer",
+            data=render_points_df,
+            get_position="[lon, lat]",
+            get_radius=45,
+            get_fill_color=[30, 120, 255],
+            pickable=True,
+            opacity=0.95,
         )
-else:
-    if not safe_paths_df.empty and "path" in safe_paths_df.columns:
-        layers.append(
-            pdk.Layer(
-                "PathLayer",
-                data=safe_paths_df,
-                get_path="path",
-                get_width=5,
-                get_color=[60, 150, 255],
-                pickable=False,
-                opacity=0.9,
-            )
-        )
-
-    if not render_points_df.empty:
-        layers.append(
-            pdk.Layer(
-                "ScatterplotLayer",
-                data=render_points_df,
-                get_position="[lon, lat]",
-                get_radius=45,
-                get_fill_color=[30, 120, 255],
-                pickable=True,
-                opacity=0.95,
-            )
-        )
+    )
 
 if show_weather and not render_weather_df.empty:
     layers.append(

@@ -2,6 +2,7 @@ import time
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from utils.load_data import load_route_window, load_route_daily
 
 def format_latest_timestamp(df: pd.DataFrame, column: str) -> str:
@@ -61,7 +62,7 @@ else:
     df_window_filtered = df_window.copy()
     df_daily_filtered = df_daily.copy()
 
-now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+now_str = datetime.now(ZoneInfo("Europe/Helsinki")).strftime("%Y-%m-%d %H:%M")
 st.caption(f"Last updated: {now_str}")
 
 if "window_end" in df_window_filtered.columns and df_window_filtered["window_end"].notna().any():
