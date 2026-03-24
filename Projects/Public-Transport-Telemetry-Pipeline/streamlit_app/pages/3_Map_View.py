@@ -105,13 +105,13 @@ selected_route = st.sidebar.selectbox(
     index=0,
 )
 
-show_weather = st.sidebar.checkbox("Show weather context", value=True)
+show_weather = st.sidebar.checkbox("Show weather context", value=False)
 
 max_points = st.sidebar.slider(
     "Max points in overview",
     min_value=100,
     max_value=1000,
-    value=400,
+    value=100,
     step=100,
 )
 
@@ -143,11 +143,24 @@ if not safe_points_df.empty:
     safe_points_df["lat_display"] = safe_points_df["lat"].round(4)
     safe_points_df["lon_display"] = safe_points_df["lon"].round(4)
 
-    # Unified tooltip fields for HSL points
+    # default city-level weather context
+    city_temp_text = "City temp: N/A"
+    city_rain_text = "City rain: N/A"
+
+    if not safe_weather_df.empty:
+        if "temp_display" in safe_weather_df.columns and safe_weather_df["temp_display"].notna().any():
+            city_temp = safe_weather_df["temp_display"].dropna().iloc[0]
+            city_temp_text = f"City temp: {city_temp} °C"
+
+        if "precip_display" in safe_weather_df.columns and safe_weather_df["precip_display"].notna().any():
+            city_rain = safe_weather_df["precip_display"].dropna().iloc[0]
+            city_rain_text = f"City rain: {city_rain} mm"
+
     safe_points_df["tooltip_title"] = "Route: " + safe_points_df["route_label"]
     safe_points_df["tooltip_line_1"] = "Lat: " + safe_points_df["lat_display"].astype(str)
     safe_points_df["tooltip_line_2"] = "Lon: " + safe_points_df["lon_display"].astype(str)
-    safe_points_df["tooltip_line_3"] = "HSL vehicle point"
+    safe_points_df["tooltip_line_3"] = city_temp_text
+    safe_points_df["tooltip_line_4"] = city_rain_text
 
 if not safe_paths_df.empty:
     keep_cols = ["path", "route_label"]
@@ -228,7 +241,7 @@ m1, m2, m3, m4 = st.columns(4)
 with m1:
     st.metric("Selected route", selected_route if selected_route_value else "All")
 with m2:
-    st.metric("Vehicles / points", len(safe_points_df))
+    st.metric("Vehicles / points", 0 if is_all_routes else len(safe_points_df))
 with m3:
     if is_all_routes:
         skeleton_count = (
@@ -295,19 +308,6 @@ if is_all_routes:
                 pickable=False,
             )
         )
-
-    if not render_points_df.empty:
-        layers.append(
-            pdk.Layer(
-                "ScatterplotLayer",
-                data=render_points_df,
-                get_position="[lon, lat]",
-                get_radius=20,
-                get_fill_color=[40, 120, 255],
-                opacity=0.85,
-                pickable=True,
-            )
-        )
 else:
     if not safe_paths_df.empty and "path" in safe_paths_df.columns:
         layers.append(
@@ -369,7 +369,8 @@ tooltip = {
     <b>{tooltip_title}</b><br/>
     {tooltip_line_1}<br/>
     {tooltip_line_2}<br/>
-    {tooltip_line_3}
+    {tooltip_line_3}<br/>
+    {tooltip_line_4}
     """,
     "style": {
         "backgroundColor": "#1f2c3a",
