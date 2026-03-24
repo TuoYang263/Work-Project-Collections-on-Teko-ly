@@ -1,18 +1,11 @@
 import time
-import streamlit as st
-import pandas as pd
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+import pandas as pd
+import streamlit as st
+
 from utils.load_data import load_route_window, load_route_daily
-
-def format_latest_timestamp(df: pd.DataFrame, column: str) -> str:
-    if df is None or df.empty or column not in df.columns:
-        return "N/A"
-
-    ts = pd.to_datetime(df[column], errors="coerce").max()
-    if pd.isna(ts):
-        return "N/A"
-    return ts.strftime("%Y-%m-%d %H:%M")
 
 
 def safe_mean(series: pd.Series, decimals: int = 2):
@@ -23,8 +16,11 @@ def safe_mean(series: pd.Series, decimals: int = 2):
 
 
 start_time = time.time()
+now_str = datetime.now(ZoneInfo("Europe/Helsinki")).strftime("%Y-%m-%d %H:%M")
+
 st.title("Route Performance")
-st.caption("Recent route-level KPIs derived from exported Gold-layer aggregates.")
+st.caption("Route-level KPIs derived from recent exported Gold-layer aggregates.")
+st.caption(f"Last updated: {now_str} (Helsinki time)")
 
 # ===== Load data =====
 with st.spinner("Loading route performance data..."):
@@ -56,14 +52,12 @@ if selected_route != "All":
     df_window_filtered = df_window[df_window["route_id"] == selected_route].copy()
     df_daily_filtered = (
         df_daily[df_daily["route_id"] == selected_route].copy()
-        if not df_daily.empty else pd.DataFrame()
+        if not df_daily.empty
+        else pd.DataFrame()
     )
 else:
     df_window_filtered = df_window.copy()
     df_daily_filtered = df_daily.copy()
-
-now_str = datetime.now(ZoneInfo("Europe/Helsinki")).strftime("%Y-%m-%d %H:%M")
-st.caption(f"Last updated: {now_str}")
 
 if "window_end" in df_window_filtered.columns and df_window_filtered["window_end"].notna().any():
     latest_window_end = df_window_filtered["window_end"].max()
@@ -107,11 +101,7 @@ else:
     else:
         st.subheader("Delay Trend")
 
-        trend_df = (
-            df_window_filtered[["window_start", "avg_delay_sec"]]
-            .dropna()
-            .copy()
-        )
+        trend_df = df_window_filtered[["window_start", "avg_delay_sec"]].dropna().copy()
 
         if trend_df.empty:
             st.info("No delay trend data available for the selected route.")

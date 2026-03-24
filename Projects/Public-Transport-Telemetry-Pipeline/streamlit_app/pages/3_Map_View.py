@@ -1,28 +1,18 @@
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
-from datetime import datetime
-from zoneinfo import ZoneInfo
 from utils.maps import build_map_bundle
 from utils.data_access import load_weather_stations
 
-def compute_dynamic_view_state(points_df, paths_df, is_all_routes: bool):
-    """
-    Compute a lightweight dynamic map center and zoom.
 
-    - All routes: use a fixed Helsinki-centered overview
-    - Selected route: prefer route path geometry for centering
-    """
-    if is_all_routes:
-        return {
-            "lat": 60.1699,
-            "lon": 24.9384,
-            "zoom": 11.5,
-        }
-
+def compute_dynamic_view_state(points_df, paths_df):
+    """Compute a lightweight dynamic map center and zoom for a selected route."""
     lats = []
     lons = []
 
@@ -81,14 +71,14 @@ st.markdown(
 )
 
 st.title("Map View")
-st.caption("HSL realtime vehicles, GTFS route shapes, and FMI weather context")
+st.caption("Route-level map view with sampled vehicle points, route shape, and optional weather context.")
 
 now_str = datetime.now(ZoneInfo("Europe/Helsinki")).strftime("%Y-%m-%d %H:%M")
-st.caption(f"Last updated: {now_str}")
+st.caption(f"Last updated: {now_str} (Helsinki time)")
 
 
-@st.cache_data(show_spinner="Loading HSL map data...")
-def load_bundle(selected_route: str | None):
+@st.cache_data(show_spinner="Loading route map data...")
+def load_bundle(selected_route: str):
     return build_map_bundle(selected_route=selected_route)
 
 
@@ -97,29 +87,22 @@ def load_weather():
     return load_weather_stations()
 
 
-initial_bundle = build_map_bundle(selected_route=None)
+initial_bundle = load_bundle(selected_route=None)
 route_options = initial_bundle["routes"]
+
+if not route_options:
+    st.warning("No route options available.")
+    st.stop()
 
 selected_route = st.sidebar.selectbox(
     "Select route",
-    options=route_options if route_options else [],
+    options=route_options,
     index=0,
 )
 
 show_weather = st.sidebar.checkbox("Show weather context", value=False)
 
-max_points = st.sidebar.slider(
-    "Max points in overview",
-    min_value=100,
-    max_value=1000,
-    value=100,
-    step=100,
-)
-
-selected_route_value = selected_route
-is_all_routes = False
-
-bundle = load_bundle(selected_route_value)
+bundle = load_bundle(selected_route)
 
 points_df = bundle["points"]
 paths_df = bundle["paths"]
@@ -131,49 +114,6 @@ weather_df = load_weather() if show_weather else pd.DataFrame()
 safe_points_df = points_df.copy()
 safe_paths_df = paths_df.copy()
 safe_weather_df = weather_df.copy()
-
-if not safe_points_df.empty:
-    keep_cols = ["lon", "lat", "route_label"]
-    existing_cols = [c for c in keep_cols if c in safe_points_df.columns]
-    safe_points_df = safe_points_df[existing_cols].copy()
-
-    safe_points_df["lon"] = safe_points_df["lon"].astype(float)
-    safe_points_df["lat"] = safe_points_df["lat"].astype(float)
-    safe_points_df["route_label"] = safe_points_df["route_label"].astype(str)
-
-    safe_points_df["lat_display"] = safe_points_df["lat"].round(4)
-    safe_points_df["lon_display"] = safe_points_df["lon"].round(4)
-
-    # default city-level weather context
-    city_temp_text = "City temp: N/A"
-    city_rain_text = "City rain: N/A"
-
-    if not safe_weather_df.empty:
-        if "temp_display" in safe_weather_df.columns and safe_weather_df["temp_display"].notna().any():
-            city_temp = safe_weather_df["temp_display"].dropna().iloc[0]
-            city_temp_text = f"City temp: {city_temp} °C"
-
-        if "precip_display" in safe_weather_df.columns and safe_weather_df["precip_display"].notna().any():
-            city_rain = safe_weather_df["precip_display"].dropna().iloc[0]
-            city_rain_text = f"City rain: {city_rain} mm"
-
-    safe_points_df["tooltip_title"] = "Route: " + safe_points_df["route_label"]
-    safe_points_df["tooltip_line_1"] = "Lat: " + safe_points_df["lat_display"].astype(str)
-    safe_points_df["tooltip_line_2"] = "Lon: " + safe_points_df["lon_display"].astype(str)
-    safe_points_df["tooltip_line_3"] = city_temp_text
-    safe_points_df["tooltip_line_4"] = city_rain_text
-
-if not safe_paths_df.empty:
-    keep_cols = ["path", "route_label"]
-    existing_cols = [c for c in keep_cols if c in safe_paths_df.columns]
-    safe_paths_df = safe_paths_df[existing_cols].copy()
-
-    safe_paths_df["route_label"] = safe_paths_df["route_label"].astype(str)
-    safe_paths_df["path"] = safe_paths_df["path"].apply(
-        lambda p: [[float(x), float(y)] for x, y in p]
-        if isinstance(p, list)
-        else []
-    )
 
 if not safe_weather_df.empty:
     keep_cols = [
@@ -223,7 +163,6 @@ if not safe_weather_df.empty:
     else:
         safe_weather_df["observation_display"] = ""
 
-    # Unified tooltip fields for weather points
     safe_weather_df["tooltip_title"] = safe_weather_df["station_name"]
     safe_weather_df["tooltip_line_1"] = (
         "Temp: " + safe_weather_df["temp_display"].astype(str) + " °C"
@@ -235,6 +174,48 @@ if not safe_weather_df.empty:
         "Observed: " + safe_weather_df["observation_display"].astype(str)
     )
 
+if not safe_points_df.empty:
+    keep_cols = ["lon", "lat", "route_label"]
+    existing_cols = [c for c in keep_cols if c in safe_points_df.columns]
+    safe_points_df = safe_points_df[existing_cols].copy()
+
+    safe_points_df["lon"] = safe_points_df["lon"].astype(float)
+    safe_points_df["lat"] = safe_points_df["lat"].astype(float)
+    safe_points_df["route_label"] = safe_points_df["route_label"].astype(str)
+
+    safe_points_df["lat_display"] = safe_points_df["lat"].round(4)
+    safe_points_df["lon_display"] = safe_points_df["lon"].round(4)
+
+    city_temp_text = "City temp: N/A"
+    city_rain_text = "City rain: N/A"
+
+    if not safe_weather_df.empty:
+        if "temp_display" in safe_weather_df.columns and safe_weather_df["temp_display"].notna().any():
+            city_temp = safe_weather_df["temp_display"].dropna().iloc[0]
+            city_temp_text = f"City temp: {city_temp} °C"
+
+        if "precip_display" in safe_weather_df.columns and safe_weather_df["precip_display"].notna().any():
+            city_rain = safe_weather_df["precip_display"].dropna().iloc[0]
+            city_rain_text = f"City rain: {city_rain} mm"
+
+    safe_points_df["tooltip_title"] = "Route: " + safe_points_df["route_label"]
+    safe_points_df["tooltip_line_1"] = "Lat: " + safe_points_df["lat_display"].astype(str)
+    safe_points_df["tooltip_line_2"] = "Lon: " + safe_points_df["lon_display"].astype(str)
+    safe_points_df["tooltip_line_3"] = city_temp_text
+    safe_points_df["tooltip_line_4"] = city_rain_text
+
+if not safe_paths_df.empty:
+    keep_cols = ["path", "route_label"]
+    existing_cols = [c for c in keep_cols if c in safe_paths_df.columns]
+    safe_paths_df = safe_paths_df[existing_cols].copy()
+
+    safe_paths_df["route_label"] = safe_paths_df["route_label"].astype(str)
+    safe_paths_df["path"] = safe_paths_df["path"].apply(
+        lambda p: [[float(x), float(y)] for x, y in p]
+        if isinstance(p, list)
+        else []
+    )
+
 # -----------------------------
 # Metrics
 # -----------------------------
@@ -242,7 +223,7 @@ m1, m2, m3, m4 = st.columns(4)
 with m1:
     st.metric("Selected route", selected_route)
 with m2:
-    st.metric("Vehicles / points", 0 if is_all_routes else len(safe_points_df))
+    st.metric("Vehicles / points", len(safe_points_df))
 with m3:
     st.metric("Route paths", len(safe_paths_df))
 with m4:
@@ -275,11 +256,7 @@ st.markdown(
 # Layers
 # -----------------------------
 layers = []
-
 render_points_df = safe_points_df.copy()
-if is_all_routes and len(render_points_df) > max_points:
-    render_points_df = render_points_df.sample(n=max_points, random_state=42).copy()
-
 render_weather_df = safe_weather_df.copy()
 
 if not safe_paths_df.empty and "path" in safe_paths_df.columns:
@@ -328,7 +305,7 @@ if show_weather and not render_weather_df.empty:
 # -----------------------------
 # View state
 # -----------------------------
-view_cfg = compute_dynamic_view_state(render_points_df, safe_paths_df, is_all_routes)
+view_cfg = compute_dynamic_view_state(render_points_df, safe_paths_df)
 
 view_state = pdk.ViewState(
     latitude=view_cfg["lat"],
@@ -362,13 +339,3 @@ st.pydeck_chart(
     use_container_width=True,
     height=650,
 )
-
-with st.expander("Debug preview"):
-    st.write("Selected route:", selected_route_value)
-    st.write("Original points shape:", safe_points_df.shape)
-    st.write("Rendered points shape:", render_points_df.shape)
-    st.write("Paths shape:", safe_paths_df.shape)
-    st.write("Weather shape:", safe_weather_df.shape)
-    st.dataframe(render_points_df.head(20), use_container_width=True)
-    st.dataframe(safe_paths_df.head(10), use_container_width=True)
-    st.dataframe(safe_weather_df.head(10), use_container_width=True)

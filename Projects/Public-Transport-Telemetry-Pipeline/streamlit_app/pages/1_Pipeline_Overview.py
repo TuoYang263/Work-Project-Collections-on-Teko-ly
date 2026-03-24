@@ -1,23 +1,19 @@
 import time
-import streamlit as st
-import pandas as pd
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+import pandas as pd
+import streamlit as st
+
 from utils.load_data import load_pipeline_metrics
-
-def format_latest_timestamp(df: pd.DataFrame, column: str) -> str:
-    if df is None or df.empty or column not in df.columns:
-        return "N/A"
-
-    ts = pd.to_datetime(df[column], errors="coerce").max()
-    if pd.isna(ts):
-        return "N/A"
-    return ts.strftime("%Y-%m-%d %H:%M")
 
 
 start_time = time.time()
+now_str = datetime.now(ZoneInfo("Europe/Helsinki")).strftime("%Y-%m-%d %H:%M")
+
 st.title("Pipeline Overview")
 st.caption("Recent 60-minute operational snapshot based on exported Gold-layer pipeline metrics.")
+st.caption(f"Last updated: {now_str} (Helsinki time)")
 
 with st.spinner("Loading latest pipeline metrics..."):
     df = load_pipeline_metrics()
@@ -30,9 +26,6 @@ df = df.copy()
 for col in ["window_start", "window_end"]:
     if col in df.columns:
         df[col] = pd.to_datetime(df[col], errors="coerce")
-
-now_str = datetime.now(ZoneInfo("Europe/Helsinki")).strftime("%Y-%m-%d %H:%M")
-st.caption(f"Last updated: {now_str}")
 
 if "window_end" in df.columns and df["window_end"].notna().any():
     latest_window_end = df["window_end"].max()
