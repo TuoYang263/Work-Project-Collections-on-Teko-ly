@@ -18,7 +18,7 @@ This repository highlights a small set of projects that best represent my curren
 **Production-style data pipeline with observability, simple deployment, and practical engineering trade-offs**
 
 Live demo:  
-https://transport-telemetry-dashboard.onrender.com
+https://transport-telemetry-dashboard-vs4l.onrender.com
 
 This project models a realistic telemetry pipeline where operational signals and external data (weather) are integrated into a unified data flow.
 
