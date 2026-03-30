@@ -165,7 +165,7 @@ def get_map_center(*dfs: pd.DataFrame) -> Tuple[float, float]:
         if "lat" in df.columns and "lon" in df.columns:
             tmp = df[["lat", "lon"]].dropna()
             if not tmp.empty:
-                # 这里不直接全部灌进 Python list，先轻量采样
+                # Lightweight sampling to reduce memory usage
                 if len(tmp) > 500:
                     tmp = tmp.sample(n=500, random_state=42)
                 lats.extend(tmp["lat"].astype(float).tolist())
@@ -280,7 +280,7 @@ def prepare_points_for_pydeck(points_df: pd.DataFrame, max_points: int = 400) ->
 
     out = df[keep_cols].copy()
 
-    # 只保留最近一部分点，防止 map 页面把 Render 内存吃爆
+    # Limit number of points to avoid excessive memory usage in map rendering
     sort_col = None
     for candidate in ["event_time", "observation_time", "event_time_raw", "seq"]:
         if candidate in out.columns:

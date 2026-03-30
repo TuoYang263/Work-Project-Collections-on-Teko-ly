@@ -3,7 +3,7 @@
 ## Live Demo
 
 Dashboard (Render):  
-https://transport-telemetry-dashboard.onrender.com
+https://transport-telemetry-dashboard-vs4l.onrender.com
 
 The dashboard reads precomputed parquet outputs and reflects recent pipeline runs.
 
