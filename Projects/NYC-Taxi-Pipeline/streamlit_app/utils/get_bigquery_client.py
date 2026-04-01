@@ -26,12 +26,17 @@ def get_bigquery_client():
     # 2) Render env: full service account JSON
     try:
         sa_json = os.getenv("GCP_SA_JSON")
-        if sa_json:
+        if not sa_json:
+            st.error("GCP_SA_JSON is missing or empty.")
+        else:
             sa_info = json.loads(sa_json)
+            if isinstance(sa_info, str):
+                sa_info = json.loads(sa_info)
+                
             credentials = service_account.Credentials.from_service_account_info(sa_info)
             return bigquery.Client(project=sa_info.get("project_id"), credentials=credentials)
-    except Exception:
-        pass
+    except Exception as e:
+        st.error(f"GCP_SA_JSON auth failed: {type(e).__name__}: {e}")
     
     # 3) Local: service account file path (optional)
     sa_path = getattr(config, "SERVICE_ACCOUNT_PATH", None)
