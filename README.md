@@ -44,7 +44,7 @@ View project details:
 **End-to-end batch pipeline demonstrating core data engineering patterns**
 
 Live demo:  
-https://nyc-taxi-dashboard-render-deploy.onrender.com
+https://nyc-taxi-dashboard-render.onrender.com
 
 This project covers the full path from ingestion to consumption:
 
