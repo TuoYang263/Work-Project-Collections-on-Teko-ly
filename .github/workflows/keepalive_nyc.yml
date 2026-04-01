@@ -15,7 +15,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          URL="https://nyc-taxi-dashboard-render-deploy.onrender.com/?keepalive=$(date +%s)"
+          URL="https://nyc-taxi-dashboard-render.onrender.com/?keepalive=$(date +%s)"
           echo "Ping: $URL"
 
           # HEAD is enough to keep Render awake and is more compatible with monitors
