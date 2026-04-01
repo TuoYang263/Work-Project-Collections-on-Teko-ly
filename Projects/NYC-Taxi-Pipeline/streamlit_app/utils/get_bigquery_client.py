@@ -15,29 +15,37 @@ def get_bigquery_client():
     4) Fallback -> Application Default Credentials (ADC)
     """
 
-    # 1) Cloud: Streamlit secrets (recommended)
+    streamlit_error_1 = None
+
+    # 1) Streamlit secrets
     try:
         sa_info = dict(st.secrets["gcp_service_account"])
         credentials = service_account.Credentials.from_service_account_info(sa_info)
         return bigquery.Client(project=sa_info.get("project_id"), credentials=credentials)
-    except Exception:
-        pass
+    except Exception as e:
+        streamlit_error_1 = f"st.secrets auth failed: {type(e).__name__}: {e}"
 
-    # 2) Render env: full service account JSON
+    # 2) Render env
     try:
         sa_json = os.getenv("GCP_SA_JSON")
         if not sa_json:
-            st.error("GCP_SA_JSON is missing or empty.")
-        else:
-            sa_info = json.loads(sa_json)
-            if isinstance(sa_info, str):
-                sa_info = json.loads(sa_info)
-                
-            credentials = service_account.Credentials.from_service_account_info(sa_info)
-            return bigquery.Client(project=sa_info.get("project_id"), credentials=credentials)
+            raise RuntimeError("GCP_SA_JSON is missing or empty")
+
+        sa_info = json.loads(sa_json)
+        if isinstance(sa_info, str):
+            sa_info = json.loads(sa_info)
+
+        credentials = service_account.Credentials.from_service_account_info(sa_info)
+        return bigquery.Client(project=sa_info.get("project_id"), credentials=credentials)
+
     except Exception as e:
-        st.error(f"GCP_SA_JSON auth failed: {type(e).__name__}: {e}")
+        raise RuntimeError(
+            "BigQuery auth debug:\n"
+            f"1) {streamlit_error_1}\n"
+            f"2) GCP_SA_JSON failed: {type(e).__name__}: {e}"
+        )
     
+    """
     # 3) Local: service account file path (optional)
     sa_path = getattr(config, "SERVICE_ACCOUNT_PATH", None)
     if sa_path and os.path.exists(sa_path):
@@ -46,3 +54,4 @@ def get_bigquery_client():
     
     # 4) Fallback: ADC (gcloud auth application-default login, etc.)
     return bigquery.Client(project=getattr(config, "PROJECT_ID", None))
+    """
