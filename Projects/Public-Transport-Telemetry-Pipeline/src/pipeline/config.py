@@ -84,8 +84,8 @@ GOLD_PIPELINE_METRICS_PATH = GOLD_DIR / "gold_pipeline_metrics_window.csv"
 # Transit processing parameters
 # -----------------------------------------------------------------------------
 
-TRANSIT_WINDOW = "5 minutes"
-TRANSIT_LOOKBACK_MINUTES = 60
+TRANSIT_WINDOW = "10 minutes"
+TRANSIT_LOOKBACK_MINUTES = 120
 TRANSIT_LATE_THRESHOLD_SEC = 120
 
 # -----------------------------------------------------------------------------

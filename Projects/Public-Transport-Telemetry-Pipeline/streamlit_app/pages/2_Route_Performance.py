@@ -147,6 +147,41 @@ else:
                     "Window-level route KPIs are exported from Gold-layer aggregates over recent telemetry batches."
                 )
 
+                # ===== Window-level reference table =====
+                if selected_route != "All":
+                    st.subheader("Recent Window Metrics")
+                    st.caption("Recent window-level route metrics for reference.")
+
+                    window_display_cols = [
+                        "window_start",
+                        "window_end",
+                        "route_id",
+                        "avg_delay_sec",
+                        "avg_occupancy_pct",
+                        "n_events_delay",
+                        "n_events_occupancy",
+                        "late_rate_delay",
+                        "avg_ingest_delay_sec",
+                        "dq_flag",
+                    ]
+
+                    if df_window_filtered.empty:
+                        st.info("No recent window-level metrics available.")
+                    else:
+                        window_table_df = df_window_filtered.copy()
+
+                        if "window_start" in window_table_df.columns:
+                            window_table_df = window_table_df.sort_values("window_start", ascending=False).head(12)
+
+                        available_window_cols = [c for c in window_display_cols if c in window_table_df.columns]
+
+                        with st.expander("Underlying recent window metrics"):
+                            st.dataframe(
+                                window_table_df[available_window_cols],
+                                use_container_width=True,
+                                height=300,
+                            )
+
 # ===== Daily summary =====
 st.subheader("Daily Summary")
 st.caption("Daily aggregated metrics per route")
