@@ -10,15 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: HEAD render homepage
+      - name: Keepalive via Streamlit health endpoint
         shell: bash
         run: |
           set -euo pipefail
 
-          URL="https://nyc-taxi-dashboard-render.onrender.com/?keepalive=$(date +%s)"
+          URL="https://nyc-taxi-dashboard-render.onrender.com/_stcore/health"
           echo "Ping: $URL"
 
-          # HEAD is enough to keep Render awake and is more compatible with monitors
           code=$(curl -sS -L \
             --connect-timeout 15 \
             --max-time 90 \

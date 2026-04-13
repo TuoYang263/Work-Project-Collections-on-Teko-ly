@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - name: GET render homepage
+      - name: Keepalive via Streamlit health endpoint
         shell: bash
         run: |
           set -euo pipefail
