@@ -102,14 +102,12 @@ st.markdown(
 st.title("Map View")
 st.caption("Route-level map view with sampled vehicle points, route shape, and optional weather context.")
 
-now_str = datetime.now(ZoneInfo("Europe/Helsinki")).strftime("%Y-%m-%d %H:%M")
-st.caption(f"Last updated: {now_str} (Helsinki time)")
-
+latest_time_text = "Latest map context time: N/A"
+latest_time_placeholder = st.empty()
 
 @st.cache_data(show_spinner="Loading FMI weather data...", ttl=300, max_entries=2)
 def load_weather():
     return load_weather_stations()
-
 
 # -----------------------------
 # Route selection
@@ -117,6 +115,7 @@ def load_weather():
 with st.spinner("Loading route options..."):
     initial_bundle = build_map_bundle(None)
     route_options = initial_bundle.get("routes", [])
+    route_options = [str(r) for r in route_options if pd.notna(r) and str(r).strip() != ""]
 
 if not route_options:
     st.warning("No route options available.")
@@ -234,9 +233,39 @@ if weather_df is not None and not weather_df.empty:
         "Observed: " + safe_weather_df["observation_display"].astype(str)
     )
     safe_weather_df["tooltip_line_4"] = ""
+
+    # -----------------------------
+    # Latest data time (weather anchor)
+    # -----------------------------
+    now_local = datetime.now(ZoneInfo("Europe/Helsinki"))
+
+    latest_obs_time = None
+
+    if not safe_weather_df.empty and "observation_time" in safe_weather_df.columns:
+        latest_obs = safe_weather_df["observation_time"].dropna()
+        if not latest_obs.empty:
+            latest_obs_time = latest_obs.max()
+
+    if latest_obs_time is not None and pd.notna(latest_obs_time):
+        if latest_obs_time.tzinfo is None:
+            latest_obs_time = latest_obs_time.tz_localize("UTC").tz_convert("Europe/Helsinki")
+        else:
+            latest_obs_time = latest_obs_time.tz_convert("Europe/Helsinki")
+
+        freshness_min = max(
+            0,
+            int((now_local - latest_obs_time.to_pydatetime()).total_seconds() / 60)
+        )
+
+        latest_time_text = (
+            f"Latest map context time: {latest_obs_time.strftime('%Y-%m-%d %H:%M')} "
+            f"(Helsinki time) · freshness lag: ~{freshness_min} min"
+        )
 else:
     safe_weather_df = pd.DataFrame()
+    latest_time_text = "Latest map context time: N/A"
 
+latest_time_placeholder.caption(latest_time_text)
 
 # -----------------------------
 # Enrich vehicle tooltip with city weather summary
@@ -297,6 +326,10 @@ st.markdown(
 # -----------------------------
 # Layers
 # -----------------------------
+st.caption(
+    "Vehicle points represent sampled recent positions from telemetry batches, shown as a near-real-time operational snapshot."
+)
+
 layers = []
 
 if not safe_paths_df.empty and "path" in safe_paths_df.columns:
@@ -305,10 +338,11 @@ if not safe_paths_df.empty and "path" in safe_paths_df.columns:
             "PathLayer",
             data=safe_paths_df,
             get_path="path",
-            get_width=5,
-            get_color=[60, 150, 255],
+            get_width=12,
+            width_min_pixels=2,
+            get_color=[90, 170, 255],
             pickable=False,
-            opacity=0.9,
+            opacity=0.95,
         )
     )
 
@@ -318,10 +352,14 @@ if not safe_points_df.empty:
             "ScatterplotLayer",
             data=safe_points_df,
             get_position="[lon, lat]",
-            get_radius=45,
+            get_radius=60,
             get_fill_color=[30, 120, 255],
+            get_line_color=[255, 255, 255],
+            line_width_min_pixels=1,
+            stroked=True,
+            filled=True,
             pickable=True,
-            opacity=0.95,
+            opacity=0.82,
         )
     )
 

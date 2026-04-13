@@ -104,10 +104,15 @@ if not df_plot.empty:
 if df_plot.empty:
     st.info("No transit pipeline trend data available.")
 else:
+    # Horizontal axis
+    df_plot["time_label"] = df_plot["window_start"].dt.strftime("%-I:%M %p")
     st.line_chart(
-        df_plot.set_index("window_start")["transit_avg_ingest_delay_sec"],
+        df_plot.set_index("time_label")["transit_avg_ingest_delay_sec"],
         height=300,
     )
+
+    # Vertical axis instructions
+    st.caption("Average ingest delay (seconds). Time axis in Helsinki local time.")
 
 st.subheader("Delivered Scope")
 st.markdown(

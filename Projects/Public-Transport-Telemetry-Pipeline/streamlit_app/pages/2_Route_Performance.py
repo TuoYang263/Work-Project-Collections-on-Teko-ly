@@ -16,11 +16,9 @@ def safe_mean(series: pd.Series, decimals: int = 2):
 
 
 start_time = time.time()
-now_str = datetime.now(ZoneInfo("Europe/Helsinki")).strftime("%Y-%m-%d %H:%M")
 
 st.title("Route Performance")
 st.caption("Route-level KPIs derived from recent exported Gold-layer aggregates.")
-st.caption(f"Last updated: {now_str} (Helsinki time)")
 
 # ===== Load data =====
 with st.spinner("Loading route performance data..."):
@@ -33,9 +31,34 @@ if df_window is None or df_window.empty:
     st.stop()
 
 df_window = df_window.copy()
+
+now_local = datetime.now(ZoneInfo("Europe/Helsinki"))
+
+def to_helsinki(ts: pd.Series) -> pd.Series:
+    s = pd.to_datetime(ts, errors="coerce", utc=True)
+    return s.dt.tz_convert("Europe/Helsinki")
+
 for col in ["window_start", "window_end"]:
     if col in df_window.columns:
-        df_window[col] = pd.to_datetime(df_window[col], errors="coerce")
+        df_window[col] = to_helsinki(df_window[col])
+
+latest_window_end = (
+    df_window["window_end"].max()
+    if "window_end" in df_window.columns and df_window["window_end"].notna().any()
+    else pd.NaT
+)
+
+if pd.notna(latest_window_end):
+    freshness_min = max(
+        0,
+        int((now_local - latest_window_end.to_pydatetime()).total_seconds() / 60)
+    )
+    st.caption(
+        f"Latest route window end: {latest_window_end.strftime('%Y-%m-%d %H:%M')} "
+        f"(Helsinki time) · freshness lag: ~{freshness_min} min"
+    )
+else:
+    st.caption("Latest route window end: N/A")
 
 if df_daily is None:
     df_daily = pd.DataFrame()
@@ -95,6 +118,8 @@ else:
                 st.info("No route comparison data available.")
             else:
                 st.bar_chart(route_rank.set_index("route_id")["avg_delay_sec"])
+                st.caption("X-axis: route ID.")
+                st.caption("Y-axis: average delay in seconds.")
                 st.caption(
                     "Route ranking is based on exported Gold-layer daily summaries and should be read as a recent analytical snapshot."
                 )
@@ -106,12 +131,15 @@ else:
         if trend_df.empty:
             st.info("No delay trend data available for the selected route.")
         else:
-            trend_df = trend_df.sort_values("window_start").tail(12)
+            trend_df = trend_df.sort_values("window_start").tail(24)
+            trend_df["time_label"] = trend_df["window_start"].dt.strftime("%I:%M %p")
 
             if trend_df.empty:
                 st.info("No delay trend data available for the selected route.")
             else:
-                st.line_chart(trend_df.set_index("window_start")["avg_delay_sec"])
+                st.line_chart(trend_df.set_index("time_label")["avg_delay_sec"])
+                st.caption("X-axis: Helsinki local time.")
+                st.caption("Y-axis: average delay in seconds.")
                 st.caption(
                     "Window-level route KPIs are exported from Gold-layer aggregates over recent telemetry batches."
                 )

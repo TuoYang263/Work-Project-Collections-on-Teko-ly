@@ -116,8 +116,25 @@ def ingest_simulated_transit_batch(
 ) -> None:
     """
     Generate simulated transit telemetry and append it to Bronze.
+
+    Strategy:
+    - guarantee a minimum number of events per route
+    - fill the remaining batch with random route selection
     """
-    rows = [make_simulated_event() for _ in range(n)]
+    route_ids = SIM_ROUTE_IDS
+    min_events_per_route = 12
+
+    rows = []
+
+    # 1) guarantee a minimum number of events per route
+    for route_id in route_ids:
+        for _ in range(min_events_per_route):
+            rows.append(make_simulated_event(route_ids=[route_id]))
+
+    # 2) fill the remaining batch with random route selection
+    remaining = max(0, n - len(rows))
+    rows.extend(make_simulated_event(route_ids=route_ids) for _ in range(remaining))
+
     df = spark.createDataFrame(rows)
 
     df2 = (
@@ -126,7 +143,7 @@ def ingest_simulated_transit_batch(
     )
 
     df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
-    print(f"Batch {batch_id} appended to {BRONZE_EVENTS_TABLE}: {n} rows")
+    print(f"Batch {batch_id} appended to {BRONZE_EVENTS_TABLE}: {len(rows)} rows")
 
 
 # -----------------------------------------------------------------------------
