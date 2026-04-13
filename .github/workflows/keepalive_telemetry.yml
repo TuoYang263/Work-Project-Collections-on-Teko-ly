@@ -16,7 +16,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          URL="https://transport-telemetry-dashboard-vs4l.onrender.com/?keepalive=$(date +%s)"
+          URL="https://transport-telemetry-dashboard-vs4l.onrender.com/_stcore/health"
           echo "Ping: $URL"
 
           code="$(curl -sS -L \
