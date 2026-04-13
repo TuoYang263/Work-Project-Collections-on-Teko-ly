@@ -9,11 +9,10 @@ from utils.load_data import load_pipeline_metrics
 
 
 start_time = time.time()
-now_str = datetime.now(ZoneInfo("Europe/Helsinki")).strftime("%Y-%m-%d %H:%M")
+now_local = datetime.now(ZoneInfo("Europe/Helsinki"))
 
 st.title("Pipeline Overview")
-st.caption("Recent 60-minute operational snapshot based on exported Gold-layer pipeline metrics.")
-st.caption(f"Last updated: {now_str} (Helsinki time)")
+st.caption("Recent operational snapshot based on exported Gold-layer pipeline metrics.")
 
 with st.spinner("Loading latest pipeline metrics..."):
     df = load_pipeline_metrics()
@@ -23,9 +22,27 @@ if df is None or df.empty:
     st.stop()
 
 df = df.copy()
+
+def to_helsinki(ts: pd.Series) -> pd.Series:
+    s = pd.to_datetime(ts, errors="coerce", utc=True)
+    return s.dt.tz_convert("Europe/Helsinki")
+
 for col in ["window_start", "window_end"]:
     if col in df.columns:
-        df[col] = pd.to_datetime(df[col], errors="coerce")
+        df[col] = to_helsinki(df[col])
+
+latest_window_end = df["window_end"].max() if "window_end" in df.columns else pd.NaT
+if pd.notna(latest_window_end):
+    freshness_min = max(
+        0,
+        int((now_local - latest_window_end.to_pydatetime()).total_seconds() / 60)
+    )
+    st.caption(
+        f"Latest data window end: {latest_window_end.strftime('%Y-%m-%d %H:%M')} "
+        f"(Helsinki time) · freshness lag: ~{freshness_min} min"
+    )
+else:
+    st.caption("Latest data window end: N/A")
 
 # --------------------------------------------------
 # Use the most recent valid transit window for KPI
@@ -66,7 +83,8 @@ col2.metric("Transit Events (recent batch)", total_transit_events)
 col3.metric("Pipeline Metric Rows", metric_rows)
 
 st.caption(
-    "KPI values are computed from the most recent transit window with valid metrics, to ensure stability when different data streams are not perfectly aligned."
+    "KPI values are computed from the most recent transit window with valid metrics, "
+    "to ensure stability when different data streams are not perfectly aligned. "
     "This avoids empty latest-window cases when weather and transit windows do not align perfectly."
 )
 
@@ -81,7 +99,7 @@ else:
     df_plot = pd.DataFrame()
 
 if not df_plot.empty:
-    df_plot = df_plot.sort_values("window_start").tail(12)
+    df_plot = df_plot.sort_values("window_start").tail(24)
 
 if df_plot.empty:
     st.info("No transit pipeline trend data available.")
