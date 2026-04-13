@@ -115,7 +115,14 @@ def load_weather():
 with st.spinner("Loading route options..."):
     initial_bundle = build_map_bundle(None)
     route_options = initial_bundle.get("routes", [])
-    route_options = [str(r) for r in route_options if pd.notna(r) and str(r).strip() != ""]
+    route_options = sorted({
+        str(r).strip()
+        for r in route_options
+        if pd.notna(r)
+        and str(r).strip() != ""
+        and str(r).strip().lower() != "nan"
+        and str(r).strip().lower() != "none"
+    })
 
 if not route_options:
     st.warning("No route options available.")

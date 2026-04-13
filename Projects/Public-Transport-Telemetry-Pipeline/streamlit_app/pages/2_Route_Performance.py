@@ -82,6 +82,9 @@ else:
     df_window_filtered = df_window.copy()
     df_daily_filtered = df_daily.copy()
 
+st.caption(f"Daily routes loaded: {sorted(df_daily_filtered['route_id'].dropna().unique().tolist())}")
+st.caption(f"Daily row count: {len(df_daily_filtered)}")
+
 if "window_end" in df_window_filtered.columns and df_window_filtered["window_end"].notna().any():
     latest_window_end = df_window_filtered["window_end"].max()
     latest_window_df = df_window_filtered[df_window_filtered["window_end"] == latest_window_end].copy()
