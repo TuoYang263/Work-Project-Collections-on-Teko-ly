@@ -82,9 +82,6 @@ else:
     df_window_filtered = df_window.copy()
     df_daily_filtered = df_daily.copy()
 
-st.caption(f"Daily routes loaded: {sorted(df_daily_filtered['route_id'].dropna().unique().tolist())}")
-st.caption(f"Daily row count: {len(df_daily_filtered)}")
-
 if "window_end" in df_window_filtered.columns and df_window_filtered["window_end"].notna().any():
     latest_window_end = df_window_filtered["window_end"].max()
     latest_window_df = df_window_filtered[df_window_filtered["window_end"] == latest_window_end].copy()
@@ -147,40 +144,40 @@ else:
                     "Window-level route KPIs are exported from Gold-layer aggregates over recent telemetry batches."
                 )
 
-                # ===== Window-level reference table =====
-                if selected_route != "All":
-                    st.subheader("Recent Window Metrics")
-                    st.caption("Recent window-level route metrics for reference.")
+        # ===== Window-level reference table =====
+        if selected_route != "All":
+            st.subheader("Recent Window Metrics")
+            st.caption("Recent window-level route metrics for reference.")
 
-                    window_display_cols = [
-                        "window_start",
-                        "window_end",
-                        "route_id",
-                        "avg_delay_sec",
-                        "avg_occupancy_pct",
-                        "n_events_delay",
-                        "n_events_occupancy",
-                        "late_rate_delay",
-                        "avg_ingest_delay_sec",
-                        "dq_flag",
-                    ]
+            window_display_cols = [
+                "window_start",
+                "window_end",
+                "route_id",
+                "avg_delay_sec",
+                "avg_occupancy_pct",
+                "n_events_delay",
+                "n_events_occupancy",
+                "late_rate_delay",
+                "avg_ingest_delay_sec",
+                "dq_flag",
+            ]
 
-                    if df_window_filtered.empty:
-                        st.info("No recent window-level metrics available.")
-                    else:
-                        window_table_df = df_window_filtered.copy()
+            if df_window_filtered.empty:
+                st.info("No recent window-level metrics available.")
+            else:
+                window_table_df = df_window_filtered.copy()
 
-                        if "window_start" in window_table_df.columns:
-                            window_table_df = window_table_df.sort_values("window_start", ascending=False).head(12)
+                if "window_start" in window_table_df.columns:
+                    window_table_df = window_table_df.sort_values("window_start", ascending=False).head(12)
 
-                        available_window_cols = [c for c in window_display_cols if c in window_table_df.columns]
+                available_window_cols = [c for c in window_display_cols if c in window_table_df.columns]
 
-                        with st.expander("Underlying recent window metrics"):
-                            st.dataframe(
-                                window_table_df[available_window_cols],
-                                use_container_width=True,
-                                height=300,
-                            )
+                with st.expander("Underlying recent window metrics"):
+                    st.dataframe(
+                        window_table_df[available_window_cols],
+                        use_container_width=True,
+                        height=300,
+                    )
 
 # ===== Daily summary =====
 st.subheader("Daily Summary")
