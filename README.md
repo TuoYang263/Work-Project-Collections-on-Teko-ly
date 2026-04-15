@@ -14,11 +14,13 @@ This repository highlights a small set of projects that best represent my curren
 
 ## Featured Project — Primary Focus
 
-### Public Transport Telemetry Pipeline  
-**Production-style data pipeline with observability, simple deployment, and practical engineering trade-offs**
+### Public Transport Telemetry Pipeline
 
-Live demo:  
-https://transport-telemetry-dashboard-vs4l.onrender.com
+> This is the most representative project of my current work.
+
+**Production-style data pipeline with observability, decoupled serving, and practical engineering trade-offs**
+
+Live demo: https://transport-telemetry-dashboard-vs4l.onrender.com
 
 This project models a realistic telemetry pipeline where operational signals and external data (weather) are integrated into a unified data flow.
 
@@ -32,6 +34,16 @@ This project models a realistic telemetry pipeline where operational signals and
 
 The focus is on **clarity, stability, and realistic trade-offs**, rather than system complexity.
 
+**Design boundary**
+
+This project intentionally avoids platform-level complexity (e.g. streaming infrastructure, orchestration frameworks, API layers) to keep the system focused, explainable, and maintainable. The emphasis is on clear data modeling and reliable downstream consumption rather than full platform coverage.
+
+**Optional extension — explanation layer**
+
+An optional explanation layer can be added on top of the curated KPI outputs to provide lightweight summaries and guided Q&A.
+
+This layer would operate on precomputed data and would not modify the pipeline itself, keeping the core system deterministic and maintainable.
+
 **Tech stack:**  
 PySpark · Delta Lake · SQL · GitHub Actions · Azure Blob Storage · Streamlit
 
@@ -43,8 +55,7 @@ View project details:
 ### NYC Yellow Taxi Data Engineering Pipeline  
 **End-to-end batch pipeline demonstrating core data engineering patterns**
 
-Live demo:  
-https://nyc-taxi-dashboard-render.onrender.com
+Live demo: https://nyc-taxi-dashboard-render.onrender.com
 
 This project covers the full path from ingestion to consumption:
 

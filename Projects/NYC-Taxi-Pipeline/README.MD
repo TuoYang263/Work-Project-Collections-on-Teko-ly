@@ -1,5 +1,7 @@
 # NYC Yellow Taxi Data Pipeline
 
+> This project focuses on demonstrating core batch pipeline patterns, while the telemetry project reflects a more production-oriented design with clearer trade-offs.
+
 This project implements a production-style data pipeline for NYC Yellow Taxi trip data.
 
 It ingests raw trip records, transforms them using PySpark, stores analytics-ready tables in BigQuery, and exposes key metrics through a Streamlit dashboard.
