@@ -256,8 +256,10 @@ The dashboard is designed for clarity and stability rather than heavy interactiv
 
 Pipeline execution is handled using GitHub Actions.
 
-Note:  
-Execution timing is best-effort and may vary depending on GitHub runner availability.
+Note:
+Pipeline execution is scheduled via GitHub Actions.
+Execution timing is best-effort and may vary depending on runner availability.
+This approach keeps orchestration lightweight, at the cost of precise scheduling guarantees.
 
 Workflows:
 
