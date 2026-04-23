@@ -104,6 +104,14 @@ FMI_DEFAULT_PARAMS = "t2m,r_1h"
 FMI_DEFAULT_LOOKBACK_MINUTES = 360
 FMI_WFS_URL = "https://opendata.fmi.fi/wfs"
 
+FMI_REQUEST_TIMEOUT_CONNECT = 15
+FMI_REQUEST_TIMEOUT_READ = 60
+
+FMI_MAX_RETRIES = 3
+FMI_BACKOFF_FACTOR = 2
+
+FMI_ALLOW_FAILURE = True
+
 # -----------------------------------------------------------------------------
 # Simulation parameters
 # -----------------------------------------------------------------------------

@@ -19,12 +19,19 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from datetime import datetime, timedelta, timezone
 from src.pipeline.setup import initialize_environment
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from .config import (
     BRONZE_EVENTS_TABLE,
+    FMI_ALLOW_FAILURE,
+    FMI_BACKOFF_FACTOR,
     FMI_DEFAULT_LOOKBACK_MINUTES,
     FMI_DEFAULT_PARAMS,
     FMI_DEFAULT_PLACE,
+    FMI_MAX_RETRIES,
+    FMI_REQUEST_TIMEOUT_CONNECT,
+    FMI_REQUEST_TIMEOUT_READ,
     FMI_WFS_URL,
     SIM_DEFAULT_BATCH_SIZE,
     SIM_ROUTE_IDS,
@@ -67,9 +74,15 @@ def run_bronze_layer(
             f"params={FMI_DEFAULT_PARAMS}, "
             f"minutes={FMI_DEFAULT_LOOKBACK_MINUTES})."
         )
-    except Exception:
-        logger.exception("FMI weather ingest failed.")
-        raise
+    except Exception as exc:
+        if FMI_ALLOW_FAILURE:
+            logger.warning(
+                "FMI weather ingest failed, continuing without weather data.",
+                exc_info=True,
+            )
+        else:
+            logger.exception("FMI weather ingest failed.")
+            raise
 
     bronze_count = spark.table(BRONZE_EVENTS_TABLE).count()
     logger.info(f"Bronze table updated: {BRONZE_EVENTS_TABLE}")
@@ -150,6 +163,26 @@ def ingest_simulated_transit_batch(
 # FMI weather ingestion
 # -----------------------------------------------------------------------------
 
+def build_fmi_retry_session() -> requests.Session:
+    """
+    Build a requests session with retry handling for transient FMI failures.
+    """
+    retry = Retry(
+        total=FMI_MAX_RETRIES,
+        connect=FMI_MAX_RETRIES,
+        read=FMI_MAX_RETRIES,
+        backoff_factor=FMI_BACKOFF_FACTOR,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"],
+        raise_on_status=False,
+    )
+
+    adapter = HTTPAdapter(max_retries=retry)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
 def fetch_fmi_timevaluepair(
     place: str = FMI_DEFAULT_PLACE,
     params: str = FMI_DEFAULT_PARAMS,
@@ -172,7 +205,12 @@ def fetch_fmi_timevaluepair(
         "endtime": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
 
-    response = requests.get(FMI_WFS_URL, params=query, timeout=60)
+    session = build_fmi_retry_session()
+    response = session.get(
+        FMI_WFS_URL,
+        params=query,
+        timeout=(FMI_REQUEST_TIMEOUT_CONNECT, FMI_REQUEST_TIMEOUT_READ),
+    )
     response.raise_for_status()
     return response.text
 
