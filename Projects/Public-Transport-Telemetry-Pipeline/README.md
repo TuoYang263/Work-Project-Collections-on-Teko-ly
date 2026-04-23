@@ -14,15 +14,24 @@ Select a route and toggle weather context in the Map View to explore how externa
 
 ## Summary
 
-A production-style telemetry pipeline that integrates transport signals and weather data into a unified event model, with a focus on reliability, observability, and simple deployment.
+A production-oriented telemetry pipeline that integrates transport signals and weather data into a unified event model.
 
-The system follows a layered architecture (Bronze → Silver → Gold → Serving → Dashboard) and delivers stable, queryable outputs for monitoring and analysis.
+The system focuses on reliability, observability, and maintainable deployment, producing stable outputs for monitoring.
+
+---
+
+## Key focus
+
+- reliable data ingestion
+- clear layer separation
+- stable downstream outputs
+- resilience to external data failures
 
 ---
 
 ## System Overview
 
-A lightweight, production-oriented data pipeline focused on:
+A lightweight data pipeline focused on:
 
 - reliable data integration  
 - simple and consistent aggregation logic  
@@ -75,10 +84,8 @@ Route-level KPIs and daily summaries derived from aggregated Gold-layer outputs.
 Visualizes route geometry, sampled vehicle positions, and optional weather context (FMI).
 
 - Route geometry is derived from HSL GTFS reference data
-- Weather observations are integrated from FMI API
-- Enables spatial exploration of operational signals and external conditions
-
-The map layer is enriched with **HSL GTFS route reference data**, providing realistic route geometry and spatial context.
+- Weather observations are integrated from the FMI API
+- Supports spatial exploration of operational signals and external conditions
 
 ![Map View](docs/dashboard_map_view.jpg)
 
@@ -95,7 +102,7 @@ GitHub Actions → export_gold → Azure Blob → Streamlit (Render)
 - Files are uploaded to Azure Blob Storage
 - The Streamlit dashboard reads precomputed outputs
 
-This design avoids direct database dependencies and ensures a stable, low-maintenance system. This reduces coupling between pipeline execution and data consumption.
+This design avoids direct database dependencies, reduces coupling between pipeline execution and data consumption, and keeps the system low-maintenance.
 
 ---
 
@@ -159,6 +166,17 @@ This allows:
 GitHub Actions is used for scheduling and execution instead of heavier orchestration tools.
 
 This keeps the system simple while still supporting automation and reproducibility.
+
+### Resilient external data ingestion
+
+External APIs can fail temporarily due to network issues or upstream instability.
+
+To keep the pipeline stable, weather ingestion is treated as a non-blocking step:
+- transient FMI request failures are retried
+- timeout and backoff behavior is configurable
+- downstream processing can continue even when weather data is temporarily unavailable
+
+This avoids turning an auxiliary data source into a single point of failure.
 
 ---
 
@@ -254,12 +272,10 @@ The dashboard is designed for clarity and stability rather than heavy interactiv
 
 ## Scheduling
 
-Pipeline execution is handled using GitHub Actions.
-
-Note:
 Pipeline execution is scheduled via GitHub Actions.
-Execution timing is best-effort and may vary depending on runner availability.
-This approach keeps orchestration lightweight, at the cost of precise scheduling guarantees.
+
+Scheduling is best-effort and may vary depending on runner availability.
+This keeps orchestration lightweight, at the cost of precise scheduling guarantees.
 
 Workflows:
 
