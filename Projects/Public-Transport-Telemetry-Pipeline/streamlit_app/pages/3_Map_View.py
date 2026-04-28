@@ -144,7 +144,7 @@ with st.spinner("Loading route map data..."):
 
 points_df = bundle["points"]
 paths_df = bundle["paths"]
-weather_df = load_weather()
+weather_df = load_weather() if show_weather else pd.DataFrame()
 
 # -----------------------------
 # Final pydeck-safe dataframes
@@ -270,7 +270,16 @@ if weather_df is not None and not weather_df.empty:
         )
 else:
     safe_weather_df = pd.DataFrame()
-    latest_time_text = "Latest map context time: N/A"
+    if show_weather:
+        latest_time_text = (
+            "Latest map context time: weather context enabled, but no weather data is available. "
+            "Map is based on the latest exported route snapshot."
+        )
+    else:
+        latest_time_text = (
+            "Latest map context time: weather context disabled. "
+            "Map is based on the latest exported route snapshot."
+        )
 
 latest_time_placeholder.caption(latest_time_text)
 
@@ -278,10 +287,10 @@ latest_time_placeholder.caption(latest_time_text)
 # Enrich vehicle tooltip with city weather summary
 # -----------------------------
 if not safe_points_df.empty:
-    city_temp_text = "City temp: N/A"
-    city_rain_text = "City rain: N/A"
+    if show_weather and not safe_weather_df.empty:
+        city_temp_text = "City temp: N/A"
+        city_rain_text = "City rain: N/A"
 
-    if not safe_weather_df.empty:
         if "temp_display" in safe_weather_df.columns and safe_weather_df["temp_display"].notna().any():
             city_temp = safe_weather_df["temp_display"].dropna().iloc[0]
             city_temp_text = f"City temp: {city_temp} °C"
@@ -290,9 +299,11 @@ if not safe_points_df.empty:
             city_rain = safe_weather_df["precip_display"].dropna().iloc[0]
             city_rain_text = f"City rain: {city_rain} mm"
 
-    safe_points_df["tooltip_line_3"] = city_temp_text
-    safe_points_df["tooltip_line_4"] = city_rain_text
-
+        safe_points_df["tooltip_line_3"] = city_temp_text
+        safe_points_df["tooltip_line_4"] = city_rain_text
+    else:
+        safe_points_df["tooltip_line_3"] = "Weather context: off"
+        safe_points_df["tooltip_line_4"] = ""
 
 # -----------------------------
 # Metrics
@@ -310,21 +321,69 @@ with m4:
 # -----------------------------
 # Legend
 # -----------------------------
+legend_items = [
+    '<div class="legend-item">'
+    '<span class="legend-dot vehicle-dot"></span>'
+    '<span>HSL vehicle points</span>'
+    '</div>',
+    '<div class="legend-item">'
+    '<span class="legend-line route-line"></span>'
+    '<span>Route path</span>'
+    '</div>',
+]
+
+if show_weather:
+    legend_items.append(
+        '<div class="legend-item">'
+        '<span class="legend-dot weather-dot"></span>'
+        '<span>FMI weather station</span>'
+        '</div>'
+    )
+
+legend_html = "".join(legend_items)
+
 st.markdown(
-    """
-    <div style="display:flex; gap:24px; align-items:center; font-size:14px; margin-bottom:8px;">
-        <div style="display:flex; align-items:center; gap:8px;">
-            <span style="width:12px; height:12px; border-radius:50%; background:#1e78ff; display:inline-block;"></span>
-            <span>HSL vehicle points</span>
-        </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-            <span style="width:12px; height:12px; border-radius:50%; background:#ffa500; border:2px solid #b46e00; display:inline-block;"></span>
-            <span>FMI weather station</span>
-        </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-            <span style="width:22px; height:2px; background:#7a7a7a; display:inline-block;"></span>
-            <span>Route path</span>
-        </div>
+    f"""
+    <style>
+    .legend-container {{
+        display: flex;
+        gap: 24px;
+        align-items: center;
+        flex-wrap: wrap;
+        font-size: 14px;
+        margin-bottom: 8px;
+    }}
+    .legend-item {{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+    }}
+    .legend-dot {{
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+    }}
+    .vehicle-dot {{
+        background: #1e78ff;
+    }}
+    .weather-dot {{
+        background: #ffa500;
+        border: 2px solid #b46e00;
+    }}
+    .legend-line {{
+        width: 22px;
+        height: 2px;
+        display: inline-block;
+    }}
+    .route-line {{
+        background: #7a7a7a;
+    }}
+    </style>
+
+    <div class="legend-container">
+        {legend_html}
     </div>
     """,
     unsafe_allow_html=True,
@@ -334,7 +393,8 @@ st.markdown(
 # Layers
 # -----------------------------
 st.caption(
-    "Vehicle points represent sampled recent positions from telemetry batches, shown as a near-real-time operational snapshot."
+    "Vehicle points represent sampled recent positions from telemetry batches. "
+    "Weather stations are optional context only and are not used for causal analysis."
 )
 
 layers = []

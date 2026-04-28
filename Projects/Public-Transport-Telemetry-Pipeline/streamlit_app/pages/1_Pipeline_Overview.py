@@ -67,25 +67,45 @@ else:
 col1, col2, col3 = st.columns(3)
 
 if not latest_df.empty:
-    avg_ingest_gap = latest_df["transit_avg_ingest_delay_sec"].dropna().mean()
-    total_transit_events = int(latest_df["transit_total_events"].fillna(0).sum())
-    metric_rows = len(latest_df)
+    if "transit_avg_ingest_delay_sec" in latest_df.columns:
+        avg_ingest_gap = latest_df["transit_avg_ingest_delay_sec"].dropna().mean()
+    else:
+        avg_ingest_gap = None
+    
+    if "transit_total_events" in latest_df.columns:
+        total_transit_events = int(latest_df["transit_total_events"].fillna(0).sum())
+    else:
+        total_transit_events = 0
+
+    # Use a business-facing data quality indicator instead of exposing row counts.
+    # If dq_flag is not available in pipeline_metrics, infer a lightweight status
+    # from the latest valid transit window.
+    if "dq_flag" in latest_df.columns:
+        dq_values = latest_df["dq_flag"].dropna().astype(str).str.upper()
+
+        if dq_values.empty:
+            dq_status = "OK" if total_transit_events > 0 and pd.notna(avg_ingest_gap) else "Check"
+        elif dq_values.isin(["OK", "PASS", "VALID", "CHECK"]).all():
+            dq_status = "OK"
+        else:
+            dq_status = "Check"
+    else:
+        dq_status = "OK" if total_transit_events > 0 and pd.notna(avg_ingest_gap) else "Check"
 else:
     avg_ingest_gap = None
     total_transit_events = 0
-    metric_rows = 0
+    dq_status = "N/A"
 
 col1.metric(
-    "Avg Event-to-Ingest Gap (s)",
+    "Avg Ingest Delay (s)",
     round(avg_ingest_gap, 2) if pd.notna(avg_ingest_gap) else "N/A",
 )
-col2.metric("Transit Events (recent batch)", total_transit_events)
-col3.metric("Pipeline Metric Rows", metric_rows)
+col2.metric("Events Processed", total_transit_events)
+col3.metric("Data Quality Status", dq_status)
 
 st.caption(
-    "KPI values are computed from the most recent transit window with valid metrics, "
-    "to ensure stability when different data streams are not perfectly aligned. "
-    "This avoids empty latest-window cases when weather and transit windows do not align perfectly."
+    "KPIs are calculated from the most recent valid transit window. "
+    "This keeps the dashboard stable when transit and weather data are refreshed at different times."
 )
 
 # ===== Trend =====
@@ -105,7 +125,11 @@ if df_plot.empty:
     st.info("No transit pipeline trend data available.")
 else:
     # Horizontal axis
-    df_plot["time_label"] = df_plot["window_start"].dt.strftime("%-I:%M %p")
+    df_plot["time_label"] = (
+        df_plot["window_start"]
+        .dt.strftime("%I:%M %p")
+        .str.lstrip("0")
+    )
     st.line_chart(
         df_plot.set_index("time_label")["transit_avg_ingest_delay_sec"],
         height=300,
