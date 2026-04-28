@@ -9,11 +9,24 @@ from utils.load_data import load_route_window, load_route_daily
 
 
 def safe_mean(series: pd.Series, decimals: int = 2):
-    series = series.dropna()
+    series = pd.to_numeric(series, errors="coerce").dropna()
     if series.empty:
         return "N/A"
     return round(series.mean(), decimals)
 
+def safe_rate_pct(series: pd.Series, decimals: int = 1):
+    # Normalize input to numeric values. Non-numeric values are treated as missing
+    # to keep dashboard metrics stable when source data contains dirty records.
+    series = pd.to_numeric(series, errors="coerce").dropna()
+    if series.empty:
+        return "N/A"
+    return f"{series.mean() * 100:.{decimals}f}%"
+
+def safe_sum(series: pd.Series):
+    series = pd.to_numeric(series, errors="coerce").dropna()
+    if series.empty:
+        return 0
+    return int(series.sum())
 
 start_time = time.time()
 
@@ -89,10 +102,20 @@ else:
     latest_window_df = df_window_filtered.copy()
 
 # ===== KPI =====
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
+
 col1.metric("Avg Delay (s)", safe_mean(latest_window_df["avg_delay_sec"]))
 col2.metric("Avg Occupancy (%)", safe_mean(latest_window_df["avg_occupancy_pct"]))
-col3.metric("Late Rate", safe_mean(latest_window_df["late_rate_delay"]))
+col3.metric("Late Rate (%)", safe_rate_pct(latest_window_df["late_rate_delay"]))
+
+if "n_events_delay" in latest_window_df.columns:
+    observed_events = safe_sum(latest_window_df["n_events_delay"])
+elif "total_events_delay" in latest_window_df.columns:
+    observed_events = safe_sum(latest_window_df["total_events_delay"])
+else:
+    observed_events = len(latest_window_df)
+
+col4.metric("Observed Events", observed_events)
 
 st.caption(
     "KPIs above reflect the latest available exported route window, while the charts below show recent historical context."
@@ -121,7 +144,8 @@ else:
                 st.caption("X-axis: route ID.")
                 st.caption("Y-axis: average delay in seconds.")
                 st.caption(
-                    "Route ranking is based on exported Gold-layer daily summaries and should be read as a recent analytical snapshot."
+                    "Route ranking is based on exported Gold-layer daily summaries. "
+                    "Higher average delay may indicate routes that need closer operational attention."
                 )
     else:
         st.subheader("Delay Trend")
@@ -132,7 +156,11 @@ else:
             st.info("No delay trend data available for the selected route.")
         else:
             trend_df = trend_df.sort_values("window_start").tail(24)
-            trend_df["time_label"] = trend_df["window_start"].dt.strftime("%I:%M %p")
+            trend_df["time_label"] = (
+                trend_df["window_start"]
+                .dt.strftime("%I:%M %p")
+                .str.lstrip("0")
+            )
 
             if trend_df.empty:
                 st.info("No delay trend data available for the selected route.")
@@ -157,7 +185,7 @@ else:
                 "avg_occupancy_pct",
                 "n_events_delay",
                 "n_events_occupancy",
-                "late_rate_delay",
+                "late_rate_pct",
                 "avg_ingest_delay_sec",
                 "dq_flag",
             ]
@@ -166,6 +194,11 @@ else:
                 st.info("No recent window-level metrics available.")
             else:
                 window_table_df = df_window_filtered.copy()
+
+                if "late_rate_delay" in window_table_df.columns:
+                    window_table_df["late_rate_pct"] = (
+                        pd.to_numeric(window_table_df["late_rate_delay"], errors="coerce") * 100
+                    ).round(1)
 
                 if "window_start" in window_table_df.columns:
                     window_table_df = window_table_df.sort_values("window_start", ascending=False).head(12)
@@ -186,6 +219,13 @@ st.caption("Daily aggregated metrics per route")
 if df_daily_filtered.empty:
     st.info("No daily summary data available.")
 else:
+    daily_table_df = df_daily_filtered.copy()
+
+    if "avg_late_rate_delay" in daily_table_df.columns:
+        daily_table_df["avg_late_rate_pct"] = (
+            pd.to_numeric(daily_table_df["avg_late_rate_delay"], errors="coerce") * 100
+        ).round(1)
+
     display_cols = [
         "date",
         "route_id",
@@ -193,15 +233,15 @@ else:
         "avg_occupancy_pct",
         "total_events_delay",
         "total_events_occupancy",
-        "avg_late_rate_delay",
+        "avg_late_rate_pct",
         "avg_ingest_delay_sec",
         "dq_flag",
     ]
 
-    available_cols = [col for col in display_cols if col in df_daily_filtered.columns]
+    available_cols = [col for col in display_cols if col in daily_table_df.columns]
     with st.expander("Underlying daily metrics (for reference)"):
         st.dataframe(
-            df_daily_filtered[available_cols],
+            daily_table_df[available_cols],
             use_container_width=True,
             height=300,
         )
