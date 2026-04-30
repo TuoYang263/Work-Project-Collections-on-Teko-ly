@@ -8,8 +8,7 @@ import pydeck as pdk
 import streamlit as st
 
 from utils.data_access import load_weather_stations
-from utils.maps import build_map_bundle
-
+from utils.maps import build_map_bundle, load_route_options_only
 
 def compute_dynamic_view_state(points_df: pd.DataFrame, paths_df: pd.DataFrame):
     """
@@ -105,7 +104,7 @@ st.caption("Route-level map view with sampled vehicle points, route shape, and o
 latest_time_text = "Latest map context time: N/A"
 latest_time_placeholder = st.empty()
 
-@st.cache_data(show_spinner="Loading FMI weather data...", ttl=300, max_entries=2)
+@st.cache_data(show_spinner="Loading FMI weather data...", ttl=900, max_entries=2)
 def load_weather():
     return load_weather_stations()
 
@@ -113,8 +112,7 @@ def load_weather():
 # Route selection
 # -----------------------------
 with st.spinner("Loading route options..."):
-    initial_bundle = build_map_bundle(None)
-    route_options = initial_bundle.get("routes", [])
+    route_options = load_route_options_only()
     route_options = sorted({
         str(r).strip()
         for r in route_options
