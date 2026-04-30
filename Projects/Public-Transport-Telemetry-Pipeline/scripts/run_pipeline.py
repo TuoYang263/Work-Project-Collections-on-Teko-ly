@@ -45,7 +45,7 @@ def run_pipeline(layer: str, logger: logging.Logger) -> None:
     try:
         if layer == "bronze":
             logger.info("Running BRONZE layer")
-            run_bronze_layer(spark, logger, reset=False)
+            run_bronze_layer(spark, logger, reset=True)
 
         if layer == "silver":
             logger.info("Running SILVER layer")
@@ -57,7 +57,7 @@ def run_pipeline(layer: str, logger: logging.Logger) -> None:
         
         elif layer == "full":
             logger.info("Running BRONZE layer")
-            run_bronze_layer(spark, logger, reset=False)
+            run_bronze_layer(spark, logger, reset=True)
 
             logger.info("Dropping existing Silver / Gold tables for clean rebuild")
             drop_derived_tables(spark)

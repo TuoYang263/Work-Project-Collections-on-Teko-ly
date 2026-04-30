@@ -58,7 +58,12 @@ def build_silver_transit_metrics(spark: SparkSession) -> None:
         )
         .withColumn("is_clock_skew", F.col("ingest_delay_sec_raw") < F.lit(0))
         .withColumn("ingest_delay_sec", F.greatest(F.col("ingest_delay_sec_raw"), F.lit(0)))
-        .withColumn("is_late_event", F.col("ingest_delay_sec") > F.lit(TRANSIT_LATE_THRESHOLD_SEC))
+        .withColumn("is_late_event",
+                    F.when(
+                        F.col("metric") == F.lit("delay_sec"),
+                        F.col("value") > F.lit(TRANSIT_LATE_THRESHOLD_SEC),
+                    ).otherwise(F.lit(False)),
+        )
     )
 
     silver_transit = (
