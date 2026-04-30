@@ -19,7 +19,6 @@ import pandas as pd
 import streamlit as st
 
 from utils.data_access import (
-    load_hsl_df_map,
     load_hsl_map_points,
     load_hsl_route_paths,
     load_hsl_route_options,
@@ -73,16 +72,14 @@ def _normalize_route_label(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-@st.cache_data(show_spinner=False, ttl=300, max_entries=2)
+@st.cache_data(show_spinner=False, ttl=900, max_entries=2)
 def load_map_parquets() -> Dict[str, pd.DataFrame]:
     loaded: Dict[str, pd.DataFrame] = {
-        "df_map": load_hsl_df_map(),
         "map_points": load_hsl_map_points(),
         "paths": load_hsl_route_paths(),
-        "route_options": load_hsl_route_options(),
     }
 
-    for key in ["df_map", "map_points", "paths", "route_options"]:
+    for key in ["map_points", "paths"]:
         if key in loaded and loaded[key] is not None and not loaded[key].empty:
             loaded[key] = _rename_to_standard(loaded[key])
             loaded[key] = _coerce_numeric(loaded[key], ["lat", "lon", "seq"])
@@ -90,16 +87,38 @@ def load_map_parquets() -> Dict[str, pd.DataFrame]:
     return loaded
 
 
-@st.cache_data(show_spinner=False, ttl=300, max_entries=2)
+@st.cache_data(show_spinner=False, ttl=900, max_entries=2)
 def load_route_options_only() -> List[str]:
-    data = load_map_parquets()
+    """
+    Load only route options for the sidebar selector.
 
-    route_options_df = data.get("route_options", pd.DataFrame())
-    fallback_df = data.get("df_map", pd.DataFrame())
-    if fallback_df.empty:
-        fallback_df = data.get("map_points", pd.DataFrame())
+    This avoids building the full map bundle just to populate the route dropdown.
+    Falls back to map points if the dedicated route options file is missing or empty.
+    """
+    try:
+        route_options_df = load_hsl_route_options()
 
-    return get_route_options(route_options_df, fallback_df=fallback_df)
+        if route_options_df is not None and not route_options_df.empty:
+            route_options_df = _rename_to_standard(route_options_df)
+            values = get_route_options(route_options_df)
+
+            if values:
+                return values
+    except Exception:
+        pass
+
+    # Fallback only when the dedicated route options file is unavailable.
+    try:
+        fallback_df = load_hsl_map_points()
+
+        if fallback_df is not None and not fallback_df.empty:
+            fallback_df = _rename_to_standard(fallback_df)
+            fallback_df = _coerce_numeric(fallback_df, ["lat", "lon", "seq"])
+            return get_route_options(pd.DataFrame(), fallback_df=fallback_df)
+    except Exception:
+        pass
+    
+    return []
 
 
 def get_route_options(
@@ -208,8 +227,10 @@ def prepare_paths_for_pydeck(paths_df: pd.DataFrame, max_paths: int = 2) -> pd.D
             out["path"] = out["path"].apply(_safe_path)
             out = out[out["path"].map(len) > 1]
 
-        if "route_label" in out.columns:
-            out = out.drop_duplicates(subset=["route_label"])
+        if "path" in out.columns:
+            out["path_len"] = out["path"].map(len)
+            out = out.sort_values("path_len", ascending=False)
+
         out = out.head(max_paths)
 
         keep_cols = [col for col in ["path", "route_label", "route_id"] if col in out.columns]
@@ -298,27 +319,29 @@ def prepare_points_for_pydeck(points_df: pd.DataFrame, max_points: int = 400) ->
 
     return out
 
+
 def build_map_bundle(selected_route: Optional[str]) -> Dict[str, Any]:
+    """
+    Build the map data required for pydeck rendering.
+
+    Route options are loaded separately through load_route_options_only()
+    so this function only loads data needed to render the selected map view.
+    """
     data = load_map_parquets()
 
-    df_map = data.get("df_map", pd.DataFrame())
     map_points = data.get("map_points", pd.DataFrame())
     paths = data.get("paths", pd.DataFrame())
-    route_options_df = data.get("route_options", pd.DataFrame())
-
-    fallback_df = df_map if not df_map.empty else map_points
-    routes = get_route_options(route_options_df, fallback_df=fallback_df)
 
     filtered_points = filter_by_route(map_points, selected_route)
     filtered_paths = filter_by_route(paths, selected_route)
 
     points_layer_df = prepare_points_for_pydeck(filtered_points, max_points=400)
-    path_layer_df = prepare_paths_for_pydeck(filtered_paths, max_paths=2)
+    path_layer_df = prepare_paths_for_pydeck(filtered_paths, max_paths=4)
 
-    center_lat, center_lon = get_map_center(points_layer_df, filtered_points, df_map)
+    center_lat, center_lon = get_map_center(points_layer_df, path_layer_df)
 
     return {
-        "routes": routes,
+        "routes": [],
         "points": points_layer_df,
         "paths": path_layer_df,
         "center": {
