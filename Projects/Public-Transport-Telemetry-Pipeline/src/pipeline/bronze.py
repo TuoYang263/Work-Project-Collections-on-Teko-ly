@@ -14,13 +14,15 @@ import logging
 import random
 import requests
 import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
+from itertools import product
 from typing import Dict, List
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-from datetime import datetime, timedelta, timezone
 from src.pipeline.setup import initialize_environment
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
 
 from .config import (
     BRONZE_EVENTS_TABLE,
@@ -35,8 +37,13 @@ from .config import (
     FMI_WFS_URL,
     SIM_DEFAULT_BATCH_SIZE,
     SIM_ROUTE_IDS,
-    SIM_RECENT_SPAN_MINUTES,
+    SIM_HISTORY_WINDOWS,
+    SIM_WINDOW_MINUTES,
+    SIM_EVENTS_PER_ROUTE_WINDOW,
+    SIM_INGEST_DELAY_MIN_SEC,
+    SIM_INGEST_DELAY_MAX_SEC,
 )
+
 
 def infer_unit(metric: str) -> str:
     if metric == "t2m":
@@ -44,6 +51,7 @@ def infer_unit(metric: str) -> str:
     if metric in {"r_1h", "precipitation", "r1_10min"}:
         return "mm"
     return "unknown"
+
 
 def run_bronze_layer(
     spark: SparkSession,
@@ -88,38 +96,141 @@ def run_bronze_layer(
     logger.info(f"Bronze table updated: {BRONZE_EVENTS_TABLE}")
     logger.info(f"Bronze row count after transit + weather ingest: {bronze_count}")
 
+
 # -----------------------------------------------------------------------------
 # Transit simulation
 # -----------------------------------------------------------------------------
 
-def make_simulated_event(route_ids: List[str] | None = None) -> Dict:
+
+# Optional parameters allow tests or callers to override specific fields.
+# When not provided, the function generates random/default values internally.
+def make_simulated_event(
+    route_ids: List[str] | None = None,
+    route_id: str | None = None,
+    metric: str | None = None,
+    event_epoch: int | None = None,
+) -> Dict:
     """
     Build one simulated telemetry event row compatible with the Bronze schema.
+
+    The event time can be injected so demo data can cover multiple historical
+    windows instead of only the latest few minutes.
     """
     route_ids = route_ids or SIM_ROUTE_IDS
+    route_id = route_id or random.choice(route_ids)
+    metric = metric or random.choice(["delay_sec", "occupancy"])
 
-    metric = random.choice(["delay_sec", "occupancy"])
-    value = random.randint(-30, 600) if metric == "delay_sec" else random.randint(0, 80)
+    if metric == "delay_sec":
+        # Simulate vehicle delay in seconds.
+        # Most values are close to schedule, with occasional operational delays.
+        r = random.random()
 
-    # keep simulated events recent so event-to-ingest gap looks more realistic
-    offset_sec = random.randint(0, SIM_RECENT_SPAN_MINUTES * 60)
-    event_epoch = int(time.time()) - offset_sec
+        if r < 0.65:
+            value = random.randint(-30, 90)
+        elif r < 0.90:
+            value = random.randint(90, 180)
+        else:
+            value = random.randint(180, 420)
+
+        unit = "sec"
+    else:
+        value = random.randint(10, 85)
+        unit = "pct"
+
+    if event_epoch is None:
+        event_epoch = int(time.time())
+
+    ingest_delay_sec = random.randint(
+        SIM_INGEST_DELAY_MIN_SEC,
+        SIM_INGEST_DELAY_MAX_SEC,
+    )
+    ingest_epoch = event_epoch + ingest_delay_sec
+
     event_time_raw = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(event_epoch))
+    ingest_time_raw = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ingest_epoch))
 
     return {
         "event_id": str(uuid.uuid4()),
         "event_time_raw": event_time_raw,
+        "sim_ingest_time_raw": ingest_time_raw,
         "source": "sim_transit",
         "entity_type": "vehicle",
         "entity_id": f"veh_{random.randint(100, 130)}",
         "metric": metric,
         "value": float(value),
-        "unit": "sec" if metric == "delay_sec" else "pct",
+        "unit": unit,
         "attrs": {
-            "route_id": random.choice(route_ids),
+            "route_id": route_id,
             "stop_id": str(random.randint(1, 60)),
         },
     }
+
+
+def generate_route_window_events(
+    route_ids: List[str],
+    metrics: List[str],
+    window_starts: List[int],
+    window_sec: int,
+    events_per_metric: int,
+) -> List[Dict]:
+    """
+    Generate stable route-window telemetry coverage.
+
+    Each route receives delay and occupancy events in each historical window.
+    This keeps dashboard trend charts meaningful without creating frontend-only mock data.
+    """
+    rows: List[Dict] = []
+
+    for window_start_epoch, route_id, metric in product(
+        window_starts, route_ids, metrics
+    ):
+        for _ in range(events_per_metric):
+            event_epoch = random.randint(
+                window_start_epoch,
+                window_start_epoch + window_sec - 1,
+            )
+
+            rows.append(
+                make_simulated_event(
+                    route_ids=route_ids,
+                    route_id=route_id,
+                    metric=metric,
+                    event_epoch=event_epoch,
+                )
+            )
+
+    return rows
+
+
+def generate_random_fill_events(
+    route_ids: List[str],
+    earliest_window_start: int,
+    latest_completed_window_start: int,
+    window_sec: int,
+    n: int,
+) -> List[Dict]:
+    """
+    Generate additional random events across the same historical time range.
+
+    These events add variability while the stable route-window coverage ensures
+    every route has enough records for dashboard trends.
+    """
+    rows: List[Dict] = []
+
+    for _ in range(max(0, n)):
+        event_epoch = random.randint(
+            earliest_window_start,
+            latest_completed_window_start + window_sec - 1,
+        )
+
+        rows.append(
+            make_simulated_event(
+                route_ids=route_ids,
+                event_epoch=event_epoch,
+            )
+        )
+
+    return rows
 
 
 def ingest_simulated_transit_batch(
@@ -131,37 +242,91 @@ def ingest_simulated_transit_batch(
     Generate simulated transit telemetry and append it to Bronze.
 
     Strategy:
-    - guarantee a minimum number of events per route
-    - fill the remaining batch with random route selection
+    - generate multiple historical 10-minute windows
+    - guarantee delay and occupancy events for every route in every window
+    - add random fill events to preserve variability
+    - keep the batch lightweight enough for local and GitHub Actions runs
     """
     route_ids = SIM_ROUTE_IDS
-    min_events_per_route = 12
+    metrics = ["delay_sec", "occupancy"]
 
-    rows = []
+    window_sec = SIM_WINDOW_MINUTES * 60
+    now_epoch = int(time.time())
 
-    # 1) guarantee a minimum number of events per route
-    for route_id in route_ids:
-        for _ in range(min_events_per_route):
-            rows.append(make_simulated_event(route_ids=[route_id]))
+    # Use the latest completed window to avoid future-looking window_end values.
+    latest_completed_window_start = (now_epoch // window_sec) * window_sec - window_sec
 
-    # 2) fill the remaining batch with random route selection
-    remaining = max(0, n - len(rows))
-    rows.extend(make_simulated_event(route_ids=route_ids) for _ in range(remaining))
+    window_starts = [
+        latest_completed_window_start
+        - (SIM_HISTORY_WINDOWS - 1 - window_idx) * window_sec
+        for window_idx in range(SIM_HISTORY_WINDOWS)
+    ]
+
+    events_per_metric = max(
+        1,
+        SIM_EVENTS_PER_ROUTE_WINDOW // len(metrics),
+    )
+
+    stable_rows = generate_route_window_events(
+        route_ids=route_ids,
+        metrics=metrics,
+        window_starts=window_starts,
+        window_sec=window_sec,
+        events_per_metric=events_per_metric,
+    )
+
+    remaining = max(0, n - len(stable_rows))
+
+    fill_rows = generate_random_fill_events(
+        route_ids=route_ids,
+        earliest_window_start=window_starts[0],
+        latest_completed_window_start=latest_completed_window_start,
+        window_sec=window_sec,
+        n=remaining,
+    )
+
+    rows = stable_rows + fill_rows
 
     df = spark.createDataFrame(rows)
 
     df2 = (
-        df.withColumn("event_time_ts", F.to_timestamp("event_time_raw", "yyyy-MM-dd'T'HH:mm:ss'Z'"))
-        .withColumn("ingest_time_ts", F.current_timestamp())
+        df.withColumn(
+            "event_time_ts",
+            F.to_timestamp("event_time_raw", "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+        )
+        .withColumn(
+            "ingest_time_ts",
+            F.to_timestamp("sim_ingest_time_raw", "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+        )
+        .select(
+            "event_id",
+            "event_time_raw",
+            "source",
+            "entity_type",
+            "entity_id",
+            "metric",
+            "value",
+            "unit",
+            "attrs",
+            "event_time_ts",
+            "ingest_time_ts",
+        )
     )
 
     df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
-    print(f"Batch {batch_id} appended to {BRONZE_EVENTS_TABLE}: {len(rows)} rows")
+
+    print(
+        f"Batch {batch_id} appended to {BRONZE_EVENTS_TABLE}: "
+        f"{len(rows)} rows "
+        f"({len(stable_rows)} stable coverage rows, {len(fill_rows)} random fill rows) "
+        f"across {SIM_HISTORY_WINDOWS} windows"
+    )
 
 
 # -----------------------------------------------------------------------------
 # FMI weather ingestion
 # -----------------------------------------------------------------------------
+
 
 def build_fmi_retry_session() -> requests.Session:
     """
@@ -182,6 +347,7 @@ def build_fmi_retry_session() -> requests.Session:
     session.mount("https://", adapter)
     session.mount("http://", adapter)
     return session
+
 
 def fetch_fmi_timevaluepair(
     place: str = FMI_DEFAULT_PLACE,
@@ -213,6 +379,7 @@ def fetch_fmi_timevaluepair(
     )
     response.raise_for_status()
     return response.text
+
 
 def parse_fmi_events(xml_text: str, place: str = FMI_DEFAULT_PLACE) -> List[Dict]:
     """
@@ -253,9 +420,8 @@ def parse_fmi_events(xml_text: str, place: str = FMI_DEFAULT_PLACE) -> List[Dict
         metric = infer_metric(xlink_href(observed)) or "t2m"
 
         fmisid = safe_text(member.find(".//gml:identifier", ns))
-        station_name = (
-            safe_text(member.find(".//gml:Point/gml:name", ns))
-            or safe_text(member.find(".//gml:name", ns))
+        station_name = safe_text(member.find(".//gml:Point/gml:name", ns)) or safe_text(
+            member.find(".//gml:name", ns)
         )
         region = safe_text(member.find(".//target:region", ns))
 
@@ -302,6 +468,7 @@ def parse_fmi_events(xml_text: str, place: str = FMI_DEFAULT_PLACE) -> List[Dict
 
     return events
 
+
 def ingest_fmi_weather(
     spark: SparkSession,
     place: str = FMI_DEFAULT_PLACE,
@@ -326,10 +493,9 @@ def ingest_fmi_weather(
         return
 
     df = spark.createDataFrame(rows)
-    df2 = (
-        df.withColumn("event_time_ts", F.to_timestamp("event_time_raw", "yyyy-MM-dd'T'HH:mm:ssX"))
-        .withColumn("ingest_time_ts", F.current_timestamp())
-    )
+    df2 = df.withColumn(
+        "event_time_ts", F.to_timestamp("event_time_raw", "yyyy-MM-dd'T'HH:mm:ssX")
+    ).withColumn("ingest_time_ts", F.current_timestamp())
 
     df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
     print(f"Appended FMI events: {len(rows)}")

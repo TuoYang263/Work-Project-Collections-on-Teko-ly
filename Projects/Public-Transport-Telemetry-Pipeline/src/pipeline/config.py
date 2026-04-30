@@ -85,7 +85,7 @@ GOLD_PIPELINE_METRICS_PATH = GOLD_DIR / "gold_pipeline_metrics_window.csv"
 # -----------------------------------------------------------------------------
 
 TRANSIT_WINDOW = "10 minutes"
-TRANSIT_LOOKBACK_MINUTES = 120
+TRANSIT_LOOKBACK_MINUTES = 180
 TRANSIT_LATE_THRESHOLD_SEC = 120
 
 # -----------------------------------------------------------------------------
@@ -117,25 +117,28 @@ FMI_ALLOW_FAILURE = True
 # -----------------------------------------------------------------------------
 
 SIM_ROUTE_IDS = ["M1", "M2", "T1", "R10", "B1", "B2", "X3", "X7"]
-SIM_TIME_SPAN_MINUTES = 60
-SIM_DEFAULT_BATCH_SIZE = 200
-SIM_RECENT_SPAN_MINUTES = 5
+
+# Demo history settings
+SIM_HISTORY_WINDOWS = int(os.getenv("SIM_HISTORY_WINDOWS", "12"))
+SIM_WINDOW_MINUTES = int(os.getenv("SIM_WINDOW_MINUTES", "10"))
+SIM_EVENTS_PER_ROUTE_WINDOW = int(os.getenv("SIM_EVENTS_PER_ROUTE_WINDOW", "10"))
+
+# Batch size is kept moderate so local and GitHub Actions runs stay lightweight
+SIM_DEFAULT_BATCH_SIZE = int(os.getenv("SIM_DEFAULT_BATCH_SIZE", "1000"))
+
+# Simulated event-to-ingest delay range.
+SIM_INGEST_DELAY_MIN_SEC = int(os.getenv("SIM_INGEST_DELAY_MIN_SEC", "20"))
+SIM_INGEST_DELAY_MAX_SEC = int(os.getenv("SIM_INGEST_DELAY_MAX_SEC", "240"))
 
 # -----------------------------------------------------------------------------
 # Spark local runtime settings (WSL / local development)
 # -----------------------------------------------------------------------------
 SPARK_WAREHOUSE_DIR = os.getenv(
-    "SPARK_WAREHOUSE_DIR",
-    "file:/tmp/spark-warehouse/telemetry"
+    "SPARK_WAREHOUSE_DIR", "file:/tmp/spark-warehouse/telemetry"
 )
 
-SPARK_LOCAL_DIR = os.getenv(
-    "SPARK_LOCAL_DIR",
-    "/tmp/spark-tmp"
-)
+SPARK_LOCAL_DIR = os.getenv("SPARK_LOCAL_DIR", "/tmp/spark-tmp")
 
 SPARK_DATABASE_LOCATION = os.getenv(
-    "SPARK_DATABASE_LOCATION",
-    f"{SPARK_WAREHOUSE_DIR}/{DATABASE_NAME}.db"
+    "SPARK_DATABASE_LOCATION", f"{SPARK_WAREHOUSE_DIR}/{DATABASE_NAME}.db"
 )
-

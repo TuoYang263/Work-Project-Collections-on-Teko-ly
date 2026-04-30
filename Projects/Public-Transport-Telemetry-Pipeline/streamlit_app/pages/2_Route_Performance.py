@@ -14,6 +14,7 @@ def safe_mean(series: pd.Series, decimals: int = 2):
         return "N/A"
     return round(series.mean(), decimals)
 
+
 def safe_rate_pct(series: pd.Series, decimals: int = 1):
     # Normalize input to numeric values. Non-numeric values are treated as missing
     # to keep dashboard metrics stable when source data contains dirty records.
@@ -22,11 +23,13 @@ def safe_rate_pct(series: pd.Series, decimals: int = 1):
         return "N/A"
     return f"{series.mean() * 100:.{decimals}f}%"
 
+
 def safe_sum(series: pd.Series):
     series = pd.to_numeric(series, errors="coerce").dropna()
     if series.empty:
         return 0
     return int(series.sum())
+
 
 start_time = time.time()
 
@@ -47,9 +50,11 @@ df_window = df_window.copy()
 
 now_local = datetime.now(ZoneInfo("Europe/Helsinki"))
 
+
 def to_helsinki(ts: pd.Series) -> pd.Series:
     s = pd.to_datetime(ts, errors="coerce", utc=True)
     return s.dt.tz_convert("Europe/Helsinki")
+
 
 for col in ["window_start", "window_end"]:
     if col in df_window.columns:
@@ -63,8 +68,7 @@ latest_window_end = (
 
 if pd.notna(latest_window_end):
     freshness_min = max(
-        0,
-        int((now_local - latest_window_end.to_pydatetime()).total_seconds() / 60)
+        0, int((now_local - latest_window_end.to_pydatetime()).total_seconds() / 60)
     )
     st.caption(
         f"Latest route window end: {latest_window_end.strftime('%Y-%m-%d %H:%M')} "
@@ -95,9 +99,14 @@ else:
     df_window_filtered = df_window.copy()
     df_daily_filtered = df_daily.copy()
 
-if "window_end" in df_window_filtered.columns and df_window_filtered["window_end"].notna().any():
+if (
+    "window_end" in df_window_filtered.columns
+    and df_window_filtered["window_end"].notna().any()
+):
     latest_window_end = df_window_filtered["window_end"].max()
-    latest_window_df = df_window_filtered[df_window_filtered["window_end"] == latest_window_end].copy()
+    latest_window_df = df_window_filtered[
+        df_window_filtered["window_end"] == latest_window_end
+    ].copy()
 else:
     latest_window_df = df_window_filtered.copy()
 
@@ -156,16 +165,16 @@ else:
             st.info("No delay trend data available for the selected route.")
         else:
             trend_df = trend_df.sort_values("window_start").tail(24)
-            trend_df["time_label"] = (
-                trend_df["window_start"]
-                .dt.strftime("%I:%M %p")
-                .str.lstrip("0")
-            )
 
             if trend_df.empty:
                 st.info("No delay trend data available for the selected route.")
             else:
-                st.line_chart(trend_df.set_index("time_label")["avg_delay_sec"])
+                chart_df = (
+                    trend_df.sort_values("window_start")
+                    .set_index("window_start")[["avg_delay_sec"]]
+                    .rename(columns={"avg_delay_sec": "Avg delay (s)"})
+                )
+                st.line_chart(chart_df)
                 st.caption("X-axis: Helsinki local time.")
                 st.caption("Y-axis: average delay in seconds.")
                 st.caption(
@@ -197,13 +206,20 @@ else:
 
                 if "late_rate_delay" in window_table_df.columns:
                     window_table_df["late_rate_pct"] = (
-                        pd.to_numeric(window_table_df["late_rate_delay"], errors="coerce") * 100
+                        pd.to_numeric(
+                            window_table_df["late_rate_delay"], errors="coerce"
+                        )
+                        * 100
                     ).round(1)
 
                 if "window_start" in window_table_df.columns:
-                    window_table_df = window_table_df.sort_values("window_start", ascending=False).head(12)
+                    window_table_df = window_table_df.sort_values(
+                        "window_start", ascending=False
+                    ).head(12)
 
-                available_window_cols = [c for c in window_display_cols if c in window_table_df.columns]
+                available_window_cols = [
+                    c for c in window_display_cols if c in window_table_df.columns
+                ]
 
                 with st.expander("Underlying recent window metrics"):
                     st.dataframe(
@@ -245,6 +261,8 @@ else:
             use_container_width=True,
             height=300,
         )
-    st.caption("This table reflects the exported Gold-layer daily aggregates per route.")
+    st.caption(
+        "This table reflects the exported Gold-layer daily aggregates per route."
+    )
 
 st.caption(f"Page rendered in {time.time() - start_time:.2f}s")

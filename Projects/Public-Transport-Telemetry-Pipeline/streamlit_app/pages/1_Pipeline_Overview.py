@@ -7,7 +7,6 @@ import streamlit as st
 
 from utils.load_data import load_pipeline_metrics
 
-
 start_time = time.time()
 now_local = datetime.now(ZoneInfo("Europe/Helsinki"))
 
@@ -23,9 +22,11 @@ if df is None or df.empty:
 
 df = df.copy()
 
+
 def to_helsinki(ts: pd.Series) -> pd.Series:
     s = pd.to_datetime(ts, errors="coerce", utc=True)
     return s.dt.tz_convert("Europe/Helsinki")
+
 
 for col in ["window_start", "window_end"]:
     if col in df.columns:
@@ -34,8 +35,7 @@ for col in ["window_start", "window_end"]:
 latest_window_end = df["window_end"].max() if "window_end" in df.columns else pd.NaT
 if pd.notna(latest_window_end):
     freshness_min = max(
-        0,
-        int((now_local - latest_window_end.to_pydatetime()).total_seconds() / 60)
+        0, int((now_local - latest_window_end.to_pydatetime()).total_seconds() / 60)
     )
     st.caption(
         f"Latest data window end: {latest_window_end.strftime('%Y-%m-%d %H:%M')} "
@@ -71,7 +71,7 @@ if not latest_df.empty:
         avg_ingest_gap = latest_df["transit_avg_ingest_delay_sec"].dropna().mean()
     else:
         avg_ingest_gap = None
-    
+
     if "transit_total_events" in latest_df.columns:
         total_transit_events = int(latest_df["transit_total_events"].fillna(0).sum())
     else:
@@ -84,13 +84,19 @@ if not latest_df.empty:
         dq_values = latest_df["dq_flag"].dropna().astype(str).str.upper()
 
         if dq_values.empty:
-            dq_status = "OK" if total_transit_events > 0 and pd.notna(avg_ingest_gap) else "Check"
+            dq_status = (
+                "OK"
+                if total_transit_events > 0 and pd.notna(avg_ingest_gap)
+                else "Check"
+            )
         elif dq_values.isin(["OK", "PASS", "VALID", "CHECK"]).all():
             dq_status = "OK"
         else:
             dq_status = "Check"
     else:
-        dq_status = "OK" if total_transit_events > 0 and pd.notna(avg_ingest_gap) else "Check"
+        dq_status = (
+            "OK" if total_transit_events > 0 and pd.notna(avg_ingest_gap) else "Check"
+        )
 else:
     avg_ingest_gap = None
     total_transit_events = 0
@@ -114,7 +120,9 @@ st.subheader("Pipeline Delay Trend")
 df_plot = df.copy()
 
 if "transit_avg_ingest_delay_sec" in df_plot.columns:
-    df_plot = df_plot.dropna(subset=["window_start", "transit_avg_ingest_delay_sec"]).copy()
+    df_plot = df_plot.dropna(
+        subset=["window_start", "transit_avg_ingest_delay_sec"]
+    ).copy()
 else:
     df_plot = pd.DataFrame()
 
@@ -125,27 +133,23 @@ if df_plot.empty:
     st.info("No transit pipeline trend data available.")
 else:
     # Horizontal axis
-    df_plot["time_label"] = (
-        df_plot["window_start"]
-        .dt.strftime("%I:%M %p")
-        .str.lstrip("0")
+    chart_df = (
+        df_plot.sort_values("window_start")
+        .set_index("window_start")[["transit_avg_ingest_delay_sec"]]
+        .rename(columns={"transit_avg_ingest_delay_sec": "Avg ingest delay (s)"})
     )
-    st.line_chart(
-        df_plot.set_index("time_label")["transit_avg_ingest_delay_sec"],
-        height=300,
-    )
+
+    st.line_chart(chart_df, height=300)
 
     # Vertical axis instructions
     st.caption("Average ingest delay (seconds). Time axis in Helsinki local time.")
 
 st.subheader("Delivered Scope")
-st.markdown(
-    """
+st.markdown("""
 - Gold-layer pipeline metrics exported for dashboard consumption
 - Recent batch-oriented telemetry summary over the latest available transit windows
 - Lightweight, decoupled serving layer based on exported outputs
-    """
-)
+    """)
 
 st.caption(
     "This page is intended for stable inspection of recent exported pipeline outputs, "
