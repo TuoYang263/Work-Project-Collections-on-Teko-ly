@@ -71,3 +71,7 @@ notebooks/**/.ipynb_checkpoints/
 
 # Dev files
 requirements-dev.txt
+
+# Generated dashboard parquet outputs
+data/gold/hsl/*.parquet
+data/gold/weather/*.parquet
