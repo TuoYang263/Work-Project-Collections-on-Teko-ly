@@ -59,10 +59,12 @@ def build_gold_weather_station_outputs(spark: SparkSession, logger: logging.Logg
             F.col("attrs.lat").cast("double").alias("lat"),
             F.col("attrs.lon").cast("double").alias("lon"),
             F.col("metric"),
-            F.col("value"),
+            F.col("value").cast("double").alias("value"),
             F.col("event_time_ts"),
         )
         .filter(F.col("lat").isNotNull() & F.col("lon").isNotNull())
+        .filter(F.col("value").isNotNull())
+        .filter(~F.isnan(F.col("value")))
     )
 
     # Keep latest observation per station + metric

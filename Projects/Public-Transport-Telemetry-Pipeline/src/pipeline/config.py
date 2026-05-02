@@ -100,6 +100,18 @@ WEATHER_LOOKBACK_MINUTES = 360
 # -----------------------------------------------------------------------------
 
 FMI_DEFAULT_PLACE = "helsinki"
+
+FMI_DEFAULT_PLACES = os.getenv(
+    "FMI_DEFAULT_PLACES",
+    "helsinki,espoo,vantaa,kauniainen",
+)
+
+FMI_PLACES = [
+    place.strip()
+    for place in FMI_DEFAULT_PLACES.split(",")
+    if place.strip()
+]
+
 FMI_DEFAULT_PARAMS = "t2m,r_1h"
 FMI_DEFAULT_LOOKBACK_MINUTES = 360
 FMI_WFS_URL = "https://opendata.fmi.fi/wfs"
