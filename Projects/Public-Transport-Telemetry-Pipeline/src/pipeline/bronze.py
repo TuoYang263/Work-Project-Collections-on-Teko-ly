@@ -31,6 +31,7 @@ from .config import (
     FMI_DEFAULT_LOOKBACK_MINUTES,
     FMI_DEFAULT_PARAMS,
     FMI_DEFAULT_PLACE,
+    FMI_PLACES,
     FMI_MAX_RETRIES,
     FMI_REQUEST_TIMEOUT_CONNECT,
     FMI_REQUEST_TIMEOUT_READ,
@@ -70,15 +71,15 @@ def run_bronze_layer(
     logger.info("Simulated transit batch appended to Bronze.")
 
     try:
-        ingest_fmi_weather(
+        ingest_fmi_weather_for_places(
             spark=spark,
-            place=FMI_DEFAULT_PLACE,
+            places=FMI_PLACES,
             params=FMI_DEFAULT_PARAMS,
             minutes=FMI_DEFAULT_LOOKBACK_MINUTES,
         )
         logger.info(
             "FMI weather ingest completed "
-            f"(place={FMI_DEFAULT_PLACE}, "
+            f"(places={FMI_PLACES}, "
             f"params={FMI_DEFAULT_PARAMS}, "
             f"minutes={FMI_DEFAULT_LOOKBACK_MINUTES})."
         )
@@ -499,3 +500,55 @@ def ingest_fmi_weather(
 
     df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
     print(f"Appended FMI events: {len(rows)}")
+
+
+def ingest_fmi_weather_for_places(
+    spark: SparkSession,
+    places: List[str],
+    params: str = FMI_DEFAULT_PARAMS,
+    minutes: int = FMI_DEFAULT_LOOKBACK_MINUTES,
+) -> None:
+    """
+    Fetch FMI weather observations for multiple nearby place queries and append
+    deduplicated station observations to Bronze.
+
+    Different place queries can resolve to the same FMI station, so rows are 
+    deduplicated by station, metric, and observation timestamp.
+    """
+    all_rows: List[Dict] = []
+
+    for place in places:
+        xml_text = fetch_fmi_timevaluepair(
+            place=place,
+            params=params,
+            minutes=minutes,
+        )
+        rows = parse_fmi_events(xml_text, place=place)
+        all_rows.extend(rows)
+
+    if not all_rows:
+        print(
+            f"No FMI rows parsed "
+            f"(places={places}, params={params}, minutes={minutes})."
+        )
+        return
+    
+    df = spark.createDataFrame(all_rows)
+
+    df2 = (
+        df.withColumn(
+            "event_time_ts",
+            F.to_timestamp("event_time_raw", "yyyy-MM-dd'T'HH:mm:ssX"),
+        )
+        .withColumn("ingest_time_ts", F.current_timestamp())
+        .dropDuplicates(["entity_id", "metric", "event_time_raw"])
+    )
+
+    row_count = df2.count()
+
+    df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
+
+    print(
+        f"Appended FMI events: {row_count} deduplicated rows "
+        f"from places={places}"
+    )
