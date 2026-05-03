@@ -3,12 +3,117 @@ from __future__ import annotations
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import math
 import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
 from utils.data_access import load_weather_stations
 from utils.maps import build_map_bundle, load_route_options_with_modes
+
+
+def haversine_km(lat1, lon1, lat2, lon2) -> float:
+    """
+    Calculate approximate distance between two lat/lon points in kilometers.
+    """
+    radius_km = 6371.0
+
+    lat1_rad = math.radians(float(lat1))
+    lon1_rad = math.radians(float(lon1))
+    lat2_rad = math.radians(float(lat2))
+    lon2_rad = math.radians(float(lon2))
+
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    return radius_km * c
+
+
+def attach_nearest_weather_station_context(
+    points_df: pd.DataFrame,
+    weather_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Add nearest FMI weather station context to vehicle points.
+
+    This is distance-based context only. It does not assign weather impact
+    or causal meaning to vehicle observations.
+    """
+    if points_df.empty or weather_df.empty:
+        return points_df
+
+    required_point_cols = {"lat", "lon"}
+    required_weather_cols = {"lat", "lon", "station_name"}
+
+    if not required_point_cols.issubset(points_df.columns):
+        return points_df
+
+    if not required_weather_cols.issubset(weather_df.columns):
+        return points_df
+
+    out = points_df.copy()
+
+    nearest_names = []
+    nearest_distances = []
+    nearest_temps = []
+    nearest_rains = []
+    nearest_observed = []
+
+    station_rows = weather_df.dropna(subset=["lat", "lon"]).to_dict("records")
+
+    if not station_rows:
+        return out
+
+    for _, point in out.iterrows():
+        best_station = None
+        best_distance = None
+
+        for station in station_rows:
+            distance_km = haversine_km(
+                point["lat"],
+                point["lon"],
+                station["lat"],
+                station["lon"],
+            )
+
+            if best_distance is None or distance_km < best_distance:
+                best_distance = distance_km
+                best_station = station
+
+        if best_station is None:
+            nearest_names.append("N/A")
+            nearest_distances.append(None)
+            nearest_temps.append("N/A")
+            nearest_rains.append("N/A")
+            nearest_observed.append("N/A")
+            continue
+
+        nearest_names.append(str(best_station.get("station_name", "N/A")))
+        nearest_distances.append(
+            round(best_distance, 1) if best_distance is not None else None
+        )
+        nearest_temps.append(best_station.get("temp_display", "N/A"))
+        nearest_rains.append(best_station.get("precip_display", "N/A"))
+        nearest_observed.append(best_station.get("observation_display", "N/A"))
+
+    out["nearest_weather_station"] = nearest_names
+    out["nearest_weather_distance_km"] = nearest_distances
+    out["nearest_weather_distance_display"] = (
+        pd.Series(nearest_distances)
+        .apply(lambda x: f"{x:.1f}" if pd.notna(x) else "N/A")
+        .values
+    )
+    out["nearest_weather_temp"] = nearest_temps
+    out["nearest_weather_rain"] = nearest_rains
+    out["nearest_weather_observed"] = nearest_observed
+
+    return out
 
 
 def compute_dynamic_view_state(points_df: pd.DataFrame, paths_df: pd.DataFrame):
@@ -445,13 +550,35 @@ if show_weather and not safe_weather_df.empty:
             "They are not assigned to individual vehicles or used for causal analysis."
         )
 
+if show_weather and not safe_weather_df.empty and not safe_points_df.empty:
+    safe_points_df = attach_nearest_weather_station_context(
+        safe_points_df,
+        safe_weather_df,
+    )
+
 # -----------------------------
 # Enrich vehicle tooltip with weather context status
 # -----------------------------
 if not safe_points_df.empty:
     if show_weather and not safe_weather_df.empty:
-        safe_points_df["tooltip_line_3"] = "Weather context: see station summary"
-        safe_points_df["tooltip_line_4"] = ""
+        if "nearest_weather_station" in safe_points_df.columns:
+            safe_points_df["tooltip_line_3"] = (
+                "Nearest FMI station: "
+                + safe_points_df["nearest_weather_station"].astype(str)
+                + " ("
+                + safe_points_df["nearest_weather_distance_display"].astype(str)
+                + " km)"
+            )
+            safe_points_df["tooltip_line_4"] = (
+                "Observed weather: "
+                + safe_points_df["nearest_weather_temp"].astype(str)
+                + " °C, rain "
+                + safe_points_df["nearest_weather_rain"].astype(str)
+                + " mm"
+            )
+        else:
+            safe_points_df["tooltip_line_3"] = "Weather context: see station summary"
+            safe_points_df["tooltip_line_4"] = ""
     elif show_weather:
         safe_points_df["tooltip_line_3"] = "Weather context: no station data"
         safe_points_df["tooltip_line_4"] = ""
@@ -549,8 +676,8 @@ st.markdown(
 # -----------------------------
 st.caption(
     "Vehicle points represent the latest exported HSL realtime snapshot. "
-    "Weather stations show the latest available FMI observations as context only "
-    "and are not used for causal analysis."
+    "Nearest weather station context is selected by geographic distance and shown for context only. "
+    "It is not used for causal weather impact analysis."
 )
 
 layers = []
