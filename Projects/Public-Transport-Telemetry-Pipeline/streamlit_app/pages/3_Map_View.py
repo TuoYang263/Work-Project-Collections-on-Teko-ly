@@ -8,14 +8,19 @@ import pydeck as pdk
 import streamlit as st
 
 from utils.data_access import load_weather_stations
-from utils.maps import build_map_bundle, load_route_options_only
+from utils.maps import build_map_bundle, load_route_options_with_modes
+
 
 def compute_dynamic_view_state(points_df: pd.DataFrame, paths_df: pd.DataFrame):
     """
     Lightweight dynamic view state.
     Prefer points first. Only fall back to a small number of path coordinates.
     """
-    if points_df is not None and not points_df.empty and {"lat", "lon"}.issubset(points_df.columns):
+    if (
+        points_df is not None
+        and not points_df.empty
+        and {"lat", "lon"}.issubset(points_df.columns)
+    ):
         tmp = points_df[["lat", "lon"]].dropna()
         if not tmp.empty:
             lat_min = float(tmp["lat"].min())
@@ -99,37 +104,74 @@ st.markdown(
 )
 
 st.title("Map View")
-st.caption("Route-level map view with sampled vehicle points, route shape, and optional weather context.")
+st.caption(
+    "Latest route-level map view with sampled HSL vehicle points, route shapes, "
+    "and optional FMI weather station context."
+)
 
 latest_time_text = "Latest map context time: N/A"
-latest_time_placeholder = st.empty()
+
 
 @st.cache_data(show_spinner="Loading FMI weather data...", ttl=900, max_entries=2)
 def load_weather():
     return load_weather_stations()
 
+
 # -----------------------------
-# Route selection
+# Route and context controls
 # -----------------------------
 with st.spinner("Loading route options..."):
-    route_options = load_route_options_only()
-    route_options = sorted({
-        str(r).strip()
-        for r in route_options
-        if pd.notna(r)
-        and str(r).strip() != ""
-        and str(r).strip().lower() != "nan"
-        and str(r).strip().lower() != "none"
-    })
+    route_meta_df = load_route_options_with_modes()
 
-if not route_options:
+if route_meta_df is None or route_meta_df.empty:
     st.warning("No route options available.")
     st.stop()
 
-selected_route = st.sidebar.selectbox(
-    "Select route",
-    options=route_options,
+available_modes = ["All"] + [
+    mode
+    for mode in ["Metro", "Tram", "Bus", "Rail", "Ferry", "Other"]
+    if mode in set(route_meta_df["mode_label"].dropna())
+]
+
+selected_mode = st.sidebar.selectbox(
+    "Transport mode",
+    options=available_modes,
     index=0,
+)
+
+filtered_route_meta = route_meta_df.copy()
+
+if selected_mode != "All":
+    filtered_route_meta = filtered_route_meta[
+        filtered_route_meta["mode_label"] == selected_mode
+    ].copy()
+
+route_display_to_label = dict(
+    zip(filtered_route_meta["route_display"], filtered_route_meta["route_label"])
+)
+
+route_display_options = list(route_display_to_label.keys())
+
+if not route_display_options:
+    st.warning("No routes available for the selected transport mode.")
+    st.stop()
+
+selected_route_display = st.sidebar.selectbox(
+    "Select route",
+    options=route_display_options,
+    index=0,
+)
+
+route_display_to_mode = dict(
+    zip(filtered_route_meta["route_display"], filtered_route_meta["mode_label"])
+)
+
+selected_route = route_display_to_label[selected_route_display]
+
+effective_selected_mode = (
+    selected_mode
+    if selected_mode != "All"
+    else route_display_to_mode.get(selected_route_display, "All")
 )
 
 show_weather = st.sidebar.checkbox("Show weather context", value=False)
@@ -138,7 +180,10 @@ show_weather = st.sidebar.checkbox("Show weather context", value=False)
 # Main bundle
 # -----------------------------
 with st.spinner("Loading route map data..."):
-    bundle = build_map_bundle(selected_route)
+    bundle = build_map_bundle(
+        selected_route=selected_route,
+        selected_mode=effective_selected_mode,
+    )
 
 points_df = bundle["points"]
 paths_df = bundle["paths"]
@@ -148,7 +193,21 @@ weather_df = load_weather() if show_weather else pd.DataFrame()
 # Final pydeck-safe dataframes
 # -----------------------------
 if points_df is not None and not points_df.empty:
-    keep_cols = [c for c in ["lon", "lat", "route_label"] if c in points_df.columns]
+    keep_cols = [
+        c
+        for c in [
+            "lon",
+            "lat",
+            "route_label",
+            "vehicle_id",
+            "vehicle_observed_at",
+            "transport_mode",
+            "mode_label",
+            "color",
+        ]
+        if c in points_df.columns
+    ]
+
     safe_points_df = points_df[keep_cols].copy()
     safe_points_df["lon"] = pd.to_numeric(safe_points_df["lon"], errors="coerce")
     safe_points_df["lat"] = pd.to_numeric(safe_points_df["lat"], errors="coerce")
@@ -159,21 +218,68 @@ if points_df is not None and not points_df.empty:
     else:
         safe_points_df["route_label"] = safe_points_df["route_label"].astype(str)
 
-    safe_points_df["lat_display"] = safe_points_df["lat"].round(4)
-    safe_points_df["lon_display"] = safe_points_df["lon"].round(4)
-    safe_points_df["tooltip_title"] = "Route: " + safe_points_df["route_label"]
-    safe_points_df["tooltip_line_1"] = "Lat: " + safe_points_df["lat_display"].astype(str)
-    safe_points_df["tooltip_line_2"] = "Lon: " + safe_points_df["lon_display"].astype(str)
+    if "vehicle_id" in safe_points_df.columns:
+        safe_points_df["vehicle_id"] = (
+            safe_points_df["vehicle_id"].fillna("N/A").astype(str)
+        )
+    else:
+        safe_points_df["vehicle_id"] = "N/A"
+
+    if "mode_label" in safe_points_df.columns:
+        safe_points_df["mode_label"] = (
+            safe_points_df["mode_label"].fillna("Other").astype(str)
+        )
+    else:
+        safe_points_df["mode_label"] = "Other"
+
+    if "color" not in safe_points_df.columns:
+        safe_points_df["color"] = [[130, 130, 130]] * len(safe_points_df)
+
+    if "vehicle_observed_at" in safe_points_df.columns:
+        safe_points_df["vehicle_observed_at"] = pd.to_datetime(
+            safe_points_df["vehicle_observed_at"],
+            errors="coerce",
+            utc=True,
+        )
+        safe_points_df["observed_display"] = (
+            safe_points_df["vehicle_observed_at"]
+            .dt.tz_convert("Europe/Helsinki")
+            .dt.strftime("%Y-%m-%d %H:%M")
+        )
+    else:
+        safe_points_df["observed_display"] = "N/A"
+
+    safe_points_df["observed_display"] = safe_points_df["observed_display"].fillna(
+        "N/A"
+    )
+
+    safe_points_df["tooltip_title"] = (
+        safe_points_df["mode_label"] + " · " + safe_points_df["route_label"]
+    )
+    safe_points_df["tooltip_line_1"] = "Vehicle: " + safe_points_df["vehicle_id"]
+    safe_points_df["tooltip_line_2"] = "Observed: " + safe_points_df["observed_display"]
 else:
     safe_points_df = pd.DataFrame(columns=["lon", "lat", "route_label"])
 
 
 if paths_df is not None and not paths_df.empty:
-    keep_cols = [c for c in ["path", "route_label"] if c in paths_df.columns]
+    keep_cols = [
+        c
+        for c in ["path", "route_label", "transport_mode", "mode_label", "color"]
+        if c in paths_df.columns
+    ]
     safe_paths_df = paths_df[keep_cols].copy()
 
     if "route_label" in safe_paths_df.columns:
         safe_paths_df["route_label"] = safe_paths_df["route_label"].astype(str)
+
+    if "mode_label" in safe_paths_df.columns:
+        safe_paths_df["mode_label"] = (
+            safe_paths_df["mode_label"].fillna("Other").astype(str)
+        )
+
+    if "color" not in safe_paths_df.columns:
+        safe_paths_df["color"] = [[130, 130, 130]] * len(safe_paths_df)
 else:
     safe_paths_df = pd.DataFrame(columns=["path", "route_label"])
 
@@ -195,6 +301,13 @@ if weather_df is not None and not weather_df.empty:
     safe_weather_df["lon"] = pd.to_numeric(safe_weather_df["lon"], errors="coerce")
     safe_weather_df = safe_weather_df.dropna(subset=["lat", "lon"])
 
+    if "observation_time" in safe_weather_df.columns:
+        safe_weather_df["observation_time"] = pd.to_datetime(
+            safe_weather_df["observation_time"],
+            errors="coerce",
+            utc=True,
+        )
+
     if "station_name" in safe_weather_df.columns:
         safe_weather_df["station_name"] = safe_weather_df["station_name"].astype(str)
     else:
@@ -213,16 +326,17 @@ if weather_df is not None and not weather_df.empty:
             safe_weather_df["precipitation"], errors="coerce"
         )
         safe_weather_df["precip_display"] = safe_weather_df["precipitation"].round(2)
-        safe_weather_df["precip_display"] = safe_weather_df["precip_display"].fillna(0.0)
+        safe_weather_df["precip_display"] = safe_weather_df["precip_display"].fillna(
+            0.0
+        )
     else:
         safe_weather_df["precip_display"] = 0.0
 
     if "observation_time" in safe_weather_df.columns:
-        safe_weather_df["observation_time"] = pd.to_datetime(
-            safe_weather_df["observation_time"], errors="coerce"
-        )
-        safe_weather_df["observation_display"] = safe_weather_df["observation_time"].dt.strftime(
-            "%Y-%m-%d %H:%M"
+        safe_weather_df["observation_display"] = (
+            safe_weather_df["observation_time"]
+            .dt.tz_convert("Europe/Helsinki")
+            .dt.strftime("%Y-%m-%d %H:%M")
         )
     else:
         safe_weather_df["observation_display"] = ""
@@ -234,9 +348,9 @@ if weather_df is not None and not weather_df.empty:
     safe_weather_df["tooltip_line_2"] = (
         "Rain: " + safe_weather_df["precip_display"].astype(str) + " mm"
     )
-    safe_weather_df["tooltip_line_3"] = (
-        "Observed: " + safe_weather_df["observation_display"].astype(str)
-    )
+    safe_weather_df["tooltip_line_3"] = "Observed: " + safe_weather_df[
+        "observation_display"
+    ].astype(str)
     safe_weather_df["tooltip_line_4"] = ""
 
     # -----------------------------
@@ -253,13 +367,14 @@ if weather_df is not None and not weather_df.empty:
 
     if latest_obs_time is not None and pd.notna(latest_obs_time):
         if latest_obs_time.tzinfo is None:
-            latest_obs_time = latest_obs_time.tz_localize("UTC").tz_convert("Europe/Helsinki")
+            latest_obs_time = latest_obs_time.tz_localize("UTC").tz_convert(
+                "Europe/Helsinki"
+            )
         else:
             latest_obs_time = latest_obs_time.tz_convert("Europe/Helsinki")
 
         freshness_min = max(
-            0,
-            int((now_local - latest_obs_time.to_pydatetime()).total_seconds() / 60)
+            0, int((now_local - latest_obs_time.to_pydatetime()).total_seconds() / 60)
         )
 
         latest_time_text = (
@@ -279,26 +394,67 @@ else:
             "Map is based on the latest exported route snapshot."
         )
 
-latest_time_placeholder.caption(latest_time_text)
+latest_vehicle_text = "Latest vehicle observation: N/A"
+
+if not safe_points_df.empty and "vehicle_observed_at" in safe_points_df.columns:
+    latest_vehicle_time = safe_points_df["vehicle_observed_at"].dropna().max()
+
+    if pd.notna(latest_vehicle_time):
+        latest_vehicle_time = latest_vehicle_time.tz_convert("Europe/Helsinki")
+        latest_vehicle_text = (
+            f"Latest vehicle observation: "
+            f"{latest_vehicle_time.strftime('%Y-%m-%d %H:%M')} Helsinki time"
+        )
+
+st.caption(latest_vehicle_text)
+st.caption(latest_time_text)
+
+if show_weather and not safe_weather_df.empty:
+    station_summary_cols = [
+        c
+        for c in [
+            "station_name",
+            "temp_display",
+            "precip_display",
+            "observation_display",
+        ]
+        if c in safe_weather_df.columns
+    ]
+
+    if station_summary_cols:
+        weather_summary_df = safe_weather_df[station_summary_cols].copy()
+
+        weather_summary_df = weather_summary_df.rename(
+            columns={
+                "station_name": "Station",
+                "temp_display": "Temp °C",
+                "precip_display": "Rain mm",
+                "observation_display": "Observed",
+            }
+        )
+
+        st.markdown("**Weather station context**")
+        st.dataframe(
+            weather_summary_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        st.caption(
+            "Weather stations are shown as contextual external signals. "
+            "They are not assigned to individual vehicles or used for causal analysis."
+        )
 
 # -----------------------------
-# Enrich vehicle tooltip with city weather summary
+# Enrich vehicle tooltip with weather context status
 # -----------------------------
 if not safe_points_df.empty:
     if show_weather and not safe_weather_df.empty:
-        city_temp_text = "City temp: N/A"
-        city_rain_text = "City rain: N/A"
-
-        if "temp_display" in safe_weather_df.columns and safe_weather_df["temp_display"].notna().any():
-            city_temp = safe_weather_df["temp_display"].dropna().iloc[0]
-            city_temp_text = f"City temp: {city_temp} °C"
-
-        if "precip_display" in safe_weather_df.columns and safe_weather_df["precip_display"].notna().any():
-            city_rain = safe_weather_df["precip_display"].dropna().iloc[0]
-            city_rain_text = f"City rain: {city_rain} mm"
-
-        safe_points_df["tooltip_line_3"] = city_temp_text
-        safe_points_df["tooltip_line_4"] = city_rain_text
+        safe_points_df["tooltip_line_3"] = "Weather context: see station summary"
+        safe_points_df["tooltip_line_4"] = ""
+    elif show_weather:
+        safe_points_df["tooltip_line_3"] = "Weather context: no station data"
+        safe_points_df["tooltip_line_4"] = ""
     else:
         safe_points_df["tooltip_line_3"] = "Weather context: off"
         safe_points_df["tooltip_line_4"] = ""
@@ -308,7 +464,7 @@ if not safe_points_df.empty:
 # -----------------------------
 m1, m2, m3, m4 = st.columns(4)
 with m1:
-    st.metric("Selected route", selected_route)
+    st.metric("Selected route", selected_route_display)
 with m2:
     st.metric("Vehicles / points", len(safe_points_df))
 with m3:
@@ -320,22 +476,19 @@ with m4:
 # Legend
 # -----------------------------
 legend_items = [
-    '<div class="legend-item">'
-    '<span class="legend-dot vehicle-dot"></span>'
-    '<span>HSL vehicle points</span>'
-    '</div>',
-    '<div class="legend-item">'
-    '<span class="legend-line route-line"></span>'
-    '<span>Route path</span>'
-    '</div>',
+    '<div class="legend-item"><span class="legend-dot bus-dot"></span><span>Bus</span></div>',
+    '<div class="legend-item"><span class="legend-dot tram-dot"></span><span>Tram</span></div>',
+    '<div class="legend-item"><span class="legend-dot metro-dot"></span><span>Metro</span></div>',
+    '<div class="legend-item"><span class="legend-dot rail-dot"></span><span>Rail</span></div>',
+    '<div class="legend-item"><span class="legend-dot ferry-dot"></span><span>Ferry</span></div>',
 ]
 
 if show_weather:
     legend_items.append(
         '<div class="legend-item">'
         '<span class="legend-dot weather-dot"></span>'
-        '<span>FMI weather station</span>'
-        '</div>'
+        "<span>FMI weather station</span>"
+        "</div>"
     )
 
 legend_html = "".join(legend_items)
@@ -363,20 +516,24 @@ st.markdown(
         border-radius: 50%;
         display: inline-block;
     }}
-    .vehicle-dot {{
-        background: #1e78ff;
+    .bus-dot {{
+        background: #007AC9;
+    }}
+    .tram-dot {{
+        background: #008151;
+    }}
+    .metro-dot {{
+        background: #CA4000;
+    }}
+    .rail-dot {{
+        background: #8C4799;
+    }}
+    .ferry-dot {{
+        background: #0096AA;
     }}
     .weather-dot {{
         background: #ffa500;
         border: 2px solid #b46e00;
-    }}
-    .legend-line {{
-        width: 22px;
-        height: 2px;
-        display: inline-block;
-    }}
-    .route-line {{
-        background: #7a7a7a;
     }}
     </style>
 
@@ -391,8 +548,9 @@ st.markdown(
 # Layers
 # -----------------------------
 st.caption(
-    "Vehicle points represent sampled recent positions from telemetry batches. "
-    "Weather stations are optional context only and are not used for causal analysis."
+    "Vehicle points represent the latest exported HSL realtime snapshot. "
+    "Weather stations show the latest available FMI observations as context only "
+    "and are not used for causal analysis."
 )
 
 layers = []
@@ -405,7 +563,7 @@ if not safe_paths_df.empty and "path" in safe_paths_df.columns:
             get_path="path",
             get_width=12,
             width_min_pixels=2,
-            get_color=[90, 170, 255],
+            get_color="color",
             pickable=False,
             opacity=0.95,
         )
@@ -418,7 +576,7 @@ if not safe_points_df.empty:
             data=safe_points_df,
             get_position="[lon, lat]",
             get_radius=60,
-            get_fill_color=[30, 120, 255],
+            get_fill_color="color",
             get_line_color=[255, 255, 255],
             line_width_min_pixels=1,
             stroked=True,

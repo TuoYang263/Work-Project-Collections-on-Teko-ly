@@ -1,6 +1,7 @@
 """
 Gold-layer KPI and operational metrics builders.
 """
+
 import logging
 import pandas as pd
 from pathlib import Path
@@ -17,7 +18,10 @@ from .config import (
     SILVER_WEATHER_TABLE,
 )
 
-def build_gold_weather_station_outputs(spark: SparkSession, logger: logging.Logger) -> None:
+
+def build_gold_weather_station_outputs(
+    spark: SparkSession, logger: logging.Logger
+) -> None:
     """
     Build lightweight weather-station map output for Streamlit.
 
@@ -68,9 +72,8 @@ def build_gold_weather_station_outputs(spark: SparkSession, logger: logging.Logg
     )
 
     # Keep latest observation per station + metric
-    latest_ts = (
-        station_df.groupBy("station_id", "metric")
-        .agg(F.max("event_time_ts").alias("event_time_ts"))
+    latest_ts = station_df.groupBy("station_id", "metric").agg(
+        F.max("event_time_ts").alias("event_time_ts")
     )
 
     latest_df = (
@@ -102,9 +105,8 @@ def build_gold_weather_station_outputs(spark: SparkSession, logger: logging.Logg
         .agg(F.first("value"))
     )
 
-    obs_time = (
-        latest_df.groupBy("station_id")
-        .agg(F.max("event_time_ts").alias("observation_time"))
+    obs_time = latest_df.groupBy("station_id").agg(
+        F.max("event_time_ts").alias("observation_time")
     )
 
     result_df = (
@@ -131,7 +133,6 @@ def build_gold_weather_station_outputs(spark: SparkSession, logger: logging.Logg
     logger.info(f"Weather station rows: {len(pdf)}")
 
 
-
 def run_gold_layer(spark: SparkSession, logger: logging.Logger) -> None:
     logger.info("Gold layer started")
     use_database(spark)
@@ -151,16 +152,22 @@ def run_gold_layer(spark: SparkSession, logger: logging.Logger) -> None:
     build_gold_weather_station_outputs(spark, logger)
     logger.info("Weather station gold outputs updated")
 
-    logger.info(f"Gold route window row count: {spark.table(GOLD_ROUTE_WINDOW_TABLE).count()}")
-    logger.info(f"Gold route daily row count: {spark.table(GOLD_ROUTE_DAILY_TABLE).count()}")
-    logger.info(f"Gold pipeline metrics row count: {spark.table(GOLD_PIPELINE_METRICS_TABLE).count()}")
+    logger.info(
+        f"Gold route window row count: {spark.table(GOLD_ROUTE_WINDOW_TABLE).count()}"
+    )
+    logger.info(
+        f"Gold route daily row count: {spark.table(GOLD_ROUTE_DAILY_TABLE).count()}"
+    )
+    logger.info(
+        f"Gold pipeline metrics row count: {spark.table(GOLD_PIPELINE_METRICS_TABLE).count()}"
+    )
+
 
 def build_gold_route_kpi_window(spark: SparkSession) -> None:
     """
     Create route-level KPI metrics at the window level.
     """
-    spark.sql(
-        f"""
+    spark.sql(f"""
         CREATE OR REPLACE TABLE {GOLD_ROUTE_WINDOW_TABLE}
         USING DELTA
         AS
@@ -196,16 +203,14 @@ def build_gold_route_kpi_window(spark: SparkSession) -> None:
                 ELSE 'OK'
             END AS dq_flag
         FROM wide
-        """
-    )
+        """)
 
 
 def build_gold_route_kpi_daily(spark: SparkSession) -> None:
     """
     Aggregate route-level window KPIs into daily summaries.
     """
-    spark.sql(
-        f"""
+    spark.sql(f"""
         CREATE OR REPLACE TABLE {GOLD_ROUTE_DAILY_TABLE}
         USING DELTA
         AS
@@ -224,8 +229,7 @@ def build_gold_route_kpi_daily(spark: SparkSession) -> None:
             END AS dq_flag
         FROM {GOLD_ROUTE_WINDOW_TABLE}
         GROUP BY DATE(window_start), route_id
-        """
-    )
+        """)
 
 
 def build_gold_pipeline_metrics_window(spark: SparkSession) -> None:
@@ -233,8 +237,7 @@ def build_gold_pipeline_metrics_window(spark: SparkSession) -> None:
     Build a lightweight operational summary combining transit and weather
     Silver metrics at the window level.
     """
-    spark.sql(
-        f"""
+    spark.sql(f"""
         CREATE OR REPLACE TABLE {GOLD_PIPELINE_METRICS_TABLE}
         USING DELTA
         AS
@@ -267,8 +270,8 @@ def build_gold_pipeline_metrics_window(spark: SparkSession) -> None:
         FULL OUTER JOIN weather w
             ON t.window_start = w.window_start
            AND t.window_end = w.window_end
-        """
-    )
+        """)
+
 
 def build_gold_hsl_map_outputs(logger: logging.Logger) -> None:
     """
@@ -279,7 +282,7 @@ def build_gold_hsl_map_outputs(logger: logging.Logger) -> None:
     DATA_DIR = project_root / "data"
 
     gtfs_dir = DATA_DIR / "external" / "gtfs_hsl"
-    output_dir = DATA_DIR / "gold"/ "hsl"
+    output_dir = DATA_DIR / "gold" / "hsl"
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -287,24 +290,34 @@ def build_gold_hsl_map_outputs(logger: logging.Logger) -> None:
         gtfs_dir=gtfs_dir,
         mode="all",
         route="all",
-        lookback_minutes=30,
+        lookback_minutes=60,
     )
 
     outputs["df_map"].to_parquet(output_dir / "hsl_df_map.parquet", index=False)
-    outputs["route_options"].to_parquet(output_dir / "hsl_route_options.parquet", index=False)
+    outputs["route_options"].to_parquet(
+        output_dir / "hsl_route_options.parquet", index=False
+    )
     outputs["map_points"].to_parquet(output_dir / "hsl_map_points.parquet", index=False)
     outputs["paths"].to_parquet(output_dir / "hsl_route_paths.parquet", index=False)
 
     # lightweight overview paths for All routes
     overview_paths = outputs["paths"].copy()
 
-    if not overview_paths.empty and "route_label" in overview_paths.columns:
-        overview_paths = (
-            overview_paths.sort_values("route_label")
-            .groupby("route_label", as_index=False)
-            .head(1)
-            .copy()
-        )
+    if not overview_paths.empty:
+        group_col = None
+
+        if "route_label" in overview_paths.columns:
+            group_col = "route_label"
+        elif "route_short_name" in overview_paths.columns:
+            group_col = "route_short_name"
+
+        if group_col is not None:
+            overview_paths = (
+                overview_paths.sort_values(group_col)
+                .groupby(group_col, as_index=False)
+                .head(1)
+                .copy()
+            )
 
     overview_paths.to_parquet(
         output_dir / "hsl_route_paths_overview.parquet",
