@@ -22,7 +22,35 @@ import sys
 import time
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+def resolve_project_root() -> Path:
+    """
+    Resolve project root for local execution and Databricks Python script tasks.
+
+    Local Python exection provides __file__.
+    Databricks Python script tasks may execute the file through a notebook-style
+    wrapper where __file__ is not available, so we fall back to the current working
+    directory and search upward for the project marker files.
+    """
+    if "__file__" in globals():
+        return Path(__file__).resolve().parents[1]
+
+    current = Path.cwd().resolve()
+    candidates = [current, *current.parents]
+
+    for candidate in candidates:
+        if (candidate / "scripts" / "run_pipeline.py").exists() and (
+            candidate / "src" / "pipeline"
+        ).exists():
+            return candidate
+
+    raise RuntimeError(
+        "Could not resolve project root. Expected to find scripts/run_pipeline.py "
+        "and src/pipeline under the current working directory or one of its parents."
+    )
+
+
+PROJECT_ROOT = resolve_project_root()
 
 
 def build_env() -> dict[str, str]:
