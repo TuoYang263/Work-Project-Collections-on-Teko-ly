@@ -61,22 +61,28 @@ def run_bronze_layer(
 ) -> None:
     logger.info("Bronze layer started.")
 
+    logger.info("DEBUG: before initialize_environment")
     initialize_environment(spark, reset=reset)
+    logger.info("DEBUG: after initialize_environment")
 
+    logger.info("DEBUG: before ingest_simulated_transit_batch")
     ingest_simulated_transit_batch(
         spark=spark,
         batch_id=0,
         n=SIM_DEFAULT_BATCH_SIZE,
     )
+    logger.info("DEBUG: after ingest_simulated_transit_batch")
     logger.info("Simulated transit batch appended to Bronze.")
 
     try:
+        logger.info("DEBUG: before ingest_fmi_weather_for_places")
         ingest_fmi_weather_for_places(
             spark=spark,
             places=FMI_PLACES,
             params=FMI_DEFAULT_PARAMS,
             minutes=FMI_DEFAULT_LOOKBACK_MINUTES,
         )
+        logger.info("DEBUG: after ingest_fmi_weather_for_places")
         logger.info(
             "FMI weather ingest completed "
             f"(places={FMI_PLACES}, "
@@ -512,7 +518,7 @@ def ingest_fmi_weather_for_places(
     Fetch FMI weather observations for multiple nearby place queries and append
     deduplicated station observations to Bronze.
 
-    Different place queries can resolve to the same FMI station, so rows are 
+    Different place queries can resolve to the same FMI station, so rows are
     deduplicated by station, metric, and observation timestamp.
     """
     all_rows: List[Dict] = []
@@ -532,7 +538,7 @@ def ingest_fmi_weather_for_places(
             f"(places={places}, params={params}, minutes={minutes})."
         )
         return
-    
+
     df = spark.createDataFrame(all_rows)
 
     df2 = (
@@ -549,6 +555,5 @@ def ingest_fmi_weather_for_places(
     df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
 
     print(
-        f"Appended FMI events: {row_count} deduplicated rows "
-        f"from places={places}"
+        f"Appended FMI events: {row_count} deduplicated rows " f"from places={places}"
     )

@@ -176,11 +176,23 @@ def initialize_environment(spark: SparkSession, reset: bool = False) -> None:
     # Keep timestamp handling stable across stages
     spark.conf.set("spark.sql.session.timeZone", "UTC")
 
+    print("DEBUG: before use_database", flush=True)
     use_database(spark)
+    print("DEBUG: after use_database", flush=True)
 
     if reset:
+        print("DEBUG: before reset_tables", flush=True)
         reset_tables(spark)
-        cleanup_database_storage()
-        use_database(spark)
+        print("DEBUG: after reset_tables", flush=True)
 
+        print("DEBUG: before cleanup_database_storage", flush=True)
+        cleanup_database_storage()
+        print("DEBUG: after cleanup_database_storage", flush=True)
+
+        print("DEBUG: before use_database after cleanup", flush=True)
+        use_database(spark)
+        print("DEBUG: after use_database after cleanup", flush=True)
+
+    print("DEBUG: before create_bronze_events_table", flush=True)
     create_bronze_events_table(spark)
+    print("DEBUG: after create_bronze_events_table", flush=True)
