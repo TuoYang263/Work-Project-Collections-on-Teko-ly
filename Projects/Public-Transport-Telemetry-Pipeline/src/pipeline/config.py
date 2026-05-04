@@ -15,14 +15,18 @@ import os
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-DATA_DIR = PROJECT_ROOT / "data"
+# Runtime outputs should be written outside the Git checkout directory
+# when running in managed environments such as Databricks
+RUNTIME_ROOT = Path(os.getenv("TELEMETRY_RUNTIME_ROOT", PROJECT_ROOT))
+
+DATA_DIR = Path(os.getenv("TELEMETRY_DATA_DIR", RUNTIME_ROOT / "data"))
 RAW_DIR = DATA_DIR / "raw"
 BRONZE_DIR = DATA_DIR / "bronze"
 SILVER_DIR = DATA_DIR / "silver"
 GOLD_DIR = DATA_DIR / "gold"
 EXPORT_DIR = DATA_DIR / "output"
 
-LOGS_DIR = PROJECT_ROOT / "logs"
+LOGS_DIR = Path(os.getenv("TELEMETRY_LOGS_DIR", RUNTIME_ROOT / "logs"))
 LOG_FILE = LOGS_DIR / "pipeline.log"
 
 REQUIRED_DIRS = [
@@ -106,11 +110,7 @@ FMI_DEFAULT_PLACES = os.getenv(
     "helsinki,espoo,vantaa,kauniainen",
 )
 
-FMI_PLACES = [
-    place.strip()
-    for place in FMI_DEFAULT_PLACES.split(",")
-    if place.strip()
-]
+FMI_PLACES = [place.strip() for place in FMI_DEFAULT_PLACES.split(",") if place.strip()]
 
 FMI_DEFAULT_PARAMS = "t2m,r_1h"
 FMI_DEFAULT_LOOKBACK_MINUTES = 360

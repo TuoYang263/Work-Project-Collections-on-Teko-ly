@@ -27,7 +27,7 @@ def resolve_project_root() -> Path:
     """
     Resolve project root for local execution and Databricks Python script tasks.
 
-    Local Python exection provides __file__.
+    Local Python execution provides __file__.
     Databricks Python script tasks may execute the file through a notebook-style
     wrapper where __file__ is not available, so we fall back to the current working
     directory and search upward for the project marker files.
@@ -68,8 +68,18 @@ def build_env() -> dict[str, str]:
     env.setdefault("SPARK_LOCAL_DIRS", "/tmp/spark-tmp")
     env.setdefault("SPARK_WAREHOUSE_DIR", "file:/tmp/spark-warehouse/telemetry")
 
-    # Ensure local Spark temp directories exist.
-    for key in ["SPARK_LOCAL_DIR", "SPARK_LOCAL_DIRS"]:
+    env.setdefault("TELEMETRY_RUNTIME_ROOT", "/tmp/telemetry-pipeline")
+    env.setdefault("TELEMETRY_DATA_DIR", "/tmp/telemetry-pipeline/data")
+    env.setdefault("TELEMETRY_LOGS_DIR", "/tmp/telemetry-pipeline/logs")
+
+    # Ensure runtime directories exist.
+    for key in [
+        "SPARK_LOCAL_DIR",
+        "SPARK_LOCAL_DIRS",
+        "TELEMETRY_RUNTIME_ROOT",
+        "TELEMETRY_DATA_DIR",
+        "TELEMETRY_LOGS_DIR",
+    ]:
         Path(env[key]).mkdir(parents=True, exist_ok=True)
 
     # Ensure file-based Spark warehouse directory exists.
