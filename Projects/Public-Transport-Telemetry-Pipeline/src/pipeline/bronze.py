@@ -297,10 +297,17 @@ def ingest_simulated_transit_batch(
         n=remaining,
     )
 
+    print("DEBUG: before generate simulated rows", flush=True)
+
     rows = stable_rows + fill_rows
 
-    df = spark.createDataFrame(rows)
+    print(f"DEBUG: generated rows: {len(rows)}", flush=True)
 
+    print("DEBUG: before createDataFrame", flush=True)
+    df = spark.createDataFrame(rows)
+    print("DEBUG: after createDataFrame", flush=True)
+
+    print("DEBUG: before transform bronze df", flush=True)
     df2 = (
         df.withColumn(
             "event_time_ts",
@@ -324,11 +331,16 @@ def ingest_simulated_transit_batch(
             "ingest_time_ts",
         )
     )
+    print("DEBUG: after transform bronze df", flush=True)
 
     if os.getenv("DATABRICKS_RUNTIME_VERSION"):
+        print(f"DEBUG: before delta write to {BRONZE_EVENTS_PATH}", flush=True)
         df2.write.format("delta").mode("append").save(str(BRONZE_EVENTS_PATH))
+        print("DEBUG: after delta write", flush=True)
     else:
+        print("DEBUG: before saveAsTable", flush=True)
         df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
+        print("DEBUG: after saveAsTable", flush=True)
 
     print(
         f"Batch {batch_id} appended to {BRONZE_EVENTS_TABLE}: "
