@@ -114,6 +114,15 @@ def setup_logging(name: str = "telemetry_pipeline") -> logging.Logger:
 
 def use_database(spark: SparkSession) -> None:
     """Select the configured database."""
+    if os.getenv("DATABRICKS_RUNTIME_VERSION"):
+        # Databricks manages database/schema storage location.
+        # Avoid custom file: LOCATION here because Workspace/UC/metastore
+        # handling can hang or behave differently from local Spark.
+        spark.sql("USE CATALOG hive_metastore")
+        spark.sql(f"CREATE DATABASE IF NOT EXISTS {DATABASE_NAME}")
+        spark.sql(f"USE {DATABASE_NAME}")
+        return
+
     spark.sql(f"""
               CREATE DATABASE IF NOT EXISTS {DATABASE_NAME}
               LOCATION '{SPARK_DATABASE_LOCATION}'
@@ -175,6 +184,13 @@ def initialize_environment(spark: SparkSession, reset: bool = False) -> None:
     ensure_directories()
     # Keep timestamp handling stable across stages
     spark.conf.set("spark.sql.session.timeZone", "UTC")
+
+    if os.getenv("DATABRICKS_RUNTIME_VERSION"):
+        print(
+            "DEBUG: Databricks runtime detected; skipping database initialization",
+            flush=True,
+        )
+        return
 
     print("DEBUG: before use_database", flush=True)
     use_database(spark)

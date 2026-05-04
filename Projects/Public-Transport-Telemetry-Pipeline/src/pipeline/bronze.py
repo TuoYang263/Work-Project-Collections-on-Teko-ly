@@ -8,6 +8,7 @@ This module contains:
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 import logging
@@ -26,6 +27,7 @@ from urllib3.util.retry import Retry
 
 from .config import (
     BRONZE_EVENTS_TABLE,
+    BRONZE_EVENTS_PATH,
     FMI_ALLOW_FAILURE,
     FMI_BACKOFF_FACTOR,
     FMI_DEFAULT_LOOKBACK_MINUTES,
@@ -99,7 +101,10 @@ def run_bronze_layer(
             logger.exception("FMI weather ingest failed.")
             raise
 
-    bronze_count = spark.table(BRONZE_EVENTS_TABLE).count()
+    if os.getenv("DATABRICKS_RUNTIME_VERSION"):
+        bronze_count = spark.read.format("delta").load(str(BRONZE_EVENTS_PATH)).count()
+    else:
+        bronze_count = spark.table(BRONZE_EVENTS_TABLE).count()
     logger.info(f"Bronze table updated: {BRONZE_EVENTS_TABLE}")
     logger.info(f"Bronze row count after transit + weather ingest: {bronze_count}")
 
@@ -320,7 +325,10 @@ def ingest_simulated_transit_batch(
         )
     )
 
-    df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
+    if os.getenv("DATABRICKS_RUNTIME_VERSION"):
+        df2.write.format("delta").mode("append").save(str(BRONZE_EVENTS_PATH))
+    else:
+        df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
 
     print(
         f"Batch {batch_id} appended to {BRONZE_EVENTS_TABLE}: "
@@ -504,7 +512,10 @@ def ingest_fmi_weather(
         "event_time_ts", F.to_timestamp("event_time_raw", "yyyy-MM-dd'T'HH:mm:ssX")
     ).withColumn("ingest_time_ts", F.current_timestamp())
 
-    df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
+    if os.getenv("DATABRICKS_RUNTIME_VERSION"):
+        df2.write.format("delta").mode("append").save(str(BRONZE_EVENTS_PATH))
+    else:
+        df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
     print(f"Appended FMI events: {len(rows)}")
 
 
@@ -552,7 +563,10 @@ def ingest_fmi_weather_for_places(
 
     row_count = df2.count()
 
-    df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
+    if os.getenv("DATABRICKS_RUNTIME_VERSION"):
+        df2.write.format("delta").mode("append").save(str(BRONZE_EVENTS_PATH))
+    else:
+        df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
 
     print(
         f"Appended FMI events: {row_count} deduplicated rows " f"from places={places}"
