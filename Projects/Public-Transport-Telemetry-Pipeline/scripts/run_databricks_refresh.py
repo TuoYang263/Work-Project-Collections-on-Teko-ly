@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import runpy
 import subprocess
 import sys
 import time
@@ -91,6 +92,36 @@ def build_env() -> dict[str, str]:
     return env
 
 
+def run_script_in_process(
+    script_path: str, args: list[str], env: dict[str, str]
+) -> None:
+    """
+    Run a Python script in the current process.
+
+    This is used on Databricks because launching a seperate Python subprocess
+    may not inherit the Databricks Spark runtime context correctly.
+    """
+    old_argv = sys.argv[:]
+    old_cwd = Path.cwd()
+    old_env = os.environ.copy()
+
+    try:
+        os.environ.clear()
+        os.environ.update(env)
+
+        os.chdir(PROJECT_ROOT)
+        sys.argv = [script_path, *args]
+
+        runpy.run_path(str(PROJECT_ROOT / script_path), run_name="__main__")
+
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+        os.environ.clear()
+        os.environ.update(old_env)
+
+
 def run_command(step_name: str, command: list[str], env: dict[str, str]) -> None:
     """Run one refresh step and fail fast if it fails."""
     print(f"\n=== {step_name} ===")
@@ -98,12 +129,17 @@ def run_command(step_name: str, command: list[str], env: dict[str, str]) -> None
 
     start = time.time()
 
-    subprocess.run(
-        command,
-        cwd=PROJECT_ROOT,
-        env=env,
-        check=True,
-    )
+    if env.get("DATABRICKS_RUNTIME_VERSION"):
+        script_path = command[1]
+        script_args = command[2:]
+        run_script_in_process(script_path, script_args, env)
+    else:
+        subprocess.run(
+            command,
+            cwd=PROJECT_ROOT,
+            env=env,
+            check=True,
+        )
 
     elapsed = time.time() - start
     print(f"=== {step_name} completed in {elapsed:.2f}s ===")
