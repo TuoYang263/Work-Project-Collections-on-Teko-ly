@@ -1,11 +1,12 @@
 """
 Environment and schema setup for the telemetry pipeline.
 """
+
 import logging
+import os
 import shutil
 from pathlib import Path
 from pyspark.sql import SparkSession
-from delta import configure_spark_with_delta_pip
 
 from .config import (
     REQUIRED_DIRS,
@@ -22,25 +23,38 @@ from .config import (
     SPARK_LOCAL_DIR,
 )
 
+
 def build_spark(app_name: str = "telemetry_pipeline") -> SparkSession:
     builder = (
-        SparkSession.builder
-        .appName(app_name)
+        SparkSession.builder.appName(app_name)
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+        .config(
+            "spark.sql.catalog.spark_catalog",
+            "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+        )
         .config("spark.sql.warehouse.dir", SPARK_WAREHOUSE_DIR)
         .config("spark.local.dir", SPARK_LOCAL_DIR)
         .config("spark.sql.shuffle.partitions", "8")
         .config("spark.default.parallelism", "8")
         .enableHiveSupport()
     )
+
+    # Databricks Runtime already includes Spark and Delta.
+    # Local / Github Actions execution still uses delta-spark from pip.
+    if os.getenv("DATABRICKS_RUNTIME_VERSION"):
+        return builder.getOrCreate()
+
+    from delta import configure_spark_with_delta_pip
+
     return configure_spark_with_delta_pip(builder).getOrCreate()
+
 
 def _file_uri_to_path(file_uri: str) -> Path:
     """Convert a file: URI to a local Path."""
     if file_uri.startswith("file:"):
         return Path(file_uri.replace("file:", "", 1))
     return Path(file_uri)
+
 
 def cleanup_database_storage() -> None:
     """
@@ -53,6 +67,7 @@ def cleanup_database_storage() -> None:
 
     if db_path.exists():
         shutil.rmtree(db_path)
+
 
 def ensure_directories() -> None:
     """Create required project directories if they do not exist."""
@@ -96,6 +111,7 @@ def setup_logging(name: str = "telemetry_pipeline") -> logging.Logger:
 
     return logger
 
+
 def use_database(spark: SparkSession) -> None:
     """Select the configured database."""
     spark.sql(f"""
@@ -126,8 +142,7 @@ def create_bronze_events_table(spark: SparkSession) -> None:
     """
     Create the Bronze table used for raw transit and weather events.
     """
-    spark.sql(
-        f"""
+    spark.sql(f"""
         CREATE TABLE IF NOT EXISTS {BRONZE_EVENTS_TABLE} (
             event_id STRING,
             event_time_raw STRING,
@@ -142,8 +157,8 @@ def create_bronze_events_table(spark: SparkSession) -> None:
             ingest_time_ts TIMESTAMP
         )
         USING DELTA
-        """
-    )
+        """)
+
 
 def initialize_environment(spark: SparkSession, reset: bool = False) -> None:
     """
@@ -154,7 +169,7 @@ def initialize_environment(spark: SparkSession, reset: bool = False) -> None:
     spark:
         Active Spark session.
     reset:
-        If True, drop existing pipeline tables and remove local warehouse 
+        If True, drop existing pipeline tables and remove local warehouse
         storage before recreating the base Bronze table.
     """
     ensure_directories()
@@ -169,6 +184,3 @@ def initialize_environment(spark: SparkSession, reset: bool = False) -> None:
         use_database(spark)
 
     create_bronze_events_table(spark)
-
-
-    
