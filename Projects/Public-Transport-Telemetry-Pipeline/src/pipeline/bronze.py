@@ -17,6 +17,7 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from itertools import product
+from pathlib import Path
 from typing import Dict, List
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -46,6 +47,13 @@ from .config import (
     SIM_INGEST_DELAY_MIN_SEC,
     SIM_INGEST_DELAY_MAX_SEC,
 )
+
+
+def delta_path(path: Path) -> str:
+    """Return a Spark-compatible Delta path."""
+    if os.getenv("DATABRICKS_RUNTIME_VERSION"):
+        return f"file:{path}"
+    return str(path)
 
 
 def infer_unit(metric: str) -> str:
@@ -102,7 +110,9 @@ def run_bronze_layer(
             raise
 
     if os.getenv("DATABRICKS_RUNTIME_VERSION"):
-        bronze_count = spark.read.format("delta").load(str(BRONZE_EVENTS_PATH)).count()
+        bronze_count = (
+            spark.read.format("delta").load(delta_path(BRONZE_EVENTS_PATH)).count()
+        )
     else:
         bronze_count = spark.table(BRONZE_EVENTS_TABLE).count()
     logger.info(f"Bronze table updated: {BRONZE_EVENTS_TABLE}")
@@ -334,8 +344,10 @@ def ingest_simulated_transit_batch(
     print("DEBUG: after transform bronze df", flush=True)
 
     if os.getenv("DATABRICKS_RUNTIME_VERSION"):
-        print(f"DEBUG: before delta write to {BRONZE_EVENTS_PATH}", flush=True)
-        df2.write.format("delta").mode("append").save(str(BRONZE_EVENTS_PATH))
+        print(
+            f"DEBUG: before delta write to {delta_path(BRONZE_EVENTS_PATH)}", flush=True
+        )
+        df2.write.format("delta").mode("append").save(delta_path(BRONZE_EVENTS_PATH))
         print("DEBUG: after delta write", flush=True)
     else:
         print("DEBUG: before saveAsTable", flush=True)
@@ -525,7 +537,7 @@ def ingest_fmi_weather(
     ).withColumn("ingest_time_ts", F.current_timestamp())
 
     if os.getenv("DATABRICKS_RUNTIME_VERSION"):
-        df2.write.format("delta").mode("append").save(str(BRONZE_EVENTS_PATH))
+        df2.write.format("delta").mode("append").save(delta_path(BRONZE_EVENTS_PATH))
     else:
         df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
     print(f"Appended FMI events: {len(rows)}")
@@ -576,7 +588,7 @@ def ingest_fmi_weather_for_places(
     row_count = df2.count()
 
     if os.getenv("DATABRICKS_RUNTIME_VERSION"):
-        df2.write.format("delta").mode("append").save(str(BRONZE_EVENTS_PATH))
+        df2.write.format("delta").mode("append").save(delta_path(BRONZE_EVENTS_PATH))
     else:
         df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
 
