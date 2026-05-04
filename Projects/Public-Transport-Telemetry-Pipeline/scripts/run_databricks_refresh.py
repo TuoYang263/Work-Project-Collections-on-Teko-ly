@@ -186,6 +186,13 @@ def main() -> None:
         env=env,
     )
 
+    if args.layer != "full":
+        print(
+            f"\nLayer '{args.layer}' completed. "
+            "Skipping Gold export and Azure Blob upload because this was a layer-specific debug run."
+        )
+        return
+
     run_command(
         step_name="Export Gold outputs",
         command=[
