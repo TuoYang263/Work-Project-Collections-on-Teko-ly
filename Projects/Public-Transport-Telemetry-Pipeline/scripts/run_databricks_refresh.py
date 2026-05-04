@@ -65,13 +65,21 @@ def build_env() -> dict[str, str]:
         else f"{PROJECT_ROOT}{os.pathsep}{existing_pythonpath}"
     )
 
-    env.setdefault("SPARK_LOCAL_DIR", "/tmp/spark-tmp")
-    env.setdefault("SPARK_LOCAL_DIRS", "/tmp/spark-tmp")
-    env.setdefault("SPARK_WAREHOUSE_DIR", "file:/tmp/spark-warehouse/telemetry")
+    if os.getenv("DATABRICKS_RUNTIME_VERSION"):
+        env["TELEMETRY_RUNTIME_ROOT"] = "/local_disk0/tmp/telemetry-pipeline"
+        env["TELEMETRY_DATA_DIR"] = "/local_disk0/tmp/telemetry-pipeline/data"
+        env["TELEMETRY_LOGS_DIR"] = "/local_disk0/tmp/telemetry-pipeline/logs"
+        env["SPARK_LOCAL_DIR"] = "/local_disk0/tmp/spark-tmp"
+        env["SPARK_LOCAL_DIRS"] = "/local_disk0/tmp/spark-tmp"
+        env["SPARK_WAREHOUSE_DIR"] = "file:/local_disk0/tmp/spark-warehouse/telemetry"
+    else:
+        env.setdefault("SPARK_LOCAL_DIR", "/tmp/spark-tmp")
+        env.setdefault("SPARK_LOCAL_DIRS", "/tmp/spark-tmp")
+        env.setdefault("SPARK_WAREHOUSE_DIR", "file:/tmp/spark-warehouse/telemetry")
 
-    env.setdefault("TELEMETRY_RUNTIME_ROOT", "/tmp/telemetry-pipeline")
-    env.setdefault("TELEMETRY_DATA_DIR", "/tmp/telemetry-pipeline/data")
-    env.setdefault("TELEMETRY_LOGS_DIR", "/tmp/telemetry-pipeline/logs")
+        env.setdefault("TELEMETRY_RUNTIME_ROOT", "/tmp/telemetry-pipeline")
+        env.setdefault("TELEMETRY_DATA_DIR", "/tmp/telemetry-pipeline/data")
+        env.setdefault("TELEMETRY_LOGS_DIR", "/tmp/telemetry-pipeline/logs")
 
     # Ensure runtime directories exist.
     for key in [
