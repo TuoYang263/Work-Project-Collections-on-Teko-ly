@@ -45,6 +45,12 @@ def delta_path(path: Path) -> str:
     return str(path)
 
 
+def spark_path(path: Path) -> str:
+    if is_databricks():
+        return f"file:{path}"
+    return str(path)
+
+
 def export_table_to_parquet(
     spark: SparkSession,
     table_name: str,
@@ -77,7 +83,7 @@ def export_table_to_parquet(
 
     if is_databricks():
         logger.info(f"Reading path-based Gold Delta source: {delta_source_path}")
-        df = spark.read.format("delta").load(delta_path(delta_source_path))
+        df = spark.read.format("delta").load(spark_path(delta_source_path))
     else:
         df = spark.table(table_name)
 
@@ -86,7 +92,7 @@ def export_table_to_parquet(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    df.write.mode("overwrite").parquet(str(output_path))
+    df.write.mode("overwrite").parquet(spark_path(output_path))
 
     logger.info(f"Export completed: {table_name}")
 
