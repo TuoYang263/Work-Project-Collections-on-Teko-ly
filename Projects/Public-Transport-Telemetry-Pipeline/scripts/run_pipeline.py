@@ -62,8 +62,13 @@ def run_pipeline(layer: str, logger: logging.Logger) -> None:
             logger.info("Running BRONZE layer")
             run_bronze_layer(spark, logger, reset=True)
 
-            logger.info("Dropping existing Silver / Gold tables for clean rebuild")
-            drop_derived_tables(spark)
+            if os.getenv("DATABRICKS_RUNTIME_VERSION"):
+                logger.info(
+                    "Databricks runtime detected; skipping managed table drop for path-based run"
+                )
+            else:
+                logger.info("Dropping existing Silver / Gold tables for clean rebuild")
+                drop_derived_tables(spark)
 
             logger.info("Running SILVER layer")
             run_silver_layer(spark, logger)
