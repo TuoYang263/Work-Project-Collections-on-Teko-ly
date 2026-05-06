@@ -71,28 +71,22 @@ def run_bronze_layer(
 ) -> None:
     logger.info("Bronze layer started.")
 
-    logger.info("DEBUG: before initialize_environment")
     initialize_environment(spark, reset=reset)
-    logger.info("DEBUG: after initialize_environment")
 
-    logger.info("DEBUG: before ingest_simulated_transit_batch")
     ingest_simulated_transit_batch(
         spark=spark,
         batch_id=0,
         n=SIM_DEFAULT_BATCH_SIZE,
     )
-    logger.info("DEBUG: after ingest_simulated_transit_batch")
     logger.info("Simulated transit batch appended to Bronze.")
 
     try:
-        logger.info("DEBUG: before ingest_fmi_weather_for_places")
         ingest_fmi_weather_for_places(
             spark=spark,
             places=FMI_PLACES,
             params=FMI_DEFAULT_PARAMS,
             minutes=FMI_DEFAULT_LOOKBACK_MINUTES,
         )
-        logger.info("DEBUG: after ingest_fmi_weather_for_places")
         logger.info(
             "FMI weather ingest completed "
             f"(places={FMI_PLACES}, "
@@ -307,17 +301,10 @@ def ingest_simulated_transit_batch(
         n=remaining,
     )
 
-    print("DEBUG: before generate simulated rows", flush=True)
-
     rows = stable_rows + fill_rows
 
-    print(f"DEBUG: generated rows: {len(rows)}", flush=True)
-
-    print("DEBUG: before createDataFrame", flush=True)
     df = spark.createDataFrame(rows)
-    print("DEBUG: after createDataFrame", flush=True)
 
-    print("DEBUG: before transform bronze df", flush=True)
     df2 = (
         df.withColumn(
             "event_time_ts",
@@ -341,18 +328,11 @@ def ingest_simulated_transit_batch(
             "ingest_time_ts",
         )
     )
-    print("DEBUG: after transform bronze df", flush=True)
 
     if os.getenv("DATABRICKS_RUNTIME_VERSION"):
-        print(
-            f"DEBUG: before delta write to {delta_path(BRONZE_EVENTS_PATH)}", flush=True
-        )
         df2.write.format("delta").mode("append").save(delta_path(BRONZE_EVENTS_PATH))
-        print("DEBUG: after delta write", flush=True)
     else:
-        print("DEBUG: before saveAsTable", flush=True)
         df2.write.format("delta").mode("append").saveAsTable(BRONZE_EVENTS_TABLE)
-        print("DEBUG: after saveAsTable", flush=True)
 
     print(
         f"Batch {batch_id} appended to {BRONZE_EVENTS_TABLE}: "
