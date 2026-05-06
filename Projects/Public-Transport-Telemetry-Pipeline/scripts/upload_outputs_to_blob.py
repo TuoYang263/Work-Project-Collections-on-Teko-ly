@@ -2,6 +2,8 @@ from pathlib import Path
 import os
 import base64
 from azure.storage.blob import BlobServiceClient
+from src.pipeline.config import DATA_DIR
+
 
 def delete_existing_blobs(
     blob_service_client: BlobServiceClient,
@@ -20,6 +22,7 @@ def delete_existing_blobs(
         container_client.delete_blob(blob.name)
 
     print(f"Deleted {len(blobs)} existing blobs under prefix: {blob_prefix}")
+
 
 def upload_single_file(
     blob_service_client: BlobServiceClient,
@@ -41,7 +44,7 @@ def upload_single_file(
     block_ids = []
 
     for i in range(0, file_size, chunk_size):
-        chunk = data[i:i + chunk_size]
+        chunk = data[i : i + chunk_size]
         block_id = base64.b64encode(f"block-{i // chunk_size:06d}".encode()).decode()
         block_ids.append(block_id)
 
@@ -55,6 +58,7 @@ def upload_single_file(
     blob_client.commit_block_list(block_ids)
 
     print(f"Uploaded: {local_file} -> {container_name}/{blob_name}")
+
 
 def upload_path(
     blob_service_client: BlobServiceClient,
@@ -98,21 +102,33 @@ def main() -> None:
     connection_string = os.environ["AZURE_STORAGE_CONNECTION_STRING"]
     container_name = os.environ["AZURE_BLOB_CONTAINER"]
 
-    project_root = Path(__file__).resolve().parents[1]
-    output_dir = project_root / "data" / "output"
-    hsl_dir = project_root / "data" / "gold" / "hsl"
-    weather_dir = project_root / "data" / "gold" / "weather"
+    output_dir = DATA_DIR / "output"
+    hsl_dir = DATA_DIR / "gold" / "hsl"
+    weather_dir = DATA_DIR / "gold" / "weather"
 
+    print(f"[INFO] Upload source DATA_DIR: {DATA_DIR}")
     outputs_to_upload = [
         ("telemetry/gold_route_daily.parquet", output_dir / "gold_route_daily.parquet"),
-        ("telemetry/gold_route_window.parquet", output_dir / "gold_route_window.parquet"),
+        (
+            "telemetry/gold_route_window.parquet",
+            output_dir / "gold_route_window.parquet",
+        ),
         ("telemetry/pipeline_metrics.parquet", output_dir / "pipeline_metrics.parquet"),
         ("telemetry/hsl/hsl_df_map.parquet", hsl_dir / "hsl_df_map.parquet"),
         ("telemetry/hsl/hsl_map_points.parquet", hsl_dir / "hsl_map_points.parquet"),
         ("telemetry/hsl/hsl_route_paths.parquet", hsl_dir / "hsl_route_paths.parquet"),
-        ("telemetry/hsl/hsl_route_paths_overview.parquet", hsl_dir / "hsl_route_paths_overview.parquet"),
-        ("telemetry/hsl/hsl_route_options.parquet", hsl_dir / "hsl_route_options.parquet"),
-        ("telemetry/weather/weather_stations_latest.parquet", weather_dir / "weather_stations_latest.parquet"),
+        (
+            "telemetry/hsl/hsl_route_paths_overview.parquet",
+            hsl_dir / "hsl_route_paths_overview.parquet",
+        ),
+        (
+            "telemetry/hsl/hsl_route_options.parquet",
+            hsl_dir / "hsl_route_options.parquet",
+        ),
+        (
+            "telemetry/weather/weather_stations_latest.parquet",
+            weather_dir / "weather_stations_latest.parquet",
+        ),
     ]
 
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)

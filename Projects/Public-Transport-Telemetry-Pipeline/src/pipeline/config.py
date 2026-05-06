@@ -15,23 +15,28 @@ import os
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-DATA_DIR = PROJECT_ROOT / "data"
+# Runtime outputs should be written outside the Git checkout directory
+# when running in managed environments such as Databricks
+RUNTIME_ROOT = Path(os.getenv("TELEMETRY_RUNTIME_ROOT", PROJECT_ROOT))
+
+DATA_DIR = Path(os.getenv("TELEMETRY_DATA_DIR", RUNTIME_ROOT / "data"))
 RAW_DIR = DATA_DIR / "raw"
 BRONZE_DIR = DATA_DIR / "bronze"
 SILVER_DIR = DATA_DIR / "silver"
 GOLD_DIR = DATA_DIR / "gold"
 EXPORT_DIR = DATA_DIR / "output"
+DELTA_DIR = Path(os.getenv("TELEMETRY_DELTA_DIR", DATA_DIR / "delta"))
 
-LOGS_DIR = PROJECT_ROOT / "logs"
+LOGS_DIR = Path(os.getenv("TELEMETRY_LOGS_DIR", RUNTIME_ROOT / "logs"))
 LOG_FILE = LOGS_DIR / "pipeline.log"
 
 REQUIRED_DIRS = [
-    DATA_DIR,
     RAW_DIR,
     BRONZE_DIR,
     SILVER_DIR,
     GOLD_DIR,
     EXPORT_DIR,
+    DELTA_DIR,
     LOGS_DIR,
 ]
 
@@ -68,17 +73,17 @@ GOLD_ROUTE_DAILY_EXPORT_PATH = EXPORT_DIR / "gold_route_daily.parquet"
 GOLD_PIPELINE_METRICS_EXPORT_PATH = EXPORT_DIR / "pipeline_metrics.parquet"
 
 # -----------------------------------------------------------------------------
-# Local file outputs
+# Delta table paths for path-based execution targets such as Databricks Jobs
 # -----------------------------------------------------------------------------
 
-BRONZE_EVENTS_PATH = BRONZE_DIR / "bronze_events.csv"
+BRONZE_EVENTS_PATH = DELTA_DIR / "bronze_events"
 
-SILVER_TRANSIT_PATH = SILVER_DIR / "silver_transit_metrics.csv"
-SILVER_WEATHER_PATH = SILVER_DIR / "silver_weather_metrics.csv"
+SILVER_TRANSIT_PATH = DELTA_DIR / "silver_transit_metrics"
+SILVER_WEATHER_PATH = DELTA_DIR / "silver_weather_metrics"
 
-GOLD_ROUTE_WINDOW_PATH = GOLD_DIR / "gold_route_kpi_window.csv"
-GOLD_ROUTE_DAILY_PATH = GOLD_DIR / "gold_route_kpi_daily.csv"
-GOLD_PIPELINE_METRICS_PATH = GOLD_DIR / "gold_pipeline_metrics_window.csv"
+GOLD_ROUTE_WINDOW_PATH = DELTA_DIR / "gold_route_kpi_window"
+GOLD_ROUTE_DAILY_PATH = DELTA_DIR / "gold_route_kpi_daily"
+GOLD_PIPELINE_METRICS_PATH = DELTA_DIR / "gold_pipeline_metrics_window"
 
 # -----------------------------------------------------------------------------
 # Transit processing parameters
@@ -106,11 +111,7 @@ FMI_DEFAULT_PLACES = os.getenv(
     "helsinki,espoo,vantaa,kauniainen",
 )
 
-FMI_PLACES = [
-    place.strip()
-    for place in FMI_DEFAULT_PLACES.split(",")
-    if place.strip()
-]
+FMI_PLACES = [place.strip() for place in FMI_DEFAULT_PLACES.split(",") if place.strip()]
 
 FMI_DEFAULT_PARAMS = "t2m,r_1h"
 FMI_DEFAULT_LOOKBACK_MINUTES = 360

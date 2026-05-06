@@ -1,6 +1,8 @@
 """
 Silver-layer transformations for transit and weather metrics.
 """
+
+import os
 import logging
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -8,19 +10,44 @@ from src.pipeline.setup import use_database
 
 from .config import (
     BRONZE_EVENTS_TABLE,
+    BRONZE_EVENTS_PATH,
     TRANSIT_LOOKBACK_MINUTES,
     TRANSIT_LATE_THRESHOLD_SEC,
     SILVER_TRANSIT_TABLE,
+    SILVER_TRANSIT_PATH,
     SILVER_WEATHER_TABLE,
+    SILVER_WEATHER_PATH,
     TRANSIT_WINDOW,
     WEATHER_LOOKBACK_MINUTES,
     WEATHER_WINDOW,
 )
 
+
+def is_databricks() -> bool:
+    return bool(os.getenv("DATABRICKS_RUNTIME_VERSION"))
+
+
+def delta_path(path) -> str:
+    if is_databricks():
+        return f"file:{path}"
+    return str(path)
+
+
+def read_bronze_events(spark: SparkSession):
+    if is_databricks():
+        return spark.read.format("delta").load(delta_path(BRONZE_EVENTS_PATH))
+    return spark.table(BRONZE_EVENTS_TABLE)
+
+
 def run_silver_layer(spark: SparkSession, logger: logging.Logger) -> None:
     logger.info("Silver layer started.")
 
-    use_database(spark)
+    if is_databricks():
+        logger.info(
+            "Databricks runtime detected; using path-based Silver Delta storage"
+        )
+    else:
+        use_database(spark)
 
     build_silver_transit_metrics(spark)
     logger.info(f"Silver transit table updated: {SILVER_TRANSIT_TABLE}")
@@ -28,47 +55,53 @@ def run_silver_layer(spark: SparkSession, logger: logging.Logger) -> None:
     build_silver_weather_metrics(spark)
     logger.info(f"Silver weather table updated: {SILVER_WEATHER_TABLE}")
 
-    transit_count = spark.table(SILVER_TRANSIT_TABLE).count()
-    weather_count = spark.table(SILVER_WEATHER_TABLE).count()
+    if is_databricks():
+        transit_count = (
+            spark.read.format("delta").load(delta_path(SILVER_TRANSIT_PATH)).count()
+        )
+        weather_count = (
+            spark.read.format("delta").load(delta_path(SILVER_WEATHER_PATH)).count()
+        )
+    else:
+        transit_count = spark.table(SILVER_TRANSIT_TABLE).count()
+        weather_count = spark.table(SILVER_WEATHER_TABLE).count()
 
     logger.info(f"Silver transit row count: {transit_count}")
     logger.info(f"Silver weather row count: {weather_count}")
+
 
 def build_silver_transit_metrics(spark: SparkSession) -> None:
     """
     Aggregate simulated transit events into windowed Silver metrics.
     """
-    bronze_all = spark.table(BRONZE_EVENTS_TABLE)
+    bronze_all = read_bronze_events(spark)
 
-    bronze_recent = (
-        bronze_all
-        .filter(F.col("source") == F.lit("sim_transit"))
-        .filter(
-            F.col("event_time_ts")
-            >= F.expr(f"current_timestamp() - INTERVAL {TRANSIT_LOOKBACK_MINUTES} MINUTES")
-        )
+    bronze_recent = bronze_all.filter(F.col("source") == F.lit("sim_transit")).filter(
+        F.col("event_time_ts")
+        >= F.expr(f"current_timestamp() - INTERVAL {TRANSIT_LOOKBACK_MINUTES} MINUTES")
     )
 
     bronze_enriched = (
-        bronze_recent
-        .withColumn("route_id", F.col("attrs").getItem("route_id"))
+        bronze_recent.withColumn("route_id", F.col("attrs").getItem("route_id"))
         .withColumn(
             "ingest_delay_sec_raw",
             F.unix_timestamp("ingest_time_ts") - F.unix_timestamp("event_time_ts"),
         )
         .withColumn("is_clock_skew", F.col("ingest_delay_sec_raw") < F.lit(0))
-        .withColumn("ingest_delay_sec", F.greatest(F.col("ingest_delay_sec_raw"), F.lit(0)))
-        .withColumn("is_late_event",
-                    F.when(
-                        F.col("metric") == F.lit("delay_sec"),
-                        F.col("value") > F.lit(TRANSIT_LATE_THRESHOLD_SEC),
-                    ).otherwise(F.lit(False)),
+        .withColumn(
+            "ingest_delay_sec", F.greatest(F.col("ingest_delay_sec_raw"), F.lit(0))
+        )
+        .withColumn(
+            "is_late_event",
+            F.when(
+                F.col("metric") == F.lit("delay_sec"),
+                F.col("value") > F.lit(TRANSIT_LATE_THRESHOLD_SEC),
+            ).otherwise(F.lit(False)),
         )
     )
 
     silver_transit = (
-        bronze_enriched
-        .groupBy(
+        bronze_enriched.groupBy(
             F.window("event_time_ts", TRANSIT_WINDOW).alias("window"),
             F.col("metric"),
             F.col("route_id"),
@@ -82,8 +115,9 @@ def build_silver_transit_metrics(spark: SparkSession) -> None:
         )
         .withColumn(
             "late_event_rate",
-            F.when(F.col("n_events") == 0, F.lit(0.0))
-            .otherwise(F.col("n_late_events") / F.col("n_events")),
+            F.when(F.col("n_events") == 0, F.lit(0.0)).otherwise(
+                F.col("n_late_events") / F.col("n_events")
+            ),
         )
         .select(
             F.col("window.start").alias("window_start"),
@@ -99,38 +133,42 @@ def build_silver_transit_metrics(spark: SparkSession) -> None:
         )
     )
 
-    silver_transit.write.format("delta").mode("overwrite").saveAsTable(SILVER_TRANSIT_TABLE)
+    if is_databricks():
+        silver_transit.write.format("delta").mode("overwrite").save(
+            delta_path(SILVER_TRANSIT_PATH)
+        )
+    else:
+        silver_transit.write.format("delta").mode("overwrite").saveAsTable(
+            SILVER_TRANSIT_TABLE
+        )
+
 
 def build_silver_weather_metrics(spark: SparkSession) -> None:
     """
     Aggregate FMI weather events into windowed Silver metrics.
     """
-    bronze_all = spark.table(BRONZE_EVENTS_TABLE)
+    bronze_all = read_bronze_events(spark)
 
     weather_recent = (
-        bronze_all
-        .filter(F.col("source") == F.lit("fmi_weather"))
+        bronze_all.filter(F.col("source") == F.lit("fmi_weather"))
         .filter(
             F.col("event_time_ts")
-            >= F.expr(f"current_timestamp() - INTERVAL {WEATHER_LOOKBACK_MINUTES} MINUTES")
+            >= F.expr(
+                f"current_timestamp() - INTERVAL {WEATHER_LOOKBACK_MINUTES} MINUTES"
+            )
         )
         .withColumn("station_id", F.col("entity_id"))
     )
 
-    weather_clean = (
-        weather_recent
-        .filter(F.col("value").isNotNull())
-        .filter(
-            ~(
-                (F.col("metric") == F.lit("t2m"))
-                & ((F.col("value") < -60) | (F.col("value") > 60))
-            )
+    weather_clean = weather_recent.filter(F.col("value").isNotNull()).filter(
+        ~(
+            (F.col("metric") == F.lit("t2m"))
+            & ((F.col("value") < -60) | (F.col("value") > 60))
         )
     )
 
     silver_weather = (
-        weather_clean
-        .groupBy(
+        weather_clean.groupBy(
             F.window("event_time_ts", WEATHER_WINDOW).alias("window"),
             F.col("metric"),
             F.col("station_id"),
@@ -140,7 +178,8 @@ def build_silver_weather_metrics(spark: SparkSession) -> None:
             F.count(F.lit(1)).alias("n_events"),
             F.avg(
                 F.greatest(
-                    F.unix_timestamp("ingest_time_ts") - F.unix_timestamp("event_time_ts"),
+                    F.unix_timestamp("ingest_time_ts")
+                    - F.unix_timestamp("event_time_ts"),
                     F.lit(0),
                 )
             ).alias("avg_ingest_delay_sec"),
@@ -156,4 +195,11 @@ def build_silver_weather_metrics(spark: SparkSession) -> None:
         )
     )
 
-    silver_weather.write.format("delta").mode("overwrite").saveAsTable(SILVER_WEATHER_TABLE)
+    if is_databricks():
+        silver_weather.write.format("delta").mode("overwrite").save(
+            delta_path(SILVER_WEATHER_PATH)
+        )
+    else:
+        silver_weather.write.format("delta").mode("overwrite").saveAsTable(
+            SILVER_WEATHER_TABLE
+        )

@@ -4,6 +4,8 @@ Pipeline runner for the Public Transport Telemetry Pipeline
 This script orchestrates bronze -> silver -> gold execution
 and allows partial runs for development or debugging.
 """
+
+import os
 import time
 import argparse
 import logging
@@ -19,6 +21,7 @@ from src.pipeline.config import (
     GOLD_ROUTE_DAILY_TABLE,
     GOLD_PIPELINE_METRICS_TABLE,
 )
+
 
 def drop_derived_tables(spark) -> None:
     """
@@ -54,37 +57,52 @@ def run_pipeline(layer: str, logger: logging.Logger) -> None:
         if layer == "gold":
             logger.info("Running GOLD layer")
             run_gold_layer(spark, logger)
-        
+
         elif layer == "full":
             logger.info("Running BRONZE layer")
             run_bronze_layer(spark, logger, reset=True)
 
-            logger.info("Dropping existing Silver / Gold tables for clean rebuild")
-            drop_derived_tables(spark)
+            if os.getenv("DATABRICKS_RUNTIME_VERSION"):
+                logger.info(
+                    "Databricks runtime detected; skipping managed table drop for path-based run"
+                )
+            else:
+                logger.info("Dropping existing Silver / Gold tables for clean rebuild")
+                drop_derived_tables(spark)
 
             logger.info("Running SILVER layer")
             run_silver_layer(spark, logger)
 
             logger.info("Running GOLD layer")
             run_gold_layer(spark, logger)
-            
+
     finally:
-        spark.stop()
+        logger.info("Starting Spark session cleanup")
+
+        if os.getenv("DATABRICKS_RUNTIME_VERSION"):
+            logger.info(
+                "Databricks runtime detected; skipping explicit spark.stop() "
+                "and leaving Spark lifecycle to the job cluster."
+            )
+        else:
+            logger.info("Stopping local Spark session")
+            spark.stop()
+            logger.info("Local Spark session stopped")
+
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Run the telemetry data pipeline."
-    )
+    parser = argparse.ArgumentParser(description="Run the telemetry data pipeline.")
 
     parser.add_argument(
         "--layer",
         type=str,
         default="full",
         choices=["bronze", "silver", "gold", "full"],
-        help="Which layer of the pipeline to run"
+        help="Which layer of the pipeline to run",
     )
 
     return parser.parse_args()
+
 
 def main():
     args = parse_args()
@@ -98,11 +116,13 @@ def main():
     try:
         start = time.time()
         run_pipeline(args.layer, logger)
+        logger.info("Pipeline completed successfully")
         elapsed = time.time() - start
         logger.info(f"Pipeline completed successfully in {elapsed:.2f}s")
     except Exception:
         logger.exception("Pipeline failed")
         raise
+
 
 if __name__ == "__main__":
     main()
