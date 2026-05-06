@@ -2,6 +2,7 @@
 Gold-layer KPI and operational metrics builders.
 """
 
+import os
 import logging
 import pandas as pd
 from pathlib import Path
@@ -11,12 +12,29 @@ from src.pipeline.setup import use_database
 from src.pipeline.hsl import build_hsl_map_outputs
 
 from .config import (
+    BRONZE_EVENTS_PATH,
+    SILVER_TRANSIT_PATH,
+    SILVER_WEATHER_PATH,
+    GOLD_ROUTE_WINDOW_PATH,
+    GOLD_ROUTE_DAILY_PATH,
+    GOLD_PIPELINE_METRICS_PATH,
+    DATA_DIR,
     GOLD_PIPELINE_METRICS_TABLE,
     GOLD_ROUTE_DAILY_TABLE,
     GOLD_ROUTE_WINDOW_TABLE,
     SILVER_TRANSIT_TABLE,
     SILVER_WEATHER_TABLE,
 )
+
+
+def is_databricks() -> bool:
+    return bool(os.getenv("DATABRICKS_RUNTIME_VERSION"))
+
+
+def delta_path(path: Path) -> str:
+    if is_databricks():
+        return f"file:{path}"
+    return str(path)
 
 
 def build_gold_weather_station_outputs(
@@ -33,12 +51,17 @@ def build_gold_weather_station_outputs(
     - keep the latest observation per station and metric
     - pivot metrics into one row per station
     """
-    project_root = Path(__file__).resolve().parents[2]
-    data_dir = project_root / "data"
-    output_dir = data_dir / "gold" / "weather"
+    output_dir = DATA_DIR / "gold" / "weather"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    df = spark.table("bronze_events").filter(F.col("source") == "fmi_weather")
+    if is_databricks():
+        df = (
+            spark.read.format("delta")
+            .load(delta_path(BRONZE_EVENTS_PATH))
+            .filter(F.col("source") == "fmi_weather")
+        )
+    else:
+        df = spark.table("bronze_events").filter(F.col("source") == "fmi_weather")
 
     if df.rdd.isEmpty():
         empty_df = pd.DataFrame(
@@ -135,7 +158,10 @@ def build_gold_weather_station_outputs(
 
 def run_gold_layer(spark: SparkSession, logger: logging.Logger) -> None:
     logger.info("Gold layer started")
-    use_database(spark)
+    if is_databricks():
+        logger.info("Databricks runtime detected; using path-based Gold Delta storage")
+    else:
+        use_database(spark)
 
     build_gold_route_kpi_window(spark)
     logger.info(f"Gold route window table updated: {GOLD_ROUTE_WINDOW_TABLE}")
@@ -152,21 +178,77 @@ def run_gold_layer(spark: SparkSession, logger: logging.Logger) -> None:
     build_gold_weather_station_outputs(spark, logger)
     logger.info("Weather station gold outputs updated")
 
-    logger.info(
-        f"Gold route window row count: {spark.table(GOLD_ROUTE_WINDOW_TABLE).count()}"
-    )
-    logger.info(
-        f"Gold route daily row count: {spark.table(GOLD_ROUTE_DAILY_TABLE).count()}"
-    )
-    logger.info(
-        f"Gold pipeline metrics row count: {spark.table(GOLD_PIPELINE_METRICS_TABLE).count()}"
-    )
+    if is_databricks():
+        route_window_count = (
+            spark.read.format("delta").load(delta_path(GOLD_ROUTE_WINDOW_PATH)).count()
+        )
+        route_daily_count = (
+            spark.read.format("delta").load(delta_path(GOLD_ROUTE_DAILY_PATH)).count()
+        )
+        pipeline_metrics_count = (
+            spark.read.format("delta")
+            .load(delta_path(GOLD_PIPELINE_METRICS_PATH))
+            .count()
+        )
+    else:
+        route_window_count = spark.table(GOLD_ROUTE_WINDOW_TABLE).count()
+        route_daily_count = spark.table(GOLD_ROUTE_DAILY_TABLE).count()
+        pipeline_metrics_count = spark.table(GOLD_PIPELINE_METRICS_TABLE).count()
+
+    logger.info(f"Gold route window row count: {route_window_count}")
+    logger.info(f"Gold route daily row count: {route_daily_count}")
+    logger.info(f"Gold pipeline metrics row count: {pipeline_metrics_count}")
 
 
 def build_gold_route_kpi_window(spark: SparkSession) -> None:
     """
     Create route-level KPI metrics at the window level.
     """
+    if is_databricks():
+        s = spark.read.format("delta").load(delta_path(SILVER_TRANSIT_PATH))
+
+        wide = s.groupBy("window_start", "window_end", "route_id").agg(
+            F.max(F.when(F.col("metric") == "delay_sec", F.col("avg_value"))).alias(
+                "avg_delay_sec"
+            ),
+            F.max(F.when(F.col("metric") == "occupancy", F.col("avg_value"))).alias(
+                "avg_occupancy_pct"
+            ),
+            F.max(F.when(F.col("metric") == "delay_sec", F.col("n_events"))).alias(
+                "n_events_delay"
+            ),
+            F.max(F.when(F.col("metric") == "occupancy", F.col("n_events"))).alias(
+                "n_events_occupancy"
+            ),
+            F.max(
+                F.when(F.col("metric") == "delay_sec", F.col("late_event_rate"))
+            ).alias("late_rate_delay"),
+            F.max(
+                F.when(F.col("metric") == "delay_sec", F.col("avg_ingest_delay_sec"))
+            ).alias("avg_ingest_delay_sec"),
+            F.max(F.when(F.col("metric") == "delay_sec", F.col("n_clock_skew"))).alias(
+                "n_clock_skew"
+            ),
+        )
+
+        result = wide.withColumn(
+            "dq_flag",
+            F.when(F.coalesce(F.col("n_clock_skew"), F.lit(0)) > 0, F.lit("CLOCK_SKEW"))
+            .when(
+                F.coalesce(F.col("n_events_delay"), F.lit(0)) < 5, F.lit("LOW_VOLUME")
+            )
+            .when(
+                F.coalesce(F.col("late_rate_delay"), F.lit(0.0)) > 0.30,
+                F.lit("HIGH_LATE_RATE"),
+            )
+            .otherwise(F.lit("OK")),
+        )
+
+        result.write.format("delta").mode("overwrite").save(
+            delta_path(GOLD_ROUTE_WINDOW_PATH)
+        )
+        return
+
     spark.sql(f"""
         CREATE OR REPLACE TABLE {GOLD_ROUTE_WINDOW_TABLE}
         USING DELTA
@@ -210,6 +292,44 @@ def build_gold_route_kpi_daily(spark: SparkSession) -> None:
     """
     Aggregate route-level window KPIs into daily summaries.
     """
+    if is_databricks():
+        route_window = spark.read.format("delta").load(
+            delta_path(GOLD_ROUTE_WINDOW_PATH)
+        )
+
+        result = (
+            route_window.groupBy(F.to_date("window_start").alias("date"), "route_id")
+            .agg(
+                F.avg("avg_delay_sec").alias("avg_delay_sec"),
+                F.avg("avg_occupancy_pct").alias("avg_occupancy_pct"),
+                F.sum(F.coalesce(F.col("n_events_delay"), F.lit(0))).alias(
+                    "total_events_delay"
+                ),
+                F.sum(F.coalesce(F.col("n_events_occupancy"), F.lit(0))).alias(
+                    "total_events_occupancy"
+                ),
+                F.avg(F.coalesce(F.col("late_rate_delay"), F.lit(0.0))).alias(
+                    "avg_late_rate_delay"
+                ),
+                F.avg(F.coalesce(F.col("avg_ingest_delay_sec"), F.lit(0.0))).alias(
+                    "avg_ingest_delay_sec"
+                ),
+                F.sum(
+                    F.when(F.col("dq_flag") != "OK", F.lit(1)).otherwise(F.lit(0))
+                ).alias("n_dq_issues"),
+            )
+            .withColumn(
+                "dq_flag",
+                F.when(F.col("n_dq_issues") > 0, F.lit("CHECK")).otherwise(F.lit("OK")),
+            )
+            .drop("n_dq_issues")
+        )
+
+        result.write.format("delta").mode("overwrite").save(
+            delta_path(GOLD_ROUTE_DAILY_PATH)
+        )
+        return
+
     spark.sql(f"""
         CREATE OR REPLACE TABLE {GOLD_ROUTE_DAILY_TABLE}
         USING DELTA
@@ -237,6 +357,49 @@ def build_gold_pipeline_metrics_window(spark: SparkSession) -> None:
     Build a lightweight operational summary combining transit and weather
     Silver metrics at the window level.
     """
+    if is_databricks():
+        transit_df = spark.read.format("delta").load(delta_path(SILVER_TRANSIT_PATH))
+        weather_df = spark.read.format("delta").load(delta_path(SILVER_WEATHER_PATH))
+
+        transit = transit_df.groupBy("window_start", "window_end").agg(
+            F.sum("n_events").alias("transit_total_events"),
+            F.avg("avg_ingest_delay_sec").alias("transit_avg_ingest_delay_sec"),
+        )
+
+        weather = weather_df.groupBy("window_start", "window_end").agg(
+            F.sum("n_events").alias("weather_total_events"),
+            F.avg("avg_ingest_delay_sec").alias("weather_avg_ingest_delay_sec"),
+        )
+
+        result = (
+            transit.alias("t")
+            .join(
+                weather.alias("w"),
+                on=[
+                    F.col("t.window_start") == F.col("w.window_start"),
+                    F.col("t.window_end") == F.col("w.window_end"),
+                ],
+                how="full_outer",
+            )
+            .select(
+                F.coalesce(F.col("t.window_start"), F.col("w.window_start")).alias(
+                    "window_start"
+                ),
+                F.coalesce(F.col("t.window_end"), F.col("w.window_end")).alias(
+                    "window_end"
+                ),
+                F.col("t.transit_total_events"),
+                F.col("w.weather_total_events"),
+                F.col("t.transit_avg_ingest_delay_sec"),
+                F.col("w.weather_avg_ingest_delay_sec"),
+            )
+        )
+
+        result.write.format("delta").mode("overwrite").save(
+            delta_path(GOLD_PIPELINE_METRICS_PATH)
+        )
+        return
+
     spark.sql(f"""
         CREATE OR REPLACE TABLE {GOLD_PIPELINE_METRICS_TABLE}
         USING DELTA
@@ -278,9 +441,6 @@ def build_gold_hsl_map_outputs(logger: logging.Logger) -> None:
     Build lightweight HSL map-ready outputs for Streamlit map visualization
     These outputs are stored as parquet files rather than delta tables.
     """
-    project_root = Path(__file__).resolve().parents[2]
-    DATA_DIR = project_root / "data"
-
     gtfs_dir = DATA_DIR / "external" / "gtfs_hsl"
     output_dir = DATA_DIR / "gold" / "hsl"
 
