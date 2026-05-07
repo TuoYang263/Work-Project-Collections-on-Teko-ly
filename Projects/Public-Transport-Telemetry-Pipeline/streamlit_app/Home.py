@@ -1,4 +1,5 @@
 import streamlit as st
+from utils.refresh_metadata import load_refresh_metadata, format_metadata_check_time
 
 st.set_page_config(
     page_title="Public Transport Telemetry Pipeline",
@@ -73,4 +74,27 @@ st.markdown("""
 
 st.caption(
     "This project is intentionally scoped as a compact, production-friendly telemetry system designed for clarity, portability, scheduled refresh, and explainable engineering trade-offs."
+)
+
+metadata = load_refresh_metadata()
+latest_metadata_check = format_metadata_check_time(metadata)
+
+st.markdown("**Dashboard metadata heartbeat**")
+
+if metadata:
+    st.markdown(f"""
+            - Latest lightweight metadata check: **{latest_metadata_check}**
+            - Metadata owner: **Azure Function Timer Trigger**
+            - Full data refresh owner: **Azure Databricks scheduled job**
+            - Live operations monitor: **No**
+            """)
+else:
+    st.caption(
+        "Lightweight refresh metadata is not available yet. "
+        "The dashboard still uses the latest exported Gold-layer parquet outputs."
+    )
+
+st.caption(
+    "The metadata heartbeat only records lightweight dashboard metadata status. "
+    "It does not refresh Gold-layer metrics, trigger Databricks, or fetch HSL/FMI data."
 )
