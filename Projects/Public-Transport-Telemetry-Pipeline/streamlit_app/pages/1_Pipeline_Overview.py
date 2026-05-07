@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from utils.load_data import load_pipeline_metrics
+from utils.openai_explainer import generate_ai_explanation, has_openai_config
 
 from utils.insights import (
     explain_pipeline_metrics,
@@ -136,6 +137,50 @@ render_insight_box(
     "How to read this snapshot",
     pipeline_insights,
 )
+
+st.caption(
+    "Optional AI explanation rewrites the rule-based facts above into a short plain-English summary. "
+    "It does not calculate metrics or infer live operational causes."
+)
+
+if "pipeline_ai_explanation" not in st.session_state:
+    st.session_state["pipeline_ai_explanation"] = None
+
+generate_pipeline_ai = st.button(
+    "Generate AI explanation",
+    key="pipeline_ai_explanation_button",
+)
+
+if generate_pipeline_ai:
+    if not has_openai_config():
+        st.info(
+            "OpenAI API key is not configured. Rule-based insights remain available."
+        )
+    else:
+        with st.spinner("Generating AI explanation..."):
+            st.session_state["pipeline_ai_explanation"] = generate_ai_explanation(
+                facts=pipeline_insights,
+                page_context=(
+                    "Pipeline Overview page showing the latest exported Gold-layer "
+                    "pipeline metrics for a scheduled snapshot dashboard."
+                ),
+            )
+
+        if st.session_state["pipeline_ai_explanation"] is None:
+            st.info(
+                "AI explanation is unavailable. Rule-based insights remain available."
+            )
+
+if st.session_state["pipeline_ai_explanation"]:
+    st.markdown("**AI-generated explanation**")
+    st.info(st.session_state["pipeline_ai_explanation"])
+
+    if st.button(
+        "Clear AI explanation",
+        key="clear_pipeline_ai_explanation_button",
+    ):
+        st.session_state["pipeline_ai_explanation"] = None
+        st.rerun()
 
 # ===== Trend =====
 st.subheader("Pipeline Delay Trend")

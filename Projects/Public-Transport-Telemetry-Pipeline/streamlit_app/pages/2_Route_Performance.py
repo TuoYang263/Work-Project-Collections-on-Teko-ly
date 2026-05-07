@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from utils.load_data import load_route_window, load_route_daily
+from utils.openai_explainer import generate_ai_explanation, has_openai_config
 
 from utils.insights import (
     explain_route_metrics,
@@ -109,11 +110,12 @@ if (
     "window_end" in df_window_filtered.columns
     and df_window_filtered["window_end"].notna().any()
 ):
-    latest_window_end = df_window_filtered["window_end"].max()
+    selected_latest_window_end = df_window_filtered["window_end"].max()
     latest_window_df = df_window_filtered[
-        df_window_filtered["window_end"] == latest_window_end
+        df_window_filtered["window_end"] == selected_latest_window_end
     ].copy()
 else:
+    selected_latest_window_end = pd.NaT
     latest_window_df = df_window_filtered.copy()
 
 # ===== KPI =====
@@ -140,7 +142,16 @@ st.caption(
     "KPIs above reflect the latest available exported route window, while the charts below show recent historical context."
 )
 
-snapshot_age_min = freshness_min if pd.notna(latest_window_end) else None
+if pd.notna(selected_latest_window_end):
+    snapshot_age_min = max(
+        0,
+        int(
+            (now_local - selected_latest_window_end.to_pydatetime()).total_seconds()
+            / 60
+        ),
+    )
+else:
+    snapshot_age_min = None
 
 route_insights = [
     explain_snapshot_status(snapshot_age_min),
@@ -157,6 +168,52 @@ render_insight_box(
     "How to read this route snapshot",
     route_insights,
 )
+
+st.caption(
+    "Optional AI explanation rewrites the rule-based facts above into a short plain-English summary. "
+    "It does not calculate metrics, predict delays, or infer live operational causes."
+)
+
+route_ai_state_key = f"route_ai_explanation_{selected_route}"
+
+if route_ai_state_key not in st.session_state:
+    st.session_state[route_ai_state_key] = None
+
+generate_route_ai = st.button(
+    "Generate AI explanation",
+    key=f"route_ai_explanation_button_{selected_route}",
+)
+
+if generate_route_ai:
+    if not has_openai_config():
+        st.info(
+            "OpenAI API key is not configured. Rule-based insights remain available."
+        )
+    else:
+        with st.spinner("Generating AI explanation..."):
+            st.session_state[route_ai_state_key] = generate_ai_explanation(
+                facts=route_insights,
+                page_context=(
+                    "Route Performance page showing latest exported Gold-layer route "
+                    "metrics for a scheduled snapshot dashboard."
+                ),
+            )
+
+        if st.session_state[route_ai_state_key] is None:
+            st.info(
+                "AI explanation is unavailable. Rule-based insights remain available."
+            )
+
+if st.session_state[route_ai_state_key]:
+    st.markdown("**AI-generated explanation**")
+    st.info(st.session_state[route_ai_state_key])
+
+    if st.button(
+        "Clear AI explanation",
+        key=f"clear_route_ai_explanation_button_{selected_route}",
+    ):
+        st.session_state[route_ai_state_key] = None
+        st.rerun()
 
 # ===== Main chart =====
 if df_window_filtered.empty:
