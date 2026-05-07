@@ -1,0 +1,10 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "<function-app-storage-connection-string>",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AZURE_STORAGE_CONNECTION_STRING": "<dashboard-blob-storage-connection-string>",
+    "AZURE_CONTAINER_NAME": "<container-name>",
+    "LIGHTWEIGHT_METADATA_REFRESH_CRON": "0 15 */3 * * *"
+  }
+}
