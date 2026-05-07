@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -208,10 +209,12 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+start_time = time.time()
+
 st.title("Map View")
 st.caption(
-    "Latest route-level map view with sampled HSL vehicle points, route shapes, "
-    "and optional FMI weather station context."
+    "Scheduled snapshot map view with sampled HSL vehicle points, route shapes, "
+    "and optional FMI weather station context from the latest pipeline refresh."
 )
 
 latest_time_text = "Latest map context time: N/A"
@@ -318,6 +321,9 @@ if points_df is not None and not points_df.empty:
     safe_points_df["lat"] = pd.to_numeric(safe_points_df["lat"], errors="coerce")
     safe_points_df = safe_points_df.dropna(subset=["lon", "lat"])
 
+    safe_points_df["lat_display"] = safe_points_df["lat"].round(5).astype(str)
+    safe_points_df["lon_display"] = safe_points_df["lon"].round(5).astype(str)
+
     if "route_label" not in safe_points_df.columns:
         safe_points_df["route_label"] = str(selected_route)
     else:
@@ -363,6 +369,12 @@ if points_df is not None and not points_df.empty:
     )
     safe_points_df["tooltip_line_1"] = "Vehicle: " + safe_points_df["vehicle_id"]
     safe_points_df["tooltip_line_2"] = "Observed: " + safe_points_df["observed_display"]
+    safe_points_df["tooltip_line_location"] = (
+        "Location: "
+        + safe_points_df["lat_display"]
+        + ", "
+        + safe_points_df["lon_display"]
+    )
 else:
     safe_points_df = pd.DataFrame(columns=["lon", "lat", "route_label"])
 
@@ -405,6 +417,9 @@ if weather_df is not None and not weather_df.empty:
     safe_weather_df["lat"] = pd.to_numeric(safe_weather_df["lat"], errors="coerce")
     safe_weather_df["lon"] = pd.to_numeric(safe_weather_df["lon"], errors="coerce")
     safe_weather_df = safe_weather_df.dropna(subset=["lat", "lon"])
+
+    safe_weather_df["lat_display"] = safe_weather_df["lat"].round(5).astype(str)
+    safe_weather_df["lon_display"] = safe_weather_df["lon"].round(5).astype(str)
 
     if "observation_time" in safe_weather_df.columns:
         safe_weather_df["observation_time"] = pd.to_datetime(
@@ -453,6 +468,12 @@ if weather_df is not None and not weather_df.empty:
     safe_weather_df["tooltip_line_2"] = (
         "Rain: " + safe_weather_df["precip_display"].astype(str) + " mm"
     )
+    safe_weather_df["tooltip_line_location"] = (
+        "Location: "
+        + safe_weather_df["lat_display"]
+        + ", "
+        + safe_weather_df["lon_display"]
+    )
     safe_weather_df["tooltip_line_3"] = "Observed: " + safe_weather_df[
         "observation_display"
     ].astype(str)
@@ -484,7 +505,7 @@ if weather_df is not None and not weather_df.empty:
 
         latest_time_text = (
             f"Latest map context time: {latest_obs_time.strftime('%Y-%m-%d %H:%M')} "
-            f"(Helsinki time) · freshness lag: ~{freshness_min} min"
+            f"Helsinki time · data age: ~{freshness_min} min"
         )
 else:
     safe_weather_df = pd.DataFrame()
@@ -741,6 +762,7 @@ tooltip = {
         <div><b>{tooltip_title}</b></div>
         <div>{tooltip_line_1}</div>
         <div>{tooltip_line_2}</div>
+        <div>{tooltip_line_location}</div>
         <div>{tooltip_line_3}</div>
         <div>{tooltip_line_4}</div>
     </div>
@@ -761,3 +783,5 @@ deck = pdk.Deck(
 )
 
 st.pydeck_chart(deck, use_container_width=True)
+
+st.caption(f"Page rendered in {time.time() - start_time:.2f}s")

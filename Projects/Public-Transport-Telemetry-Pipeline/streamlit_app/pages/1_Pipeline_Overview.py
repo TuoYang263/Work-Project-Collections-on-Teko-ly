@@ -38,11 +38,11 @@ if pd.notna(latest_window_end):
         0, int((now_local - latest_window_end.to_pydatetime()).total_seconds() / 60)
     )
     st.caption(
-        f"Latest data window end: {latest_window_end.strftime('%Y-%m-%d %H:%M')} "
-        f"(Helsinki time) · freshness lag: ~{freshness_min} min"
+        f"Latest exported data window: {latest_window_end.strftime('%Y-%m-%d %H:%M')} "
+        f"Helsinki time · data age: ~{freshness_min} min"
     )
 else:
-    st.caption("Latest data window end: N/A")
+    st.caption("Latest exported data window: N/A")
 
 # --------------------------------------------------
 # Use the most recent valid transit window for KPI
@@ -154,6 +154,10 @@ st.markdown("""
 st.caption(
     "This page is intended for stable inspection of recent exported pipeline outputs, "
     "not for live pipeline monitoring."
+)
+
+st.caption(
+    "Data is refreshed by the scheduled pipeline. Metrics represent the latest exported Gold-layer snapshot."
 )
 
 st.caption(f"Page rendered in {time.time() - start_time:.2f}s")
