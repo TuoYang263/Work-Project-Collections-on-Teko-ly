@@ -1,9 +1,7 @@
-name: Refresh Telemetry Parquet
+name: Refresh Telemetry Parquet Manual Fallback
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: "*/30 * * * *"  # every 30 minutes
+  workflow_dispatch: {}
 
 jobs:
   refresh-parquet:
