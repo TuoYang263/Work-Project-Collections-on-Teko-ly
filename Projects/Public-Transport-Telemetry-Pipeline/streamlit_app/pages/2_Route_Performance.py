@@ -71,11 +71,11 @@ if pd.notna(latest_window_end):
         0, int((now_local - latest_window_end.to_pydatetime()).total_seconds() / 60)
     )
     st.caption(
-        f"Latest route window end: {latest_window_end.strftime('%Y-%m-%d %H:%M')} "
-        f"(Helsinki time) · freshness lag: ~{freshness_min} min"
+        f"Latest exported data window: {latest_window_end.strftime('%Y-%m-%d %H:%M')} "
+        f"Helsinki time · data age: ~{freshness_min} min"
     )
 else:
-    st.caption("Latest route window end: N/A")
+    st.caption("Latest exported data window: N/A")
 
 if df_daily is None:
     df_daily = pd.DataFrame()
@@ -264,5 +264,10 @@ else:
     st.caption(
         "This table reflects the exported Gold-layer daily aggregates per route."
     )
+
+st.caption(
+    "Data is refreshed by the scheduled pipeline. Route metrics represent "
+    "the latest exported Gold-layer snapshots."
+)
 
 st.caption(f"Page rendered in {time.time() - start_time:.2f}s")

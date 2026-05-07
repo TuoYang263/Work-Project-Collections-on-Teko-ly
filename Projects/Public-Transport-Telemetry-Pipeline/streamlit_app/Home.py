@@ -62,6 +62,15 @@ with col2:
 
 st.divider()
 
+st.subheader("Refresh Model")
+
+st.markdown("""
+- Optional Azure Databricks Job runs the full Bronze → Silver → Gold refresh
+- Exported parquet outputs are uploaded to Azure Blob for dashboard serving
+- GitHub Actions keepalive is used only to reduce Render dashboard cold starts
+- HSL and FMI data are treated as snapshot-style external context
+""")
+
 st.caption(
-    "This project is intentionally scoped as a compact, production-friendly telemetry system designed for clarity, portability, and explainable engineering trade-offs."
+    "This project is intentionally scoped as a compact, production-friendly telemetry system designed for clarity, portability, scheduled refresh, and explainable engineering trade-offs."
 )
