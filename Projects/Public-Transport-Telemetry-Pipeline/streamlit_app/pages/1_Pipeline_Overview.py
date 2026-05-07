@@ -7,6 +7,12 @@ import streamlit as st
 
 from utils.load_data import load_pipeline_metrics
 
+from utils.insights import (
+    explain_pipeline_metrics,
+    explain_snapshot_status,
+    render_insight_box,
+)
+
 start_time = time.time()
 now_local = datetime.now(ZoneInfo("Europe/Helsinki"))
 
@@ -112,6 +118,23 @@ col3.metric("Data Quality Status", dq_status)
 st.caption(
     "KPIs are calculated from the most recent valid transit window. "
     "This keeps the dashboard stable when transit and weather data are refreshed at different times."
+)
+
+snapshot_age_min = freshness_min if pd.notna(latest_window_end) else None
+
+pipeline_insights = [
+    explain_snapshot_status(snapshot_age_min),
+    *explain_pipeline_metrics(
+        total_events=total_transit_events,
+        avg_ingest_delay_sec=avg_ingest_gap,
+        dq_status=dq_status,
+    ),
+]
+
+render_insight_box(
+    st,
+    "How to read this snapshot",
+    pipeline_insights,
 )
 
 # ===== Trend =====

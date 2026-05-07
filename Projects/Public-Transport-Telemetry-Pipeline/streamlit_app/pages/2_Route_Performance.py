@@ -7,6 +7,12 @@ import streamlit as st
 
 from utils.load_data import load_route_window, load_route_daily
 
+from utils.insights import (
+    explain_route_metrics,
+    explain_snapshot_status,
+    render_insight_box,
+)
+
 
 def safe_mean(series: pd.Series, decimals: int = 2):
     series = pd.to_numeric(series, errors="coerce").dropna()
@@ -113,9 +119,13 @@ else:
 # ===== KPI =====
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("Avg Delay (s)", safe_mean(latest_window_df["avg_delay_sec"]))
-col2.metric("Avg Occupancy (%)", safe_mean(latest_window_df["avg_occupancy_pct"]))
-col3.metric("Late Rate (%)", safe_rate_pct(latest_window_df["late_rate_delay"]))
+avg_delay_value = safe_mean(latest_window_df["avg_delay_sec"])
+avg_occupancy_value = safe_mean(latest_window_df["avg_occupancy_pct"])
+late_rate_value = safe_rate_pct(latest_window_df["late_rate_delay"])
+
+col1.metric("Avg Delay (s)", avg_delay_value)
+col2.metric("Avg Occupancy (%)", avg_occupancy_value)
+col3.metric("Late Rate (%)", late_rate_value)
 
 if "n_events_delay" in latest_window_df.columns:
     observed_events = safe_sum(latest_window_df["n_events_delay"])
@@ -128,6 +138,24 @@ col4.metric("Observed Events", observed_events)
 
 st.caption(
     "KPIs above reflect the latest available exported route window, while the charts below show recent historical context."
+)
+
+snapshot_age_min = freshness_min if pd.notna(latest_window_end) else None
+
+route_insights = [
+    explain_snapshot_status(snapshot_age_min),
+    *explain_route_metrics(
+        selected_route=selected_route,
+        observed_events=observed_events,
+        avg_delay=avg_delay_value,
+        late_rate=late_rate_value,
+    ),
+]
+
+render_insight_box(
+    st,
+    "How to read this route snapshot",
+    route_insights,
 )
 
 # ===== Main chart =====
