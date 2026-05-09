@@ -14,38 +14,36 @@ This repository highlights a small set of projects that best represent my curren
 
 ## Featured Project — Primary Focus
 
-### Public Transport Telemetry Pipeline
+### Public Transport Telemetry Pipeline with Weather Context
 
-> This is the most representative project of my current work.
+> This is the most representative project of my current data engineering work.
 
-**Production-style data pipeline with observability, decoupled serving, and practical engineering trade-offs**
+**Production-oriented telemetry pipeline with Spark-style layers, Azure Blob serving, dashboard consumption, and cost-aware cloud execution**
 
 Live demo: https://transport-telemetry-dashboard-vs4l.onrender.com
 
-This project models a realistic telemetry pipeline where operational signals and external data (weather) are integrated into a unified data flow.
+This project models a scheduled public transport telemetry data product. It combines simulated transit telemetry with FMI weather context and HSL route reference data, then exposes stable Gold-layer outputs through a Streamlit dashboard.
 
-- Implemented a Bronze → Silver → Gold architecture using Spark and Delta-style design
-- Unified telemetry and weather data into a shared event model
-- Built event-time windowed aggregation for operational metrics
-- Designed pipeline observability signals (freshness, lag, duplicates, volume)
-- Exported precomputed outputs (parquet) for stable downstream consumption
-- Deployed a lightweight dashboard reading from Azure Blob Storage
-- Automated pipeline execution and refresh using GitHub Actions
+- Designed a Bronze → Silver → Gold pipeline using Spark and Delta-style data modeling
+- Separated `event_time` and `ingest_time` to support clearer telemetry semantics
+- Built route-level KPIs, pipeline health metrics, and dashboard-ready parquet outputs
+- Used Azure Blob Storage as a decoupled serving boundary between pipeline execution and dashboard consumption
+- Validated an optional Azure Databricks Job execution path for managed cloud refresh
+- Added an Azure Function Timer Trigger for lightweight metadata heartbeat and refresh transparency
+- Added an optional OpenAI explanation layer that summarizes precomputed facts without entering the metric calculation path
+- Deployed a Streamlit dashboard on Render with external uptime checks to reduce cold starts
+- Documented cost-aware trade-offs between portfolio deployment and production-grade infrastructure
 
-The focus is on **clarity, stability, and realistic trade-offs**, rather than system complexity.
+The focus is on **clear data responsibilities, stable downstream consumption, and practical engineering trade-offs**, rather than feature complexity.
 
 **Design boundary**
 
-This project intentionally avoids platform-level complexity (e.g. streaming infrastructure, orchestration frameworks, API layers) to keep the system focused, explainable, and maintainable. The emphasis is on clear data modeling and reliable downstream consumption rather than full platform coverage.
+This is a scheduled snapshot dashboard, not a live operations monitoring system. Databricks is used as an optional managed execution path, while the dashboard can continue serving the latest exported parquet outputs from Azure Blob Storage without keeping compute continuously active.
 
-**Optional extension — explanation layer**
-
-An optional explanation layer can be added on top of the curated KPI outputs to provide lightweight summaries and guided Q&A.
-
-This layer would operate on precomputed data and would not modify the pipeline itself, keeping the core system deterministic and maintainable.
+Weather is used as contextual external information only. The project does not infer causal weather impact.
 
 **Tech stack:**  
-PySpark · Delta Lake · SQL · GitHub Actions · Azure Blob Storage · Streamlit
+PySpark · Delta-style Medallion Architecture · Azure Blob Storage · Azure Databricks · Azure Functions · Streamlit · Render · GitHub Actions · OpenAI API
 
 View project details:  
 [`Public-Transport-Telemetry-Pipeline`](./Projects/Public-Transport-Telemetry-Pipeline)
@@ -119,17 +117,18 @@ They are kept for reference, but are not the focus of my current work.
 ## Core Skills & Tools
 
 - **Languages:** Python, SQL  
-- **Data Engineering:** PySpark, BigQuery, Airflow, Docker  
-- **Analytics & BI:** Pandas, Streamlit, Power BI  
-- **Cloud & DevOps:** Terraform, GitHub Actions  
-- **Workflow:** Git, Jupyter, reproducible pipelines
+- **Data Engineering:** PySpark, Delta-style Medallion Architecture, BigQuery, Airflow, data modeling, data quality checks  
+- **Cloud & Serving:** Azure Blob Storage, Azure Databricks, Azure Functions, Render, Streamlit  
+- **DevOps & Infrastructure:** Docker, Terraform, GitHub Actions, GitHub OIDC  
+- **Analytics & BI:** Pandas, Power BI, dashboard-ready data products  
+- **Workflow:** Git, Jupyter, reproducible pipelines, cost-aware deployment trade-offs
 
 ---
 
 ## Contact
 
 If you are reviewing this repository as part of a job application,  
-the **Public Transport Telemetry Pipeline** is the best place to start.
+the **Public Transport Telemetry Pipeline with Weather Context** is the best place to start.
 
 LinkedIn:  
 https://www.linkedin.com/in/tuo-yang-6b772b207/
