@@ -1,0 +1,10 @@
+# Exclude notebooks from GitHub language statistics.
+# Notebooks are kept as exploration / development notes,
+# while production-oriented pipeline logic lives in src/, scripts/, and streamlit_app/.
+*.ipynb linguist-vendored
+
+# Exclude generated/static data artifacts from GitHub language statistics.
+*.csv linguist-vendored
+*.json linguist-vendored
+*.parquet linguist-vendored
+*.html linguist-vendored
