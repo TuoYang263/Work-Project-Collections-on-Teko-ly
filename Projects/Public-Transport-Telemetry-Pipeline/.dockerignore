@@ -1,0 +1,17 @@
+.git
+__pycache__
+*.pyc
+.pytest_cache
+.venv
+de_env
+env
+venv
+notebooks
+docs
+logs
+metastore_db
+data/bronze
+data/silver
+data/output
+*.log
+*.crc
