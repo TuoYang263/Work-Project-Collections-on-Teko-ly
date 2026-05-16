@@ -66,9 +66,10 @@ st.divider()
 st.subheader("Refresh Model")
 
 st.markdown("""
-- Optional Azure Databricks Job runs the full Bronze → Silver → Gold refresh
+- Azure Container Apps Scheduled Job runs the containerized Bronze → Silver → Gold refresh
 - Exported parquet outputs are uploaded to Azure Blob for dashboard serving
-- GitHub Actions keepalive is used only to reduce Render dashboard cold starts
+- Manual Container Apps Job is kept for validation and fallback runs
+- GitHub Actions and external uptime checks are used only to reduce Render dashboard cold starts
 - HSL and FMI data are treated as snapshot-style external context
 """)
 
@@ -85,7 +86,7 @@ if metadata:
     st.markdown(f"""
             - Latest lightweight metadata check: **{latest_metadata_check}**
             - Metadata owner: **Azure Function Timer Trigger**
-            - Full data refresh owner: **Azure Databricks scheduled job**
+            - Full data refresh owner: **Azure Container Apps Scheduled Job**
             - Live operations monitor: **No**
             """)
 else:
@@ -96,5 +97,5 @@ else:
 
 st.caption(
     "The metadata heartbeat only records lightweight dashboard metadata status. "
-    "It does not refresh Gold-layer metrics, trigger Databricks, or fetch HSL/FMI data."
+    "It does not run the pipeline, refresh Gold-layer metrics, or fetch HSL/FMI data."
 )

@@ -225,7 +225,7 @@ st.caption(
 )
 
 st.caption(
-    "Data is refreshed by the scheduled pipeline. Metrics represent the latest exported Gold-layer snapshot."
+    "Data is refreshed by the Azure Container Apps scheduled pipeline. Metrics represent the latest exported Gold-layer snapshot."
 )
 
 st.caption(f"Page rendered in {time.time() - start_time:.2f}s")
