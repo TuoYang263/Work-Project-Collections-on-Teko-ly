@@ -17,9 +17,9 @@ Render free-tier cold starts may still occur. External uptime checks are used to
 
 A production-oriented public transport telemetry pipeline with weather context, built as a scheduled snapshot data product.
 
-The project uses Spark and Delta-style Bronze/Silver/Gold processing to generate route-level metrics, pipeline health indicators, and dashboard-ready outputs. Gold-layer parquet files are exported to Azure Blob Storage and served by a Streamlit dashboard deployed on Render.
+The project uses Spark and Delta-style Bronze/Silver/Gold processing to generate route-level metrics, pipeline health indicators, and dashboard-ready outputs. The refresh workflow is containerized with Docker and scheduled through Azure Container Apps Jobs. Gold-layer parquet files are exported to Azure Blob Storage and served by a Streamlit dashboard deployed on Render.
 
-The system is designed around practical engineering trade-offs: scheduled refresh instead of always-on streaming, precomputed outputs instead of live database queries, optional AI explanation over deterministic facts, and lightweight metadata heartbeat instead of expensive continuous refresh.
+The main trade-off is to keep the refresh path simple: run the pipeline on a schedule, export stable parquet files, and let the dashboard read from Azure Blob Storage. AI explanation and metadata heartbeat are optional layers, not part of the core metric calculation.
 
 ---
 
@@ -30,7 +30,9 @@ The system is designed around practical engineering trade-offs: scheduled refres
 - Route-level KPI modeling and pipeline health metrics
 - HSL route geometry and FMI weather station context
 - Azure Blob Storage as a decoupled serving layer
-- Azure Databricks Job as an optional cloud execution path
+- Azure Container Apps Jobs as the primary scheduled refresh path
+- Azure Databricks Job as an optional managed Spark validation path
+- Dockerized batch execution with Azure Container Registry image deployment
 - Azure Function metadata heartbeat for lightweight dashboard transparency
 - Optional OpenAI explanation layer over precomputed rule-based facts
 - Render dashboard deployment with external uptime checks for cold-start reduction
@@ -40,7 +42,7 @@ The system is designed around practical engineering trade-offs: scheduled refres
 
 ## Engineering Signals
 
-This project is designed to demonstrate practical data engineering judgment rather than feature complexity.
+I kept the project intentionally small, so the main focus stays on pipeline boundaries, refresh ownership, serving design, and cost control.
 
 It shows how to:
 
@@ -52,6 +54,8 @@ It shows how to:
 - validate an optional Azure Databricks execution path without keeping compute always on
 - make refresh behavior transparent through a lightweight Azure Function metadata heartbeat
 - document cost-aware deployment trade-offs for a personal portfolio environment
+- run the refresh workflow as a containerized batch job instead of always-on infrastructure
+- use Azure Container Apps Jobs as a cost-aware scheduler for portfolio-scale refreshes
 
 ---
 
@@ -101,7 +105,7 @@ The Map View combines HSL route geometry, sampled vehicle points, and FMI weathe
 
 ### 5. Architecture Overview
 
-The architecture view summarizes the end-to-end design: Bronze → Silver → Gold processing, parquet export, Azure Blob serving, Streamlit dashboard consumption, optional Databricks execution, optional OpenAI explanation, and lightweight metadata heartbeat.
+The architecture view summarizes the end-to-end design: containerized scheduled refresh, Bronze → Silver → Gold processing, parquet export, Azure Blob serving, Streamlit dashboard consumption, optional Databricks validation, optional OpenAI explanation, and lightweight metadata heartbeat.
 
 ![Architecture](docs/architecture.png)
 
@@ -121,7 +125,12 @@ Pipeline Processing
   └── Spark / Delta-style Bronze -> Silver -> Gold layers
 
 Cloud Execution
-  └── Optional Azure Databricks Job for full scheduled refresh
+  ├── Azure Container Apps Job for scheduled containerized refresh
+  ├── Manual Container Apps Job for validation / fallback runs
+  └── Optional Azure Databricks Job for managed Spark validation
+
+Container Image
+  └── Docker image stored in Azure Container Registry
 
 Serving Layer
   └── Exported Gold parquet outputs uploaded to Azure Blob Storage
@@ -141,20 +150,21 @@ The dashboard is intentionally separated from the pipeline execution layer. It r
 
 ## Refresh & Serving Model
 
-This project uses a scheduled snapshot refresh model.
+The full data refresh is currently owned by an Azure Container Apps scheduled job.
 
-The full data refresh is owned by an optional Azure Databricks Job:
+The scheduled job runs a containerized refresh workflow:
 
-1. Run the Bronze -> Silver -> Gold pipeline
-2. Export dashboard-ready Gold outputs as parquet files
-3. Upload exported parquet files to Azure Blob Storage
-4. Let the Render-hosted Streamlit dashboard read the latest exported outputs
+1. Pull the pipeline image from Azure Container Registry
+2. Run the Bronze -> Silver -> Gold pipeline
+3. Export dashboard-ready Gold outputs as parquet files
+4. Upload exported parquet files to Azure Blob Storage
+5. Let the Render-hosted Streamlit dashboard read the latest exported outputs
 
-GitHub Actions is kept as a manual fallback and best-effort keepalive mechanism. It is not treated as the primary production scheduler.
+The scheduled job currently runs every three hours using the cron expression `0 */3 * * *`. This is used as a validation-phase refresh frequency and may be reduced for stricter cost control.
 
-Azure Function writes a lightweight metadata heartbeat file to Azure Blob Storage. This metadata does not refresh Gold metrics, trigger Databricks, or fetch HSL/FMI data. It only improves dashboard transparency by showing when the lightweight metadata check last ran.
+A separate manual Container Apps Job is kept for validation and fallback runs.
 
-External uptime checks ping the Streamlit endpoint to reduce Render free-tier cold starts. This improves demo availability, but the dashboard is not designed as an always-on production service.
+Azure Databricks is retained as an optional managed Spark validation path. Its schedule is paused for cost control and it is not used as the routine refresh scheduler.
 
 ---
 
@@ -229,7 +239,7 @@ Guardrails:
 - Does not claim weather impact or causal analysis
 - Falls back to rule-based insights when the OpenAI API key is not configured
 
-This keeps the dashboard explainable while preserving deterministic metrics as the source of truth.
+The dashboard can show a short explanation, but the numbers still come from the Gold-layer outputs.
 
 ---
 
@@ -257,11 +267,14 @@ This is a personal portfolio deployment, so the architecture separates productio
 
 Key trade-offs:
 
-- Azure Databricks is used to validate a managed cloud execution path, but the dashboard can continue serving the latest exported parquet outputs without keeping Databricks compute continuously active.
-- Azure Blob Storage acts as a low-cost serving layer between pipeline execution and dashboard consumption.
-- Azure Function is used only for lightweight metadata heartbeat, not incremental data refresh.
+- Azure Container Apps Jobs are used as the primary scheduled refresh path because the workload is batch-oriented and does not require always-on compute.
+- The refresh pipeline is containerized and stored in Azure Container Registry, making the execution path reproducible across local Docker and Azure.
+- Azure Databricks was used to validate a managed Spark execution path, but routine scheduling was moved to Azure Container Apps Jobs to reduce fixed cloud cost exposure.
+- Azure Blob Storage acts as a low-cost serving boundary between pipeline execution and dashboard consumption.
+- Azure Function is used only for lightweight metadata heartbeat, not incremental data refresh or pipeline orchestration.
 - Render free-tier hosting may cold start; external uptime checks reduce this but do not provide production SLA.
-- GitHub Actions is retained as manual fallback and best-effort automation, not as a strict scheduler.
+- GitHub Actions is retained as manual fallback and best-effort automation, not as the primary scheduler.
+- Databricks was used as an optional managed Spark validation path. Routine scheduling was disabled, and the managed Databricks environment does not need to remain active after validation.
 
 In a company production environment, this setup would typically be upgraded with managed monitoring, alerting, Key Vault or managed identity, stricter orchestration, and company-owned cloud cost controls.
 
@@ -363,11 +376,11 @@ The pipeline produces data. The dashboard consumes data.
 
 Azure Blob Storage acts as the serving boundary between those layers. This makes the dashboard easier to deploy and prevents UI availability from depending on pipeline execution.
 
-### Databricks as an optional cloud execution path
+### Container Apps Jobs for routine refresh, Databricks for validation
 
-Azure Databricks validates that the pipeline can run in a managed cloud data engineering environment.
+Azure Container Apps Jobs are used for routine scheduled refreshes because the workload is batch-oriented and can run as a short-lived container.
 
-The same pipeline logic can run locally or through the Databricks job wrapper. For portfolio cost control, Databricks does not need to stay continuously active after the latest outputs have been exported.
+Azure Databricks was used to validate that the same Spark pipeline can run in a managed cloud data engineering environment. Its schedule is paused for cost control and it is retained only as an optional validation path.
 
 ### Lightweight metadata heartbeat
 
@@ -426,6 +439,7 @@ Projects/Public-Transport-Telemetry-Pipeline/
   scripts/
     run_pipeline.py                 # local pipeline runner
     run_databricks_refresh.py       # Databricks Job wrapper
+    run_container_refresh.py        # Azure Container Apps Job entrypoint
     export_gold.py                  # export Gold outputs to parquet
     upload_outputs_to_blob.py       # upload dashboard outputs to Azure Blob
 
@@ -468,11 +482,46 @@ Projects/Public-Transport-Telemetry-Pipeline/
     databricks_successful_run.jpg
     azure_function_metadata_heartbeat.jpg
     uptimerobot_keepalive.jpg
+    azure_container_apps_job.md
+    containerized_refresh_validation.jpg
+    aca_scheduled_job.jpg
+    azure_cost_analysis_nat_gateway.jpg
+    databricks_job_schedule_paused.jpg
+    databricks_compute_sql_warehouse_inactive.jpg
 
+Dockerfile
+.dockerignore
 README.md
 requirements.txt
 .gitignore
 ```
+
+---
+
+## Containerized Azure Container Apps Job Execution Path
+
+The project includes a container refresh entrypoint:
+
+```bash
+python Projects/Public-Transport-Telemetry-Pipeline/scripts/run_container_refresh.py
+```
+
+Build the Docker image locally:
+
+```bash
+docker build -t telemetry-pipeline-job .
+```
+
+Run the container locally:
+
+```bash
+docker run --rm \
+  -e AZURE_STORAGE_CONNECTION_STRING="$AZURE_STORAGE_CONNECTION_STRING" \
+  -e AZURE_BLOB_CONTAINER="$AZURE_BLOB_CONTAINER" \
+  telemetry-pipeline-job
+```
+
+The same image is pushed to Azure Container Registry and executed by Azure Container Apps Jobs.
 
 ---
 
@@ -518,7 +567,7 @@ streamlit run Projects/Public-Transport-Telemetry-Pipeline/streamlit_app/Home.py
 
 ---
 
-## Optional Azure Databricks Execution Path
+## Optional Azure Databricks Validation Path
 
 The project includes a Databricks-compatible refresh wrapper:
 
@@ -526,7 +575,7 @@ The project includes a Databricks-compatible refresh wrapper:
 python Projects/Public-Transport-Telemetry-Pipeline/scripts/run_databricks_refresh.py --layer full
 ```
 
-In Azure Databricks, this wrapper is used by a Job task to run the full refresh flow:
+During validation, this wrapper was used by an Azure Databricks Job task to run the full refresh flow:
 
 1. Run the pipeline
 2. Export Gold outputs
@@ -539,6 +588,27 @@ This path is optional for portfolio cost control. Once exported parquet outputs 
 ---
 
 ## Deployment Notes
+
+### Azure Container Apps Jobs
+
+The scheduled refresh job runs the containerized pipeline from Azure Container Registry.
+
+Current job roles:
+
+- `telemetry-refresh-job-scheduled` — primary scheduled refresh job
+- `telemetry-refresh-job` — manual validation / fallback job
+
+Runtime configuration:
+
+- Image: `telemetryacr263.azurecr.io/telemetry-pipeline-job:local-v1`
+- Schedule: `0 */3 * * *`
+- CPU / memory: 2 vCPU / 4 Gi
+- Blob credentials are injected through a Container Apps secret reference.
+
+Required job environment variables:
+
+- `AZURE_STORAGE_CONNECTION_STRING`
+- `AZURE_BLOB_CONTAINER`
 
 ### Dashboard
 
@@ -585,14 +655,14 @@ Current limitations:
 - dashboard data is refreshed as scheduled snapshots
 - weather data is used as context, not causal analysis
 - Render free-tier hosting may cold start
-- Databricks execution is optional and cost-controlled
+- Databricks execution is optional, not used as the routine scheduler, and can be disabled or removed for cost control
 - alerting and SLA monitoring are intentionally out of scope
 
 ---
 
 ## Additional Screenshots
 
-Additional dashboard and operations screenshots are kept in the `docs/` folder. They provide supporting evidence for the optional AI explanation layer, route-level comparison, Databricks execution, and lightweight metadata heartbeat.
+Additional dashboard and operations screenshots are kept in the `docs/` folder. They provide supporting evidence for the Azure Container Apps scheduled refresh path, Databricks validation and cost-control decisions, optional AI explanation layer, and lightweight metadata heartbeat.
 
 <details>
 <summary>Show additional screenshots</summary>
@@ -608,6 +678,26 @@ Additional dashboard and operations screenshots are kept in the `docs/` folder. 
 ### All-route ranking view
 
 ![All-route Ranking](docs/dashboard_route_ranking_all.jpg)
+
+### Azure Container Apps scheduled job
+
+![Azure Container Apps Scheduled Job](docs/aca_scheduled_job.jpg)
+
+### Containerized refresh validation
+
+![Containerized Refresh Validation](docs/containerized_refresh_validation.jpg)
+
+### Azure cost analysis / NAT Gateway monitoring
+
+![Azure Cost Analysis](docs/azure_cost_analysis_nat_gateway.jpg)
+
+### Databricks schedule paused for cost control
+
+![Databricks Job Schedule Paused](docs/databricks_job_schedule_paused.jpg)
+
+### Databricks compute inactive after migration
+
+![Databricks Compute Inactive](docs/databricks_compute_sql_warehouse_inactive.jpg)
 
 ### Azure Databricks successful run
 
@@ -630,7 +720,6 @@ Additional dashboard and operations screenshots are kept in the `docs/` folder. 
 Possible future extensions include:
 
 - structured streaming with lower-latency ingestion
-- containerized scheduled execution with Azure Container Apps Jobs as a lower-cost alternative to managed Databricks execution for portfolio-scale refreshes
 - stronger backfill and reprocessing support
 - automated alerting on pipeline health metrics
 - richer data quality checks
