@@ -164,7 +164,7 @@ The scheduled job currently runs every three hours using the cron expression `0 
 
 A separate manual Container Apps Job is kept for validation and fallback runs.
 
-Azure Databricks is retained as an optional managed Spark validation path. Its schedule is paused for cost control and it is not used as the routine refresh scheduler.
+Azure Databricks was used as an optional managed Spark validation path. It is not used as the routine refresh scheduler and can be disabled or removed after validation for cost control.
 
 ---
 
@@ -522,6 +522,8 @@ docker run --rm \
 ```
 
 The same image is pushed to Azure Container Registry and executed by Azure Container Apps Jobs.
+
+For detailed Azure Container Apps Job deployment commands, parameter notes, validation steps, and troubleshooting, see [`docs/azure_container_apps_job.md`](docs/azure_container_apps_job.md).
 
 ---
 
