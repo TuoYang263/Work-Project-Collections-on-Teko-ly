@@ -28,7 +28,7 @@ def check_file_exists(report: QualityReport, path: Path, dataset_name: str) -> b
         details=f"File not found: {path}",
     )
     return False
-    
+
 
 def read_parquet_safely(
     report: QualityReport,
@@ -37,7 +37,7 @@ def read_parquet_safely(
 ) -> pd.DataFrame | None:
     try:
         df = pd.read_parquet(path)
-    except Exception as exc: # pragma: no cover - defensive runtime guard
+    except Exception as exc:  # pragma: no cover - defensive runtime guard
         report.add_check(
             name=f"{dataset_name}_readable",
             status="failed",
@@ -45,7 +45,7 @@ def read_parquet_safely(
             details=f"Could not read parquet file: {type(exc).__name__}: {exc}",
         )
         return None
-    
+
     report.add_check(
         name=f"{dataset_name}_readable",
         status="passed",
@@ -72,7 +72,7 @@ def check_required_columns(
             details=f"Missing required columns: {missing}",
         )
         return False
-    
+
     report.add_check(
         name=f"{dataset_name}_required_columns",
         status="passed",
@@ -96,7 +96,7 @@ def check_not_empty(
             details=f"Dataset contains {len(df)} rows.",
         )
         return True
-    
+
     if allow_empty:
         report.add_check(
             name=f"{dataset_name}_not_empty",
@@ -105,7 +105,7 @@ def check_not_empty(
             details="Dataset is empty. This can be acceptable for optional map/context outputs.",
         )
         return False
-    
+
     report.add_check(
         name=f"{dataset_name}_not_empty",
         status="failed",
@@ -175,7 +175,7 @@ def check_numeric_range(
             details=f"Column {column} is missing.",
         )
         return False
-    
+
     values = pd.to_numeric(df[column], errors="coerce")
     invalid_numeric = int(values.isna().sum())
     out_of_range = pd.Series(False, index=df.index)
@@ -186,7 +186,7 @@ def check_numeric_range(
         out_of_range = out_of_range | (values > max_value)
 
     out_of_range_count = int(out_of_range.fillna(False).sum())
-    
+
     if invalid_numeric == 0 and out_of_range_count == 0:
         report.add_check(
             name=f"{dataset_name}_{column}_numeric_range",
@@ -195,7 +195,7 @@ def check_numeric_range(
             details=f"Column {column} is numeric and within expected range.",
         )
         return True
-    
+
     status = "failed" if required else "warning"
     severity = "critical" if required else "warning"
     report.add_check(
@@ -228,7 +228,7 @@ def check_allowed_values(
             details=f"Column {column} is missing.",
         )
         return False
-    
+
     allowed = set(allowed_values)
     observed = set(df[column].dropna().astype(str).unique())
     unexpected = sorted(observed - allowed)
@@ -241,7 +241,7 @@ def check_allowed_values(
             details=f"Column {column} only contains expected values.",
         )
         return True
-    
+
     status = "failed" if required else "warning"
     severity = "critical" if required else "warning"
     report.add_check(
@@ -267,7 +267,7 @@ def check_no_null_like_strings(
             details=f"Column {column} is missing; null-like string check skipped.",
         )
         return False
-    
+
     normalized = df[column].fillna("").astype(str).str.strip().str.lower()
     bad_count = int(normalized.isin(NULL_LIKE_STRINGS).sum())
 
@@ -308,7 +308,7 @@ def check_coordinate_bounds(
             details=f"Missing coordinate columns: {lat_column}, {lon_column}",
         )
         return False
-    
+
     lat = pd.to_numeric(df[lat_column], errors="coerce")
     lon = pd.to_numeric(df[lon_column], errors="coerce")
 

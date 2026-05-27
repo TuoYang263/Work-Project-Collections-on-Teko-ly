@@ -16,6 +16,7 @@ ReportStatus = Literal["passed", "passed_with_warnings", "failed"]
 # Allowed severity levels for validation checks.
 CheckSeverity = Literal["critical", "warning", "info"]
 
+
 # Dataclass is used here as a lightweight container for structured check results
 @dataclass
 class QualityCheck:
@@ -24,14 +25,19 @@ class QualityCheck:
 
     status:
     - passed: the check passed normally
-    - warning: the check found a non-critical issue
-    - failed: the check found a critical issue
+    - warning: the check found a visible but non-blocking issue
+    - failed: the check found an issue that should fail the report
 
     severity:
-    - critical: failure should fail the report
-    - warning: issue should be visible but should not fail the report
-    - info: useful context only
+    - critical: this is a critical check; failed status should fail the report
+    - warning: this is a non-critical check; issues should be visible but non-blocking
+    - info: informational check only
+
+    Note:
+    severity describes the importance of the check, not the severity of the
+    current result. For example, a critical check can still have status="passed".
     """
+
     name: str
     status: CheckStatus
     severity: CheckSeverity
@@ -47,6 +53,7 @@ class QualityReport:
     It can be written as an artifact, reviewed manually, or summarized later
     in the dashboard without making the dashboard execute quality checks.
     """
+
     source: str
 
     # Unique identifier for this validation report run.
@@ -143,7 +150,7 @@ class QualityReport:
             encoding="utf-8",
         )
         return output
-    
+
     def exit_code(self) -> int:
         """
         Exit code policy:
@@ -151,6 +158,3 @@ class QualityReport:
         - passed / passed_with_warnings -> 0
         """
         return 1 if self.status == "failed" else 0
-    
-    
-
