@@ -164,6 +164,7 @@ def check_numeric_range(
     min_value: float | None = None,
     max_value: float | None = None,
     required: bool = True,
+    allow_null: bool = False,
 ) -> bool:
     if column not in df.columns:
         status = "failed" if required else "warning"
@@ -176,8 +177,17 @@ def check_numeric_range(
         )
         return False
 
-    values = pd.to_numeric(df[column], errors="coerce")
-    invalid_numeric = int(values.isna().sum())
+    raw_values = df[column]
+    values = pd.to_numeric(raw_values, errors="coerce")
+
+    # allow_null=True is used for intentionally sparse columns.
+    # Real nulls are allowed, but non-null dirty values such as "unknown"
+    # or "N/A" should still fail numeric conversion.
+    if allow_null:
+        invalid_numeric = int((values.isna() & raw_values.isna().eq(False)).sum())
+    else:
+        invalid_numeric = int(values.isna().sum())
+
     out_of_range = pd.Series(False, index=df.index)
 
     if min_value is not None:

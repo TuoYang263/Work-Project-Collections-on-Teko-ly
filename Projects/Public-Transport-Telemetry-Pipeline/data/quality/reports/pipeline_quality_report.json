@@ -1,0 +1,426 @@
+{
+  "source": "pipeline_outputs",
+  "run_id": "e7d59fd4-0649-48f6-b000-3fb99e6ce5ff",
+  "ingest_time": "2026-06-04T17:45:17.739604+00:00",
+  "status": "passed_with_warnings",
+  "checks": [
+    {
+      "name": "gold_route_window_file_exists",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Found /mnt/d/Work Collections/Work-Project-Collections-on-Teko-ly/Projects/Public-Transport-Telemetry-Pipeline/data/output/gold_route_window.parquet"
+    },
+    {
+      "name": "gold_route_window_readable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Parquet file is readable with 96 rows and 11 columns."
+    },
+    {
+      "name": "gold_route_window_required_columns",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All required columns are present."
+    },
+    {
+      "name": "gold_route_window_not_empty",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Dataset contains 96 rows."
+    },
+    {
+      "name": "gold_route_window_window_start_parseable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All values in window_start are parseable as datetime."
+    },
+    {
+      "name": "gold_route_window_window_end_parseable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All values in window_end are parseable as datetime."
+    },
+    {
+      "name": "gold_route_window_avg_occupancy_pct_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column avg_occupancy_pct is numeric and within expected range."
+    },
+    {
+      "name": "gold_route_window_late_rate_delay_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column late_rate_delay is numeric and within expected range."
+    },
+    {
+      "name": "gold_route_window_avg_ingest_delay_sec_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column avg_ingest_delay_sec is numeric and within expected range."
+    },
+    {
+      "name": "gold_route_window_n_events_delay_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column n_events_delay is numeric and within expected range."
+    },
+    {
+      "name": "gold_route_window_n_events_occupancy_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column n_events_occupancy is numeric and within expected range."
+    },
+    {
+      "name": "gold_route_window_dq_flag_allowed_values",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column dq_flag only contains expected values."
+    },
+    {
+      "name": "gold_route_daily_file_exists",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Found /mnt/d/Work Collections/Work-Project-Collections-on-Teko-ly/Projects/Public-Transport-Telemetry-Pipeline/data/output/gold_route_daily.parquet"
+    },
+    {
+      "name": "gold_route_daily_readable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Parquet file is readable with 8 rows and 9 columns."
+    },
+    {
+      "name": "gold_route_daily_required_columns",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All required columns are present."
+    },
+    {
+      "name": "gold_route_daily_not_empty",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Dataset contains 8 rows."
+    },
+    {
+      "name": "gold_route_daily_date_parseable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All values in date are parseable as datetime."
+    },
+    {
+      "name": "gold_route_daily_avg_occupancy_pct_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column avg_occupancy_pct is numeric and within expected range."
+    },
+    {
+      "name": "gold_route_daily_avg_late_rate_delay_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column avg_late_rate_delay is numeric and within expected range."
+    },
+    {
+      "name": "gold_route_daily_avg_ingest_delay_sec_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column avg_ingest_delay_sec is numeric and within expected range."
+    },
+    {
+      "name": "gold_route_daily_total_events_delay_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column total_events_delay is numeric and within expected range."
+    },
+    {
+      "name": "gold_route_daily_total_events_occupancy_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column total_events_occupancy is numeric and within expected range."
+    },
+    {
+      "name": "gold_route_daily_dq_flag_allowed_values",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column dq_flag only contains expected values."
+    },
+    {
+      "name": "pipeline_metrics_file_exists",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Found /mnt/d/Work Collections/Work-Project-Collections-on-Teko-ly/Projects/Public-Transport-Telemetry-Pipeline/data/output/pipeline_metrics.parquet"
+    },
+    {
+      "name": "pipeline_metrics_readable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Parquet file is readable with 36 rows and 6 columns."
+    },
+    {
+      "name": "pipeline_metrics_required_columns",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All required columns are present."
+    },
+    {
+      "name": "pipeline_metrics_not_empty",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Dataset contains 36 rows."
+    },
+    {
+      "name": "pipeline_metrics_window_start_parseable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All values in window_start are parseable as datetime."
+    },
+    {
+      "name": "pipeline_metrics_window_end_parseable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All values in window_end are parseable as datetime."
+    },
+    {
+      "name": "pipeline_metrics_transit_total_events_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column transit_total_events is numeric and within expected range."
+    },
+    {
+      "name": "pipeline_metrics_weather_total_events_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column weather_total_events is numeric and within expected range."
+    },
+    {
+      "name": "pipeline_metrics_transit_avg_ingest_delay_sec_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column transit_avg_ingest_delay_sec is numeric and within expected range."
+    },
+    {
+      "name": "pipeline_metrics_weather_avg_ingest_delay_sec_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column weather_avg_ingest_delay_sec is numeric and within expected range."
+    },
+    {
+      "name": "hsl_map_points_file_exists",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Found /mnt/d/Work Collections/Work-Project-Collections-on-Teko-ly/Projects/Public-Transport-Telemetry-Pipeline/data/gold/hsl/hsl_map_points.parquet"
+    },
+    {
+      "name": "hsl_map_points_readable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Parquet file is readable with 631 rows and 7 columns."
+    },
+    {
+      "name": "hsl_map_points_required_columns",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All required columns are present."
+    },
+    {
+      "name": "hsl_map_points_not_empty",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Dataset contains 631 rows."
+    },
+    {
+      "name": "hsl_map_points_coordinate_bounds",
+      "status": "warning",
+      "severity": "warning",
+      "details": "Found 0 invalid coordinate pairs and 5 pairs outside configured coordinate bounds."
+    },
+    {
+      "name": "hsl_map_points_transport_mode_allowed_values",
+      "status": "passed",
+      "severity": "warning",
+      "details": "Column transport_mode only contains expected values."
+    },
+    {
+      "name": "hsl_route_options_file_exists",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Found /mnt/d/Work Collections/Work-Project-Collections-on-Teko-ly/Projects/Public-Transport-Telemetry-Pipeline/data/gold/hsl/hsl_route_options.parquet"
+    },
+    {
+      "name": "hsl_route_options_readable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Parquet file is readable with 170 rows and 4 columns."
+    },
+    {
+      "name": "hsl_route_options_required_columns",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All required columns are present."
+    },
+    {
+      "name": "hsl_route_options_not_empty",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Dataset contains 170 rows."
+    },
+    {
+      "name": "hsl_route_options_transport_mode_allowed_values",
+      "status": "passed",
+      "severity": "warning",
+      "details": "Column transport_mode only contains expected values."
+    },
+    {
+      "name": "hsl_route_options_route_label_null_like_strings",
+      "status": "passed",
+      "severity": "warning",
+      "details": "No null-like strings found in route_label."
+    },
+    {
+      "name": "hsl_route_options_route_short_name_null_like_strings",
+      "status": "passed",
+      "severity": "warning",
+      "details": "No null-like strings found in route_short_name."
+    },
+    {
+      "name": "hsl_route_paths_file_exists",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Found /mnt/d/Work Collections/Work-Project-Collections-on-Teko-ly/Projects/Public-Transport-Telemetry-Pipeline/data/gold/hsl/hsl_route_paths.parquet"
+    },
+    {
+      "name": "hsl_route_paths_readable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Parquet file is readable with 452 rows and 6 columns."
+    },
+    {
+      "name": "hsl_route_paths_required_columns",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All required columns are present."
+    },
+    {
+      "name": "hsl_route_paths_not_empty",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Dataset contains 452 rows."
+    },
+    {
+      "name": "hsl_route_paths_transport_mode_allowed_values",
+      "status": "warning",
+      "severity": "warning",
+      "details": "Unexpected values in transport_mode: ['other']"
+    },
+    {
+      "name": "hsl_route_paths_route_short_name_null_like_strings",
+      "status": "passed",
+      "severity": "warning",
+      "details": "No null-like strings found in route_short_name."
+    },
+    {
+      "name": "hsl_route_paths_overview_file_exists",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Found /mnt/d/Work Collections/Work-Project-Collections-on-Teko-ly/Projects/Public-Transport-Telemetry-Pipeline/data/gold/hsl/hsl_route_paths_overview.parquet"
+    },
+    {
+      "name": "hsl_route_paths_overview_readable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Parquet file is readable with 171 rows and 6 columns."
+    },
+    {
+      "name": "hsl_route_paths_overview_required_columns",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All required columns are present."
+    },
+    {
+      "name": "hsl_route_paths_overview_not_empty",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Dataset contains 171 rows."
+    },
+    {
+      "name": "hsl_route_paths_overview_transport_mode_allowed_values",
+      "status": "warning",
+      "severity": "warning",
+      "details": "Unexpected values in transport_mode: ['other']"
+    },
+    {
+      "name": "hsl_route_paths_overview_route_short_name_null_like_strings",
+      "status": "passed",
+      "severity": "warning",
+      "details": "No null-like strings found in route_short_name."
+    },
+    {
+      "name": "weather_stations_latest_file_exists",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Found /mnt/d/Work Collections/Work-Project-Collections-on-Teko-ly/Projects/Public-Transport-Telemetry-Pipeline/data/gold/weather/weather_stations_latest.parquet"
+    },
+    {
+      "name": "weather_stations_latest_readable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Parquet file is readable with 3 rows and 7 columns."
+    },
+    {
+      "name": "weather_stations_latest_required_columns",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All required columns are present."
+    },
+    {
+      "name": "weather_stations_latest_not_empty",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Dataset contains 3 rows."
+    },
+    {
+      "name": "weather_stations_latest_coordinate_bounds",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Coordinates are numeric and within configured coordinate bounds."
+    },
+    {
+      "name": "weather_stations_latest_observation_time_parseable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All values in observation_time are parseable as datetime."
+    },
+    {
+      "name": "weather_stations_latest_temperature_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column temperature is numeric and within expected range."
+    },
+    {
+      "name": "weather_stations_latest_precipitation_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column precipitation is numeric and within expected range."
+    }
+  ],
+  "record_count": {
+    "gold_route_window": 96,
+    "gold_route_daily": 8,
+    "pipeline_metrics": 36,
+    "hsl_map_points": 631,
+    "hsl_route_options": 170,
+    "hsl_route_paths": 452,
+    "hsl_route_paths_overview": 171,
+    "weather_stations_latest": 3
+  },
+  "warnings": [
+    "hsl_map_points_coordinate_bounds: Found 0 invalid coordinate pairs and 5 pairs outside configured coordinate bounds.",
+    "hsl_route_paths_transport_mode_allowed_values: Unexpected values in transport_mode: ['other']",
+    "hsl_route_paths_overview_transport_mode_allowed_values: Unexpected values in transport_mode: ['other']"
+  ],
+  "errors": [],
+  "metadata": {
+    "validation_scope": "pipeline_output_quality",
+    "connected_to_dashboard": false,
+    "runs_pipeline": false,
+    "checks_real_apis": false
+  }
+}

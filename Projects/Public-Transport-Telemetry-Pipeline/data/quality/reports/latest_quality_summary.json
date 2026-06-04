@@ -1,0 +1,20 @@
+{
+  "source": "pipeline_outputs",
+  "status": "passed_with_warnings",
+  "run_id": "e7d59fd4-0649-48f6-b000-3fb99e6ce5ff",
+  "ingest_time": "2026-06-04T17:45:17.739604+00:00",
+  "total_checks": 66,
+  "passed": 63,
+  "warnings": 3,
+  "failed": 0,
+  "record_count": {
+    "gold_route_window": 96,
+    "gold_route_daily": 8,
+    "pipeline_metrics": 36,
+    "hsl_map_points": 631,
+    "hsl_route_options": 170,
+    "hsl_route_paths": 452,
+    "hsl_route_paths_overview": 171,
+    "weather_stations_latest": 3
+  }
+}
