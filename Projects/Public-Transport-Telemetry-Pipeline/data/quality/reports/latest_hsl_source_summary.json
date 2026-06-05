@@ -1,0 +1,11 @@
+{
+  "source": "hsl_source_snapshot",
+  "status": "passed",
+  "run_id": "ad255031-4f9b-420e-8827-5f0864a06780",
+  "ingest_time": "2026-06-05T17:24:27.404264+00:00",
+  "total_checks": 1,
+  "passed": 1,
+  "warnings": 0,
+  "failed": 0,
+  "record_count": {}
+}

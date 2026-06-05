@@ -1,0 +1,24 @@
+{
+  "source": "hsl_source_snapshot",
+  "run_id": "ad255031-4f9b-420e-8827-5f0864a06780",
+  "ingest_time": "2026-06-05T17:24:27.404264+00:00",
+  "status": "passed",
+  "checks": [
+    {
+      "name": "hsl_source_validation_skeleton",
+      "status": "passed",
+      "severity": "info",
+      "details": "HSL source validation script is available. Dataset-specific compatibility checks will be added in the next step."
+    }
+  ],
+  "record_count": {},
+  "warnings": [],
+  "errors": [],
+  "metadata": {
+    "validation_scope": "real_source_compatibility",
+    "source_system": "HSL",
+    "connected_to_dashboard": false,
+    "runs_pipeline": false,
+    "modifies_pipeline_outputs": false
+  }
+}
