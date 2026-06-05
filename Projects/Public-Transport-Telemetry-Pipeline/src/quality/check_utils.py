@@ -357,3 +357,112 @@ def check_coordinate_bounds(
         ),
     )
     return False
+
+
+def check_datetime_order(
+    report: QualityReport,
+    df: pd.DataFrame,
+    start_column: str,
+    end_column: str,
+    dataset_name: str,
+    required: bool = True,
+) -> bool:
+    """
+    Check that one datetime column is strictly after another datetime column.
+
+    This is used for safe semantic checks such as:
+    - window_end > window_start
+
+    The function only validates the relationship between the two provided
+    columns. It does not check every datetime column in the dataset.
+
+    Invalid or unparseable datetime values are counted separately from rows
+    where the datetime order itself is wrong.
+    """
+    if start_column not in df.columns or end_column not in df.columns:
+        status = "failed" if required else "warning"
+        severity = "critical" if required else "warning"
+        report.add_check(
+            name=f"{dataset_name}_{start_column}_before_{end_column}",
+            status=status,
+            severity=severity,
+            details=f"Missing datetime columns: {start_column}, {end_column}.",
+        )
+        return False
+
+    start = pd.to_datetime(df[start_column], errors="coerce")
+    end = pd.to_datetime(df[end_column], errors="coerce")
+
+    invalid_datetime = start.isna() | end.isna()
+    invalid_order = (end <= start) & invalid_datetime.eq(False)
+
+    invalid_datetime_count = int(invalid_datetime.sum())
+    invalid_order_count = int(invalid_order.sum())
+
+    if invalid_datetime_count == 0 and invalid_order_count == 0:
+        report.add_check(
+            name=f"{dataset_name}_{start_column}_before_{end_column}",
+            status="passed",
+            severity="critical" if required else "warning",
+            details=f"All rows have {end_column} after {start_column}.",
+        )
+        return True
+
+    status = "failed" if required else "warning"
+    severity = "critical" if required else "warning"
+    report.add_check(
+        name=f"{dataset_name}_{start_column}_before_{end_column}",
+        status=status,
+        severity=severity,
+        details=(
+            f"Found {invalid_datetime_count} rows with unparseable datetimes and "
+            f"{invalid_order_count} rows where {end_column} is not after {start_column}."
+        ),
+    )
+    return False
+
+
+def check_unique_key(
+    report: QualityReport,
+    df: pd.DataFrame,
+    key_columns: Iterable[str],
+    dataset_name: str,
+    required: bool = True,
+) -> bool:
+    key_columns = tuple(key_columns)
+    missing = [column for column in key_columns if column not in df.columns]
+
+    if missing:
+        status = "failed" if required else "warning"
+        severity = "critical" if required else "warning"
+        report.add_check(
+            name=f"{dataset_name}_unique_key",
+            status=status,
+            severity=severity,
+            details=f"Missing key columns for uniqueness check: {missing}.",
+        )
+        return False
+
+    duplicate_count = int(df.duplicated(subset=list(key_columns)).sum())
+
+    if duplicate_count == 0:
+        report.add_check(
+            name=f"{dataset_name}_unique_key",
+            status="passed",
+            severity="critical" if required else "warning",
+            details=f"Dataset is unique by key columns: {list(key_columns)}.",
+        )
+        return True
+
+    status = "failed" if required else "warning"
+    severity = "critical" if required else "warning"
+    report.add_check(
+        name=f"{dataset_name}_unique_key",
+        status=status,
+        severity=severity,
+        details=(
+            f"Found {duplicate_count} duplicate rows by key columns: "
+            f"{list(key_columns)}."
+        ),
+    )
+    return False
