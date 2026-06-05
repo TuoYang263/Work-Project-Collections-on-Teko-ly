@@ -1,10 +1,10 @@
 {
   "source": "pipeline_outputs",
   "status": "passed_with_warnings",
-  "run_id": "e7d59fd4-0649-48f6-b000-3fb99e6ce5ff",
-  "ingest_time": "2026-06-04T17:45:17.739604+00:00",
-  "total_checks": 66,
-  "passed": 63,
+  "run_id": "b355554c-e1e3-41c7-a1f1-618b5543362a",
+  "ingest_time": "2026-06-05T16:18:55.776131+00:00",
+  "total_checks": 71,
+  "passed": 68,
   "warnings": 3,
   "failed": 0,
   "record_count": {

@@ -1,7 +1,7 @@
 {
   "source": "pipeline_outputs",
-  "run_id": "e7d59fd4-0649-48f6-b000-3fb99e6ce5ff",
-  "ingest_time": "2026-06-04T17:45:17.739604+00:00",
+  "run_id": "b355554c-e1e3-41c7-a1f1-618b5543362a",
+  "ingest_time": "2026-06-05T16:18:55.776131+00:00",
   "status": "passed_with_warnings",
   "checks": [
     {
@@ -39,6 +39,18 @@
       "status": "passed",
       "severity": "critical",
       "details": "All values in window_end are parseable as datetime."
+    },
+    {
+      "name": "gold_route_window_window_start_before_window_end",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All rows have window_end after window_start."
+    },
+    {
+      "name": "gold_route_window_unique_key",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Dataset is unique by key columns: ['route_id', 'window_start', 'window_end']."
     },
     {
       "name": "gold_route_window_avg_occupancy_pct_numeric_range",
@@ -105,6 +117,12 @@
       "status": "passed",
       "severity": "critical",
       "details": "All values in date are parseable as datetime."
+    },
+    {
+      "name": "gold_route_daily_unique_key",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Dataset is unique by key columns: ['route_id', 'date']."
     },
     {
       "name": "gold_route_daily_avg_occupancy_pct_numeric_range",
@@ -177,6 +195,18 @@
       "status": "passed",
       "severity": "critical",
       "details": "All values in window_end are parseable as datetime."
+    },
+    {
+      "name": "pipeline_metrics_window_start_before_window_end",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All rows have window_end after window_start."
+    },
+    {
+      "name": "pipeline_metrics_unique_key",
+      "status": "passed",
+      "severity": "warning",
+      "details": "Dataset is unique by key columns: ['window_start', 'window_end']."
     },
     {
       "name": "pipeline_metrics_transit_total_events_numeric_range",

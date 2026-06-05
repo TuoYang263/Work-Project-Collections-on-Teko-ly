@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from pathlib import Path
 
 import pandas as pd
@@ -6,12 +7,14 @@ import pandas as pd
 from src.quality.check_utils import (
     check_allowed_values,
     check_coordinate_bounds,
+    check_datetime_order,
     check_file_exists,
     check_no_null_like_strings,
     check_not_empty,
     check_numeric_range,
     check_parseable_datetime,
     check_required_columns,
+    check_unique_key,
     read_parquet_safely,
 )
 from src.quality.contracts import (
@@ -81,6 +84,19 @@ def validate_dataset_specific_rules(
     if dataset_name == "gold_route_window":
         check_parseable_datetime(report, df, "window_start", dataset_name)
         check_parseable_datetime(report, df, "window_end", dataset_name)
+        check_datetime_order(
+            report,
+            df,
+            start_column="window_start",
+            end_column="window_end",
+            dataset_name=dataset_name,
+        )
+        check_unique_key(
+            report,
+            df,
+            key_columns=("route_id", "window_start", "window_end"),
+            dataset_name=dataset_name,
+        )
         check_numeric_range(report, df, "avg_occupancy_pct", dataset_name, 0, 100)
         check_numeric_range(report, df, "late_rate_delay", dataset_name, 0, 1)
         check_numeric_range(report, df, "avg_ingest_delay_sec", dataset_name, 0)
@@ -96,6 +112,12 @@ def validate_dataset_specific_rules(
 
     elif dataset_name == "gold_route_daily":
         check_parseable_datetime(report, df, "date", dataset_name)
+        check_unique_key(
+            report,
+            df,
+            key_columns=("route_id", "date"),
+            dataset_name=dataset_name,
+        )
         check_numeric_range(report, df, "avg_occupancy_pct", dataset_name, 0, 100)
         check_numeric_range(report, df, "avg_late_rate_delay", dataset_name, 0, 1)
         check_numeric_range(report, df, "avg_ingest_delay_sec", dataset_name, 0)
@@ -112,6 +134,20 @@ def validate_dataset_specific_rules(
     elif dataset_name == "pipeline_metrics":
         check_parseable_datetime(report, df, "window_start", dataset_name)
         check_parseable_datetime(report, df, "window_end", dataset_name)
+        check_datetime_order(
+            report,
+            df,
+            start_column="window_start",
+            end_column="window_end",
+            dataset_name=dataset_name,
+        )
+        check_unique_key(
+            report,
+            df,
+            key_columns=("window_start", "window_end"),
+            dataset_name=dataset_name,
+            required=False,
+        )
         check_numeric_range(
             report,
             df,

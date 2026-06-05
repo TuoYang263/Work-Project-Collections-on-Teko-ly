@@ -13,6 +13,7 @@ from src.quality.pipeline_quality import (
     run_pipeline_quality_checks,
 )
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
