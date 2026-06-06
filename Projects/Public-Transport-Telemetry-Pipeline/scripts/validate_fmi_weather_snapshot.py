@@ -11,39 +11,42 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.quality.check_utils import (
-    check_allowed_values,
     check_coordinate_bounds,
     check_file_exists,
     check_not_empty,
+    check_numeric_range,
     check_parseable_datetime,
     check_required_columns,
 )
 from src.quality.contracts import (
-    ALLOWED_TRANSPORT_MODES,
+    RAIN_MM_MIN,
     REAL_SOURCE_COMPATIBILITY_BOUNDS,
+    TEMPERATURE_C_MAX,
+    TEMPERATURE_C_MIN,
 )
 from src.quality.validation_report import QualityReport
 
-DEFAULT_INPUT_PATH = Path("data/source_samples/hsl_vehicle_snapshot.parquet")
-DEFAULT_REPORT_PATH = Path("data/quality/reports/hsl_source_validation_report.json")
-DEFAULT_SUMMARY_PATH = Path("data/quality/reports/latest_hsl_source_summary.json")
+DEFAULT_INPUT_PATH = Path("data/source_samples/fmi_weather_snapshot.parquet")
+DEFAULT_REPORT_PATH = Path("data/quality/reports/fmi_source_validation_report.json")
+DEFAULT_SUMMARY_PATH = Path("data/quality/reports/latest_fmi_source_summary.json")
 
-HSL_REQUIRED_COLUMNS = (
-    "vehicle_id",
-    "route_id",
-    "transport_mode",
+FMI_REQUIRED_COLUMNS = (
+    "station_id",
+    "station_name",
     "lat",
     "lon",
-    "timestamp",
+    "observation_time",
+    "temperature",
+    "precipitation",
 )
 
 
 def read_snapshot(path: Path) -> pd.DataFrame:
     """
-    Read a local HSL source snapshot from parquet, JSON or JSON Lines.
+    Read a local FMI weather source snapshot from parquet, JSON, or JSON Lines.
 
     This script validates a local compatibility snapshot instead of calling
-    the live HSL API directly. This keeps source validation reproducible and
+    the live FMI API directly. This keeps source validation reproducible and
     separate from the dashboard serving path.
     """
     suffix = path.suffix.lower()
@@ -74,29 +77,29 @@ def read_snapshot(path: Path) -> pd.DataFrame:
     )
 
 
-def run_hsl_source_validation(
+def run_fmi_source_validation(
     input_path: Path = DEFAULT_INPUT_PATH,
     report_path: Path = DEFAULT_REPORT_PATH,
     summary_path: Path = DEFAULT_SUMMARY_PATH,
 ) -> QualityReport:
     """
-    Run optional compatibility checks for HSL source snapshots.
+    Run optional compatibility checks for FMI weather source snapshots.
 
     This script does not feed the dashboard or modify pipeline outputs.
-    It validates whether a source snapshot can be interpreted by the
-    project's telemetry event model.
+    It validates whether a local weather snapshot can be interpreted by the
+    project's weather context model.
     """
-    report = QualityReport(source="hsl_source_snapshot")
+    report = QualityReport(source="fmi_weather_source_snapshot")
 
     report.add_metadata("validation_scope", "real_source_compatibility")
-    report.add_metadata("source_system", "HSL")
+    report.add_metadata("source_system", "FMI")
     report.add_metadata("input_path", str(input_path))
     report.add_metadata("connected_to_dashboard", False)
     report.add_metadata("runs_pipeline", False)
     report.add_metadata("modifies_pipeline_outputs", False)
     report.add_metadata("calls_live_api", False)
 
-    dataset_name = "hsl_source_snapshot"
+    dataset_name = "fmi_weather_source_snapshot"
 
     if not check_file_exists(report, input_path, dataset_name):
         report.save(report_path)
@@ -130,7 +133,7 @@ def run_hsl_source_validation(
     has_required_columns = check_required_columns(
         report=report,
         df=df,
-        required_columns=HSL_REQUIRED_COLUMNS,
+        required_columns=FMI_REQUIRED_COLUMNS,
         dataset_name=dataset_name,
     )
 
@@ -141,7 +144,7 @@ def run_hsl_source_validation(
     )
 
     if has_required_columns and has_rows:
-        check_parseable_datetime(report, df, "timestamp", dataset_name)
+        check_parseable_datetime(report, df, "observation_time", dataset_name)
 
         check_coordinate_bounds(
             report,
@@ -153,13 +156,21 @@ def run_hsl_source_validation(
             required=True,
         )
 
-        check_allowed_values(
+        check_numeric_range(
             report,
             df,
-            "transport_mode",
+            "temperature",
             dataset_name,
-            ALLOWED_TRANSPORT_MODES,
-            required=False,
+            TEMPERATURE_C_MIN,
+            TEMPERATURE_C_MAX,
+        )
+
+        check_numeric_range(
+            report,
+            df,
+            "precipitation",
+            dataset_name,
+            RAIN_MM_MIN,
         )
 
     report.save(report_path)
@@ -170,14 +181,14 @@ def run_hsl_source_validation(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Validate optional HSL source snapshot compatibility."
+        description="Validate optional FMI weather source snapshot compatibility."
     )
     parser.add_argument(
         "--input",
         type=Path,
         default=DEFAULT_INPUT_PATH,
         help=(
-            "Path to a local HSL source snapshot file. "
+            "Path to a local FMI weather source snapshot file. "
             "Supported formats: parquet, json, jsonl."
         ),
     )
@@ -185,20 +196,20 @@ def parse_args() -> argparse.Namespace:
         "--output",
         type=Path,
         default=DEFAULT_REPORT_PATH,
-        help="Path for the full HSL source validation report JSON.",
+        help="Path for the full FMI source validation report JSON.",
     )
     parser.add_argument(
         "--summary-output",
         type=Path,
         default=DEFAULT_SUMMARY_PATH,
-        help="Path for the compact HSL source validation summary JSON.",
+        help="Path for the compact FMI source validation summary JSON.",
     )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    report = run_hsl_source_validation(
+    report = run_fmi_source_validation(
         input_path=args.input,
         report_path=args.output,
         summary_path=args.summary_output,
@@ -206,7 +217,7 @@ def main() -> int:
 
     summary = report.summary()
 
-    print("[data-quality] HSL source validation completed")
+    print("[data-quality] FMI source validation completed")
     print(f"[data-quality] Input snapshot: {args.input}")
     print(f"[data-quality] Status: {summary['status']}")
     print(f"[data-quality] Total checks: {summary['total_checks']}")

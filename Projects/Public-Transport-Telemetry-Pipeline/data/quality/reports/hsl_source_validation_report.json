@@ -1,24 +1,64 @@
 {
   "source": "hsl_source_snapshot",
-  "run_id": "ad255031-4f9b-420e-8827-5f0864a06780",
-  "ingest_time": "2026-06-05T17:24:27.404264+00:00",
+  "run_id": "f970cef6-6173-4380-9448-bfe60729bbb2",
+  "ingest_time": "2026-06-06T12:46:39.877929+00:00",
   "status": "passed",
   "checks": [
     {
-      "name": "hsl_source_validation_skeleton",
+      "name": "hsl_source_snapshot_file_exists",
       "status": "passed",
-      "severity": "info",
-      "details": "HSL source validation script is available. Dataset-specific compatibility checks will be added in the next step."
+      "severity": "critical",
+      "details": "Found data/source_samples/hsl_vehicle_snapshot.parquet"
+    },
+    {
+      "name": "hsl_source_snapshot_readable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Source snapshot is readable with 2 rows and 6 columns."
+    },
+    {
+      "name": "hsl_source_snapshot_required_columns",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All required columns are present."
+    },
+    {
+      "name": "hsl_source_snapshot_not_empty",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Dataset contains 2 rows."
+    },
+    {
+      "name": "hsl_source_snapshot_timestamp_parseable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All values in timestamp are parseable as datetime."
+    },
+    {
+      "name": "hsl_source_snapshot_coordinate_bounds",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Coordinates are numeric and within configured coordinate bounds."
+    },
+    {
+      "name": "hsl_source_snapshot_transport_mode_allowed_values",
+      "status": "passed",
+      "severity": "warning",
+      "details": "Column transport_mode only contains expected values."
     }
   ],
-  "record_count": {},
+  "record_count": {
+    "hsl_source_snapshot": 2
+  },
   "warnings": [],
   "errors": [],
   "metadata": {
     "validation_scope": "real_source_compatibility",
     "source_system": "HSL",
+    "input_path": "data/source_samples/hsl_vehicle_snapshot.parquet",
     "connected_to_dashboard": false,
     "runs_pipeline": false,
-    "modifies_pipeline_outputs": false
+    "modifies_pipeline_outputs": false,
+    "calls_live_api": false
   }
 }
