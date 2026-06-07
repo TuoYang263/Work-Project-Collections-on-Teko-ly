@@ -37,7 +37,9 @@ st.markdown("""
 - Route-level performance metrics for window and daily views
 - Gold parquet export for downstream consumption
 - Azure Blob upload for lightweight serving and portability
-- Streamlit dashboard with pipeline overview, route performance, and map view
+- Data quality validation reports for pipeline outputs and source compatibility checks
+- Read-only Data Quality dashboard backed by generated validation artifacts
+- Streamlit dashboard with pipeline overview, route performance, data quality, and map view
 - HSL route and vehicle map with FMI weather station context
 """)
 
@@ -57,6 +59,7 @@ with col1:
 with col2:
     st.markdown("""
 - **Decoupled dashboard layer** reading exported parquet
+- **Blob-backed quality reports** with local fallback
 - **Azure-compatible storage pattern**
 - **Delivery-focused scope control**
     """)
@@ -68,6 +71,7 @@ st.subheader("Refresh Model")
 st.markdown("""
 - Azure Container Apps Scheduled Job runs the containerized Bronze → Silver → Gold refresh
 - Exported parquet outputs are uploaded to Azure Blob for dashboard serving
+- Data quality and source compatibility reports are generated during scheduled refreshes and uploaded as read-only JSON artifacts
 - Manual Container Apps Job is kept for validation and fallback runs
 - GitHub Actions and external uptime checks are used only to reduce Render dashboard cold starts
 - HSL and FMI data are treated as snapshot-style external context
