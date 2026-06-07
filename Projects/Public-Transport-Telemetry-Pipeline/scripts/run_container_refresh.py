@@ -37,7 +37,46 @@ def main() -> None:
 
     run_command([sys.executable, "scripts/run_pipeline.py", "--layer", "full"])
     run_command([sys.executable, "scripts/export_gold.py"])
+
+    run_command(
+        [
+            sys.executable,
+            "scripts/run_quality_checks.py",
+            "--output",
+            "data/quality/reports/pipeline_quality_report.json",
+            "--summary-output",
+            "data/quality/reports/latest_quality_summary.json",
+        ]
+    )
+
+    run_command(
+        [
+            sys.executable,
+            "scripts/validate_hsl_snapshot.py",
+            "--input",
+            "data/source_samples/hsl_vehicle_snapshot.parquet",
+            "--output",
+            "data/quality/reports/hsl_source_validation_report.json",
+            "--summary-output",
+            "data/quality/reports/latest_hsl_source_summary.json",
+        ]
+    )
+
+    run_command(
+        [
+            sys.executable,
+            "scripts/validate_fmi_weather_snapshot.py",
+            "--input",
+            "data/source_samples/fmi_weather_snapshot.parquet",
+            "--output",
+            "data/quality/reports/fmi_source_validation_report.json",
+            "--summary-output",
+            "data/quality/reports/latest_fmi_source_summary.json",
+        ]
+    )
+
     run_command([sys.executable, "scripts/upload_outputs_to_blob.py"])
+    run_command([sys.executable, "scripts/upload_quality_reports_to_blob.py"])
 
     print("\n[container-refresh] Refresh job completed successfully")
 

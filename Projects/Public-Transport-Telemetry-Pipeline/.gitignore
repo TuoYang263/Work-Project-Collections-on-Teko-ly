@@ -40,11 +40,12 @@ data/gold/*.parquet
 data/gold/**/*.csv
 data/gold/**/*.parquet
 
-# Re-allow only curated demo artifacts
-!data/gold/hsl/
-!data/gold/hsl/*.parquet
-!data/gold/weather/
-!data/gold/weather/*.parquet
+# Curated source compatibility samples
+# These small versioned snapshots are used by local and remote validation jobs.
+data/source_samples/*
+!data/source_samples/
+!data/source_samples/hsl_vehicle_snapshot.parquet
+!data/source_samples/fmi_weather_snapshot.parquet
 
 # External GTFS: keep folder placeholder only, not raw huge txt/zip
 data/external/gtfs_hsl/*

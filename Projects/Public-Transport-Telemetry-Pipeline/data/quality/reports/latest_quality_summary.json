@@ -1,8 +1,8 @@
 {
   "source": "pipeline_outputs",
   "status": "passed_with_warnings",
-  "run_id": "b355554c-e1e3-41c7-a1f1-618b5543362a",
-  "ingest_time": "2026-06-05T16:18:55.776131+00:00",
+  "run_id": "4f03c9f0-c91c-4cd6-8394-e1228a4e7557",
+  "ingest_time": "2026-06-07T11:45:05.848844+00:00",
   "total_checks": 71,
   "passed": 68,
   "warnings": 3,
@@ -11,10 +11,10 @@
     "gold_route_window": 96,
     "gold_route_daily": 8,
     "pipeline_metrics": 36,
-    "hsl_map_points": 631,
-    "hsl_route_options": 170,
-    "hsl_route_paths": 452,
-    "hsl_route_paths_overview": 171,
+    "hsl_map_points": 599,
+    "hsl_route_options": 162,
+    "hsl_route_paths": 428,
+    "hsl_route_paths_overview": 163,
     "weather_stations_latest": 3
   }
 }

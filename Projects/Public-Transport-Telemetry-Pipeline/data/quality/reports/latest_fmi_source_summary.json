@@ -1,8 +1,8 @@
 {
   "source": "fmi_weather_source_snapshot",
   "status": "passed",
-  "run_id": "e44c86aa-11e8-47b1-b605-4b132cbe5692",
-  "ingest_time": "2026-06-06T17:06:38.816379+00:00",
+  "run_id": "910d26e9-61ac-4c75-9e1c-6cdf5069b329",
+  "ingest_time": "2026-06-07T11:45:07.366260+00:00",
   "total_checks": 8,
   "passed": 8,
   "warnings": 0,

@@ -7,6 +7,7 @@ import streamlit as st
 
 from utils.load_data import load_pipeline_metrics
 from utils.openai_explainer import generate_ai_explanation, has_openai_config
+from utils.quality import load_quality_summary, render_quality_summary
 
 from utils.insights import (
     explain_pipeline_metrics,
@@ -114,12 +115,16 @@ col1.metric(
     round(avg_ingest_gap, 2) if pd.notna(avg_ingest_gap) else "N/A",
 )
 col2.metric("Events Processed", total_transit_events)
-col3.metric("Data Quality Status", dq_status)
+col3.metric("Latest Transit Window", dq_status)
 
 st.caption(
     "KPIs are calculated from the most recent valid transit window. "
     "This keeps the dashboard stable when transit and weather data are refreshed at different times."
 )
+
+with st.expander("Pipeline validation report", expanded=False):
+    quality_summary = load_quality_summary()
+    render_quality_summary(quality_summary)
 
 snapshot_age_min = freshness_min if pd.notna(latest_window_end) else None
 

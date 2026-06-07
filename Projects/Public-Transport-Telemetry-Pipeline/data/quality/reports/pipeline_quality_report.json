@@ -1,7 +1,7 @@
 {
   "source": "pipeline_outputs",
-  "run_id": "b355554c-e1e3-41c7-a1f1-618b5543362a",
-  "ingest_time": "2026-06-05T16:18:55.776131+00:00",
+  "run_id": "4f03c9f0-c91c-4cd6-8394-e1228a4e7557",
+  "ingest_time": "2026-06-07T11:45:05.848844+00:00",
   "status": "passed_with_warnings",
   "checks": [
     {
@@ -242,7 +242,7 @@
       "name": "hsl_map_points_readable",
       "status": "passed",
       "severity": "critical",
-      "details": "Parquet file is readable with 631 rows and 7 columns."
+      "details": "Parquet file is readable with 599 rows and 7 columns."
     },
     {
       "name": "hsl_map_points_required_columns",
@@ -254,13 +254,13 @@
       "name": "hsl_map_points_not_empty",
       "status": "passed",
       "severity": "critical",
-      "details": "Dataset contains 631 rows."
+      "details": "Dataset contains 599 rows."
     },
     {
       "name": "hsl_map_points_coordinate_bounds",
       "status": "warning",
       "severity": "warning",
-      "details": "Found 0 invalid coordinate pairs and 5 pairs outside configured coordinate bounds."
+      "details": "Found 0 invalid coordinate pairs and 4 pairs outside configured coordinate bounds."
     },
     {
       "name": "hsl_map_points_transport_mode_allowed_values",
@@ -278,7 +278,7 @@
       "name": "hsl_route_options_readable",
       "status": "passed",
       "severity": "critical",
-      "details": "Parquet file is readable with 170 rows and 4 columns."
+      "details": "Parquet file is readable with 162 rows and 4 columns."
     },
     {
       "name": "hsl_route_options_required_columns",
@@ -290,7 +290,7 @@
       "name": "hsl_route_options_not_empty",
       "status": "passed",
       "severity": "critical",
-      "details": "Dataset contains 170 rows."
+      "details": "Dataset contains 162 rows."
     },
     {
       "name": "hsl_route_options_transport_mode_allowed_values",
@@ -320,7 +320,7 @@
       "name": "hsl_route_paths_readable",
       "status": "passed",
       "severity": "critical",
-      "details": "Parquet file is readable with 452 rows and 6 columns."
+      "details": "Parquet file is readable with 428 rows and 6 columns."
     },
     {
       "name": "hsl_route_paths_required_columns",
@@ -332,7 +332,7 @@
       "name": "hsl_route_paths_not_empty",
       "status": "passed",
       "severity": "critical",
-      "details": "Dataset contains 452 rows."
+      "details": "Dataset contains 428 rows."
     },
     {
       "name": "hsl_route_paths_transport_mode_allowed_values",
@@ -356,7 +356,7 @@
       "name": "hsl_route_paths_overview_readable",
       "status": "passed",
       "severity": "critical",
-      "details": "Parquet file is readable with 171 rows and 6 columns."
+      "details": "Parquet file is readable with 163 rows and 6 columns."
     },
     {
       "name": "hsl_route_paths_overview_required_columns",
@@ -368,7 +368,7 @@
       "name": "hsl_route_paths_overview_not_empty",
       "status": "passed",
       "severity": "critical",
-      "details": "Dataset contains 171 rows."
+      "details": "Dataset contains 163 rows."
     },
     {
       "name": "hsl_route_paths_overview_transport_mode_allowed_values",
@@ -435,14 +435,14 @@
     "gold_route_window": 96,
     "gold_route_daily": 8,
     "pipeline_metrics": 36,
-    "hsl_map_points": 631,
-    "hsl_route_options": 170,
-    "hsl_route_paths": 452,
-    "hsl_route_paths_overview": 171,
+    "hsl_map_points": 599,
+    "hsl_route_options": 162,
+    "hsl_route_paths": 428,
+    "hsl_route_paths_overview": 163,
     "weather_stations_latest": 3
   },
   "warnings": [
-    "hsl_map_points_coordinate_bounds: Found 0 invalid coordinate pairs and 5 pairs outside configured coordinate bounds.",
+    "hsl_map_points_coordinate_bounds: Found 0 invalid coordinate pairs and 4 pairs outside configured coordinate bounds.",
     "hsl_route_paths_transport_mode_allowed_values: Unexpected values in transport_mode: ['other']",
     "hsl_route_paths_overview_transport_mode_allowed_values: Unexpected values in transport_mode: ['other']"
   ],
