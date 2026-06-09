@@ -7,7 +7,7 @@ https://transport-telemetry-dashboard-vs4l.onrender.com
 
 This dashboard reads precomputed Gold-layer parquet outputs from Azure Blob Storage and presents the latest exported snapshot.
 
-> Note: This is a scheduled snapshot dashboard, not a live operations monitoring system. 
+> Note: This is a scheduled snapshot dashboard, not a live operations monitoring system.
 
 Render free-tier cold starts may still occur. External uptime checks are used to reduce startup delay, but the dashboard is not designed as an always-on production service.
 
@@ -19,7 +19,7 @@ A production-oriented public transport telemetry pipeline with weather context, 
 
 The project uses Spark and Delta-style Bronze/Silver/Gold processing to generate route-level metrics, pipeline health indicators, and dashboard-ready outputs. The refresh workflow is containerized with Docker and scheduled through Azure Container Apps Jobs. Gold-layer parquet files are exported to Azure Blob Storage and served by a Streamlit dashboard deployed on Render.
 
-The main trade-off is to keep the refresh path simple: run the pipeline on a schedule, export stable parquet files, and let the dashboard read from Azure Blob Storage. AI explanation and metadata heartbeat are optional layers, not part of the core metric calculation.
+The scheduled refresh also generates data quality and source compatibility reports. These reports are uploaded as read-only JSON artifacts to Azure Blob Storage and displayed in the dashboard with local fallback for development.
 
 ---
 
@@ -29,6 +29,8 @@ The main trade-off is to keep the refresh path simple: run the pipeline on a sch
 - Event-time and ingest-time separation for telemetry data
 - Route-level KPI modeling and pipeline health metrics
 - HSL route geometry and FMI weather station context
+- Data quality validation for exported Gold-layer outputs
+- Source compatibility validation for controlled HSL/FMI sample snapshots
 - Azure Blob Storage as a decoupled serving layer
 - Azure Container Apps Jobs as the primary scheduled refresh path
 - Azure Databricks Job as an optional managed Spark validation path
@@ -49,6 +51,7 @@ It shows how to:
 - separate pipeline execution from dashboard serving
 - model Bronze/Silver/Gold responsibilities clearly
 - expose deterministic Gold-layer outputs for downstream consumption
+- keep validation as generated artifacts owned by the scheduled refresh workflow
 - keep AI explanation outside the metric calculation path
 - use Azure Blob Storage as a lightweight serving boundary
 - validate an optional Azure Databricks execution path without keeping compute always on
@@ -95,7 +98,15 @@ The Route Performance page displays route-level KPI outputs designed for analysi
 
 ---
 
-### 4. Map View
+### 4. Data Quality & Source Validation
+
+The Data Quality page displays read-only validation reports generated during scheduled snapshot refreshes. It covers exported pipeline outputs and controlled HSL/FMI source compatibility snapshots.
+
+![Data Quality](docs/dashboard_data_quality.jpg)
+
+---
+
+### 5. Map View
 
 The Map View combines HSL route geometry, sampled vehicle points, and FMI weather station context. Weather is shown as contextual external information, not as causal impact analysis.
 
@@ -103,9 +114,9 @@ The Map View combines HSL route geometry, sampled vehicle points, and FMI weathe
 
 ---
 
-### 5. Architecture Overview
+### 6. Architecture Overview
 
-The architecture view summarizes the end-to-end design: containerized scheduled refresh, Bronze → Silver → Gold processing, parquet export, Azure Blob serving, Streamlit dashboard consumption, optional Databricks validation, optional OpenAI explanation, and lightweight metadata heartbeat.
+The architecture view summarizes the end-to-end design: containerized scheduled refresh, Bronze → Silver → Gold processing, parquet export, data quality validation, Azure Blob serving, Streamlit dashboard consumption, optional Databricks validation, optional OpenAI explanation, and lightweight metadata heartbeat.
 
 ![Architecture](docs/architecture.png)
 
@@ -132,11 +143,19 @@ Cloud Execution
 Container Image
   └── Docker image stored in Azure Container Registry
 
+Quality Validation
+  ├── Pipeline output validation for exported Gold artifacts
+  ├── HSL source compatibility validation using versioned sample snapshot
+  └── FMI source compatibility validation using versioned sample snapshot
+
 Serving Layer
-  └── Exported Gold parquet outputs uploaded to Azure Blob Storage
+  ├── Exported Gold parquet outputs uploaded to Azure Blob Storage
+  └── Generated quality reports uploaded to Azure Blob Storage as JSON artifacts
 
 Dashboard Layer
-  └── Streamlit dashboard deployed on Render
+  ├── Streamlit dashboard deployed on Render
+  ├── Dashboard pages reading exported parquet outputs
+  └── Data Quality page reading generated validation reports
 
 Supporting Services
   ├── Azure Function metadata heartbeat
@@ -144,7 +163,7 @@ Supporting Services
   └── External uptime checks + GitHub Actions best-effort keepalive
 ```
 
-The dashboard is intentionally separated from the pipeline execution layer. It reads stable exported files instead of querying live processing systems.
+The dashboard is intentionally separated from the pipeline execution layer. It reads stable exported parquet files and generated validation JSON artifacts instead of querying live processing systems or running validation checks inside the UI.
 
 ---
 
@@ -157,8 +176,12 @@ The scheduled job runs a containerized refresh workflow:
 1. Pull the pipeline image from Azure Container Registry
 2. Run the Bronze -> Silver -> Gold pipeline
 3. Export dashboard-ready Gold outputs as parquet files
-4. Upload exported parquet files to Azure Blob Storage
-5. Let the Render-hosted Streamlit dashboard read the latest exported outputs
+4. Run data quality checks against exported pipeline outputs
+5. Run HSL/FMI source compatibility checks against controlled versioned sample snapshots
+6. Upload exported parquet files and validation JSON reports to Azure Blob Storage
+7. Let the Render-hosted Streamlit dashboard read the latest exported outputs and validation artifacts
+
+The dashboard does not execute validation logic. It displays generated validation artifacts in read-only mode, using Azure Blob Storage as the primary source and local files as a development fallback.
 
 The scheduled job currently runs every three hours using the cron expression `0 */3 * * *`. This is used as a validation-phase refresh frequency and may be reduced for stricter cost control.
 
@@ -205,6 +228,20 @@ The Route Performance page provides route-level KPIs and recent historical conte
 - optional AI-generated explanation
 
 These metrics are descriptive snapshot summaries, not live service alerts.
+
+### Data Quality & Source Validation
+
+The Data Quality page displays generated validation reports in read-only mode.
+
+It includes:
+
+- pipeline output validation summary
+- HSL source snapshot compatibility validation
+- FMI weather source snapshot compatibility validation
+- dataset-level record counts
+- check-level details, warnings, and metadata
+
+The page does not run checks, call HSL/FMI live APIs, or modify pipeline outputs. In deployed mode, it reads validation JSON artifacts from Azure Blob Storage. In local development, it can fall back to files under `data/quality/reports/`.
 
 ### Map View
 
@@ -350,6 +387,8 @@ Gold outputs include:
 
 These outputs are exported as parquet files and uploaded to Azure Blob Storage for dashboard consumption.
 
+Validation outputs are stored separately from Gold parquet outputs. Pipeline quality reports and source compatibility reports are generated under `data/quality/reports/` and uploaded to Azure Blob Storage under `quality/reports/`.
+
 ---
 
 ## Design Decisions
@@ -375,6 +414,14 @@ This reduces runtime dependencies and keeps dashboard performance predictable.
 The pipeline produces data. The dashboard consumes data.
 
 Azure Blob Storage acts as the serving boundary between those layers. This makes the dashboard easier to deploy and prevents UI availability from depending on pipeline execution.
+
+### Read-only validation artifacts
+
+Data quality checks are executed as part of the scheduled refresh workflow, not inside the dashboard.
+
+The validation subsystem produces JSON artifacts for pipeline output checks and source compatibility checks. The dashboard reads these artifacts as evidence of the latest refresh quality state.
+
+This keeps validation ownership in the batch workflow and keeps the UI read-only, lightweight, and safe.
 
 ### Container Apps Jobs for routine refresh, Databricks for validation
 
@@ -427,6 +474,10 @@ Projects/Public-Transport-Telemetry-Pipeline/
       weather/                      # FMI weather station parquet outputs
       output/                       # dashboard-ready Gold parquet outputs
     external/gtfs_hsl/              # HSL GTFS reference files
+    source_samples/
+      hsl_vehicle_snapshot.parquet  # versioned controlled HSL source sample
+      fmi_weather_snapshot.parquet  # versioned controlled FMI source sample
+    quality/reports/                # generated local validation reports, not required for repo tracking
 
   src/pipeline/
     bronze.py                       # Bronze ingestion logic
@@ -436,12 +487,22 @@ Projects/Public-Transport-Telemetry-Pipeline/
     config.py
     setup.py
 
+  src/quality/
+    validation_report.py            # report models and JSON serialization
+    contracts.py                    # expected schemas and validation contracts
+    check_utils.py                  # reusable validation check helpers
+    pipeline_quality.py             # pipeline output quality checks
+
   scripts/
     run_pipeline.py                 # local pipeline runner
     run_databricks_refresh.py       # Databricks Job wrapper
     run_container_refresh.py        # Azure Container Apps Job entrypoint
     export_gold.py                  # export Gold outputs to parquet
     upload_outputs_to_blob.py       # upload dashboard outputs to Azure Blob
+    run_quality_checks.py           # validate exported pipeline outputs
+    validate_hsl_snapshot.py        # validate controlled HSL source sample
+    validate_fmi_weather_snapshot.py  # validate controlled FMI source sample
+    upload_quality_reports_to_blob.py # upload validation JSON artifacts to Azure Blob
 
   streamlit_app/
     Home.py
@@ -449,6 +510,7 @@ Projects/Public-Transport-Telemetry-Pipeline/
       1_Pipeline_Overview.py
       2_Route_Performance.py
       3_Map_View.py
+      4_Data_Quality.py
     utils/
       data_access.py
       insights.py                   # deterministic rule-based dashboard insights
@@ -456,6 +518,7 @@ Projects/Public-Transport-Telemetry-Pipeline/
       maps.py
       openai_explainer.py           # optional OpenAI explanation layer
       refresh_metadata.py           # load Azure Function metadata heartbeat
+      quality.py                    # Blob-first quality report loader with local fallback
 
   notebooks/mvp/
     00_pipeline_runner.ipynb
@@ -473,6 +536,8 @@ Projects/Public-Transport-Telemetry-Pipeline/
   docs/
     architecture.png
     dashboard_home.jpg
+    dashboard_data_quality.jpg
+    dashboard_data_quality_checks.jpg
     dashboard_pipeline_overview.jpg
     dashboard_route_performance.jpg
     dashboard_map_combined.jpg
@@ -505,6 +570,15 @@ The project includes a container refresh entrypoint:
 ```bash
 python Projects/Public-Transport-Telemetry-Pipeline/scripts/run_container_refresh.py
 ```
+
+This entrypoint runs the complete scheduled refresh workflow:
+
+1. Run the full Bronze -> Silver -> Gold pipeline
+2. Export Gold dashboard outputs
+3. Generate pipeline output quality reports
+4. Validate controlled HSL and FMI source sample snapshots
+5. Upload exported parquet outputs to Azure Blob Storage
+6. Upload generated quality reports to Azure Blob Storage
 
 Build the Docker image locally:
 
@@ -553,6 +627,34 @@ Export Gold outputs:
 
 ```bash
 python Projects/Public-Transport-Telemetry-Pipeline/scripts/export_gold.py
+```
+
+Run pipeline output quality checks:
+
+```bash
+python Projects/Public-Transport-Telemetry-Pipeline/scripts/run_quality_checks.py \
+  --output Projects/Public-Transport-Telemetry-Pipeline/data/quality/reports/pipeline_quality_report.json \
+  --summary-output Projects/Public-Transport-Telemetry-Pipeline/data/quality/reports/latest_quality_summary.json
+```
+
+Run controlled source compatibility checks:
+
+```bash
+python Projects/Public-Transport-Telemetry-Pipeline/scripts/validate_hsl_snapshot.py \
+  --input Projects/Public-Transport-Telemetry-Pipeline/data/source_samples/hsl_vehicle_snapshot.parquet \
+  --output Projects/Public-Transport-Telemetry-Pipeline/data/quality/reports/hsl_source_validation_report.json \
+  --summary-output Projects/Public-Transport-Telemetry-Pipeline/data/quality/reports/latest_hsl_source_summary.json
+
+python Projects/Public-Transport-Telemetry-Pipeline/scripts/validate_fmi_weather_snapshot.py \
+  --input Projects/Public-Transport-Telemetry-Pipeline/data/source_samples/fmi_weather_snapshot.parquet \
+  --output Projects/Public-Transport-Telemetry-Pipeline/data/quality/reports/fmi_source_validation_report.json \
+  --summary-output Projects/Public-Transport-Telemetry-Pipeline/data/quality/reports/latest_fmi_source_summary.json
+```
+
+Upload validation reports to Azure Blob Storage:
+
+```bash
+python Projects/Public-Transport-Telemetry-Pipeline/scripts/upload_quality_reports_to_blob.py
 ```
 
 Upload dashboard outputs to Azure Blob Storage:
@@ -610,7 +712,7 @@ Runtime configuration:
 Required job environment variables:
 
 - `AZURE_STORAGE_CONNECTION_STRING`
-- `AZURE_BLOB_CONTAINER`
+- `AZURE_BLOB_CONTAINER` or `AZURE_STORAGE_CONTAINER_NAME`
 
 ### Dashboard
 
@@ -619,7 +721,7 @@ The dashboard is deployed on Render and reads parquet outputs from Azure Blob St
 Required dashboard environment variables:
 
 - `AZURE_STORAGE_CONNECTION_STRING`
-- `AZURE_CONTAINER_NAME`
+- `AZURE_BLOB_CONTAINER`, `AZURE_STORAGE_CONTAINER_NAME`, or existing `AZURE_CONTAINER_NAME` depending on deployment configuration
 - `OPENAI_API_KEY` optional
 - `OPENAI_EXPLANATION_MODEL` optional
 
@@ -659,6 +761,8 @@ Current limitations:
 - Render free-tier hosting may cold start
 - Databricks execution is optional, not used as the routine scheduler, and can be disabled or removed for cost control
 - alerting and SLA monitoring are intentionally out of scope
+- source compatibility validation uses controlled versioned local snapshots, not live HSL/FMI API calls
+- the dashboard displays generated validation artifacts but does not run validation checks
 
 ---
 
@@ -680,6 +784,10 @@ Additional dashboard and operations screenshots are kept in the `docs/` folder. 
 ### All-route ranking view
 
 ![All-route Ranking](docs/dashboard_route_ranking_all.jpg)
+
+### Data Quality checks by dataset
+
+![Data Quality Checks](docs/dashboard_data_quality_checks.jpg)
 
 ### Azure Container Apps scheduled job
 

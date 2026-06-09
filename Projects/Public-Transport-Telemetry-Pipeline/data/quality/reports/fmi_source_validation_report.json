@@ -1,0 +1,70 @@
+{
+  "source": "fmi_weather_source_snapshot",
+  "run_id": "910d26e9-61ac-4c75-9e1c-6cdf5069b329",
+  "ingest_time": "2026-06-07T11:45:07.366260+00:00",
+  "status": "passed",
+  "checks": [
+    {
+      "name": "fmi_weather_source_snapshot_file_exists",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Found data/source_samples/fmi_weather_snapshot.parquet"
+    },
+    {
+      "name": "fmi_weather_source_snapshot_readable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Source snapshot is readable with 3 rows and 7 columns."
+    },
+    {
+      "name": "fmi_weather_source_snapshot_required_columns",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All required columns are present."
+    },
+    {
+      "name": "fmi_weather_source_snapshot_not_empty",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Dataset contains 3 rows."
+    },
+    {
+      "name": "fmi_weather_source_snapshot_observation_time_parseable",
+      "status": "passed",
+      "severity": "critical",
+      "details": "All values in observation_time are parseable as datetime."
+    },
+    {
+      "name": "fmi_weather_source_snapshot_coordinate_bounds",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Coordinates are numeric and within configured coordinate bounds."
+    },
+    {
+      "name": "fmi_weather_source_snapshot_temperature_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column temperature is numeric and within expected range."
+    },
+    {
+      "name": "fmi_weather_source_snapshot_precipitation_numeric_range",
+      "status": "passed",
+      "severity": "critical",
+      "details": "Column precipitation is numeric and within expected range."
+    }
+  ],
+  "record_count": {
+    "fmi_weather_source_snapshot": 3
+  },
+  "warnings": [],
+  "errors": [],
+  "metadata": {
+    "validation_scope": "real_source_compatibility",
+    "source_system": "FMI",
+    "input_path": "data/source_samples/fmi_weather_snapshot.parquet",
+    "connected_to_dashboard": false,
+    "runs_pipeline": false,
+    "modifies_pipeline_outputs": false,
+    "calls_live_api": false
+  }
+}
