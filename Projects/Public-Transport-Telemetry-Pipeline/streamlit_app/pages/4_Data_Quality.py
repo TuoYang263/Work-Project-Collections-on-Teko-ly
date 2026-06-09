@@ -6,7 +6,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from streamlit_app.utils.quality import load_quality_report_artifact
+from utils.quality import load_quality_report_artifact
 
 REPORT_SOURCES = {
     "Pipeline Outputs": "pipeline_quality_report.json",
