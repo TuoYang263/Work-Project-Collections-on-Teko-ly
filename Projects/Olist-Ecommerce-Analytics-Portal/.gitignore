@@ -1,0 +1,24 @@
+cat > .gitignore <<'EOF'
+# Local raw and sample data
+data/raw/*
+!data/raw/.gitkeep
+
+data/sample/*
+!data/sample/.gitkeep
+
+# Kaggle credentials
+kaggle.json
+.kaggle/
+
+# Environment files
+.env
+.env.*
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
