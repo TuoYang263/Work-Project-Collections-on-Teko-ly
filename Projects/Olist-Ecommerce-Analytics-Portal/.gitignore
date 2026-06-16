@@ -1,4 +1,3 @@
-cat > .gitignore <<'EOF'
 # Local raw and sample data
 data/raw/*
 !data/raw/.gitkeep
