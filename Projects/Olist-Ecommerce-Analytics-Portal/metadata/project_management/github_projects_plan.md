@@ -97,10 +97,15 @@ Future issues may include:
 - The GitHub Projects board should support the project, not replace the repository documentation.
 - The board should stay simple and practical.
 - Issues should be small enough to complete and commit cleanly.
-- M1 focuses only on setup, source understanding, and planning.
+- M1 focused on setup, source understanding, and planning.
+- M2 focused on loading source-aligned CSV files into BigQuery raw tables.
 
 ## Current Status
 
 ```text
-M1 - Project Setup & Source Understanding: in progress
+- M1 - Project Setup & Source Understanding: completed
+- M2 - BigQuery Raw Layer: completed
+- GitHub Project board `Olist Analytics Portal` created
+- M2 raw dataset and all 9 BigQuery raw tables completed
+- Raw layer row count validation completed
 ```
