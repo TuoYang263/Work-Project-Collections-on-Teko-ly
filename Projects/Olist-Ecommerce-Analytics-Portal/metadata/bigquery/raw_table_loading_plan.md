@@ -18,7 +18,7 @@ The raw layer keeps the source-aligned structure. Column names and source granul
 |---|---|
 | Source format | CSV |
 | Header row | Skip 1 header row |
-| Schema handling | BigQuery auto-detect for initial raw load |
+| Schema handling | Manual schema using source CSV column names |
 | Table naming | Prefix source-aligned tables with `raw_` |
 | Transformation | No business transformation in raw layer |
 | Load mode | Create or replace table during initial development |
@@ -48,4 +48,4 @@ After each table is loaded, check:
 
 ## Notes
 
-Raw tables are not designed for direct BI reporting. They are the source-aligned foundation for later staging and analytics layers.
+Raw tables are not designed for direct BI reporting. They are the source-aligned foundation for later staging and analytics layers. BigQuery UI auto-detect may not always preserve source column names during CSV upload. Raw tables should use manual schemas based on the original CSV headers.
