@@ -110,4 +110,5 @@ The project should follow these principles:
 - BigQuery raw dataset olist_raw created in EU location
 - Raw table loading plan documented
 - Loaded first raw table: `olist_raw.raw_product_category_translation`.
+- Loaded raw table: `olist_raw.raw_sellers`.
 ```
