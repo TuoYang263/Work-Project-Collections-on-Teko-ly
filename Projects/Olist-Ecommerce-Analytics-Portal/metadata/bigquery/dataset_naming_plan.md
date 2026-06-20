@@ -55,6 +55,12 @@ Planned dataset:
 olist_raw
 ```
 
+Raw dataset:
+
+| Dataset | Location | Purpose |
+|---|---|---|
+| `olist_raw` | EU | Stores source-aligned Olist CSV tables with minimal transformation. |
+
 Planned raw tables:
 
 | Raw table | Source file |

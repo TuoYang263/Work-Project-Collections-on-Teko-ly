@@ -105,5 +105,7 @@ The project should follow these principles:
 ## Current Status
 
 ```text
-M1 - Project Setup & Source Understanding: in progress
+- M1 - Project Setup & Source Understanding: completed
+- M2 - BigQuery Raw Layer: in progress
+- BigQuery raw dataset olist_raw created in EU location
 ```
