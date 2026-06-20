@@ -113,4 +113,5 @@ The project should follow these principles:
 - Loaded raw table: `olist_raw.raw_sellers`.
 - Loaded raw table: `olist_raw.raw_customers`.
 - Loaded raw table: `olist_raw.raw_products`.
+- Loaded raw table: `olist_raw.raw_orders`.
 ```
