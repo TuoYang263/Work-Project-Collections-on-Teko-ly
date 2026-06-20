@@ -109,4 +109,5 @@ The project should follow these principles:
 - M2 - BigQuery Raw Layer: in progress
 - BigQuery raw dataset olist_raw created in EU location
 - Raw table loading plan documented
+- Loaded first raw table: `olist_raw.raw_product_category_translation`.
 ```
