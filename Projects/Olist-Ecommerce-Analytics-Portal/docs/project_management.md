@@ -131,6 +131,7 @@ Current M3 progress:
 - staging dataset naming documented
 - source-to-staging mapping documented
 - column cleanup rules documented
+- timestamp, numeric, null, and duplicate handling rules included in staging cleanup rules
 
 Current M3 documents:
 

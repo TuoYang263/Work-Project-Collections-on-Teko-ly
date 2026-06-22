@@ -132,6 +132,55 @@ Planned cleanup:
 - do not translate, group, or simplify business categories in staging
 - do not remove review comment fields because null comments are expected source behavior
 
+## Additional Staging Handling Rules
+
+### Timestamp and Date Handling
+
+Timestamp and date fields should be standardized in staging only when the source meaning is clear.
+
+Planned handling:
+
+- convert timestamp-like fields to `TIMESTAMP` when safe
+- preserve null timestamp values when they reflect normal source behavior
+- keep order lifecycle timestamps in `stg_orders`
+- keep `shipping_limit_date` in `stg_order_items`
+- keep review timestamps in `stg_order_reviews`
+- do not infer missing timestamps
+- do not calculate delivery duration, delivery delay, shipping delay, or review response time in staging
+
+The staging layer should make timestamp fields easier to use, but business interpretation should stay in later analytical models.
+
+### Numeric Type Handling
+
+Numeric fields should be converted only when the expected type is clear.
+
+Planned handling:
+
+- convert monetary fields such as `price`, `freight_value`, and `payment_value` to numeric types
+- convert count or score fields such as `payment_installments` and `review_score` to integer types
+- convert product size and weight fields to numeric or integer types based on source values
+- use safe type conversion during implementation
+- avoid rounding monetary values
+- do not calculate revenue, margin, average order value, or other KPIs in staging
+
+The staging layer should standardize numeric types without creating business metrics.
+
+### Null and Duplicate Handling
+
+Null and duplicate values should be documented before being changed or removed.
+
+Planned handling:
+
+- preserve null values when they are part of normal source behavior
+- keep review comment fields even when comments are missing
+- preserve missing order lifecycle timestamps when they are related to order status
+- document duplicate patterns instead of removing records too early
+- treat `geolocation_zip_code_prefix` as a reference column, not a unique key
+- do not remove records only because they appear duplicated
+- do not hide null values without documentation
+
+The staging layer should make data issues visible and traceable. Business-level filtering or deduplication should be handled later only when the rule is clear.
+
 ## Out of Scope
 
 The staging layer should not:
