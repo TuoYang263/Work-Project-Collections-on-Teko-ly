@@ -123,9 +123,9 @@ metadata/bigquery/raw_layer_validation.md
 
 ### M3 - Staging Layer Planning
 
-Status: In progress
+Status: Completed
 
-Current M3 progress:
+M3 completed:
 
 - staging layer purpose documented
 - staging dataset naming documented
@@ -133,7 +133,7 @@ Current M3 progress:
 - column cleanup rules documented
 - timestamp, numeric, null, and duplicate handling rules included in staging cleanup rules
 
-Current M3 documents:
+M3 documents:
 
 ```text
 docs/staging_layer_plan.md
@@ -143,4 +143,4 @@ metadata/staging/column_cleanup_rules.md
 
 Next planned step:
 
-- timestamp and date handling rules
+- M4 - dbt Project Setup and Staging Model Implementation

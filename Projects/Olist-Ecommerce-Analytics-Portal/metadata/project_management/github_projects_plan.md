@@ -102,10 +102,39 @@ Future issues may include:
 
 ## Current Status
 
-```text
-- M1 - Project Setup & Source Understanding: completed
-- M2 - BigQuery Raw Layer: completed
+### Completed
+
+- M1 - Project Setup & Source Understanding
+- M2 - BigQuery Raw Layer
+- M3 - Staging Layer Planning & Source-to-Staging Rules
+
+### Completed GitHub Project Work
+
 - GitHub Project board `Olist Analytics Portal` created
-- M2 raw dataset and all 9 BigQuery raw tables completed
-- Raw layer row count validation completed
+- M1 tasks moved to Done
+- M2 raw layer task moved to Done
+- M3 staging planning task moved to Done
+
+### M3 Summary
+
+Staging layer planning has been completed.
+
+Completed M3 work:
+
+- staging layer purpose documented
+- staging dataset naming documented
+- source-to-staging mapping documented
+- column cleanup rules documented
+- timestamp, numeric, null, and duplicate handling rules included in staging cleanup rules
+
+Main M3 documents:
+
+```text
+docs/staging_layer_plan.md
+metadata/staging/source_to_staging_mapping.md
+metadata/staging/column_cleanup_rules.md
 ```
+
+### Next Milestone
+
+- M4 - dbt Project Setup and Staging Model Implementation
