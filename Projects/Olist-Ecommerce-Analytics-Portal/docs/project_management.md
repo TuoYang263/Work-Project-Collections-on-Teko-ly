@@ -104,19 +104,42 @@ The project should follow these principles:
 
 ## Current Status
 
+### Completed
+
+- M1 - Project Setup & Source Understanding
+- M2 - BigQuery Raw Layer
+
+### M2 Summary
+
+The BigQuery raw dataset `olist_raw` has been created in the EU location.
+
+All 9 Olist source CSV files have been loaded into source-aligned raw tables.
+
+Raw layer validation has been completed and documented in:
+
 ```text
-- M1 - Project Setup & Source Understanding: completed
-- M2 - BigQuery Raw Layer: completed
-- BigQuery raw dataset olist_raw created in EU location
-- Raw table loading plan documented
-- Loaded first raw table: `olist_raw.raw_product_category_translation`.
-- Loaded raw table: `olist_raw.raw_sellers`.
-- Loaded raw table: `olist_raw.raw_customers`.
-- Loaded raw table: `olist_raw.raw_products`.
-- Loaded raw table: `olist_raw.raw_orders`.
-- Loaded raw table: `olist_raw.raw_order_items`.
-- Loaded raw table: `olist_raw.raw_order_payments`.
-- Loaded raw table: `olist_raw.raw_order_reviews`.
-- Loaded raw table: `olist_raw.raw_geolocation`.
-- Completed raw layer row count validation for all 9 BigQuery raw tables.
+metadata/bigquery/raw_layer_validation.md
 ```
+
+### M3 - Staging Layer Planning
+
+Status: In progress
+
+Current M3 progress:
+
+- staging layer purpose documented
+- staging dataset naming documented
+- source-to-staging mapping documented
+- column cleanup rules documented
+
+Current M3 documents:
+
+```text
+docs/staging_layer_plan.md
+metadata/staging/source_to_staging_mapping.md
+metadata/staging/column_cleanup_rules.md
+```
+
+Next planned step:
+
+- timestamp and date handling rules
