@@ -30,3 +30,4 @@ The BigQuery staging dataset will be:
 
 ```text
 olist_staging
+```

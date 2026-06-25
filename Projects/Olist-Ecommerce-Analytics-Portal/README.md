@@ -101,7 +101,10 @@ The following files will be created during M1:
 - `metadata/project_management/github_projects_plan.md`
 
 ## Status
-`M1 - Project Setup & Source Understanding: in progress`
+- M1 - Project Setup & Source Understanding: Completed
+- M2 - BigQuery Raw Layer: Completed
+- M3 - Staging Layer Planning: Completed
+- Current milestone: M4 - dbt Project Setup and Staging Model Implementation
 
 ## Note
 

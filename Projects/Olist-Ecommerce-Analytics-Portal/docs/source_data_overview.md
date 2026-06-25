@@ -184,7 +184,7 @@ olist_order_reviews_dataset.csv
 Rows:
 
 ```text
-104,719
+99,224
 ```
 
 Columns:
