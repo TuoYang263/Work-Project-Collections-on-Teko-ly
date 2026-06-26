@@ -1,0 +1,37 @@
+version: 2
+
+sources:
+  - name: olist_raw
+    description: >
+      Source-aligned raw tables loaded from the Brazilian Olist e-commerce dataset
+      into BigQuery. These tables preserve the original CSV column names and are
+      used as the input layer for dbt staging models.
+    schema: olist_raw
+
+    tables:
+      - name: raw_customers
+        description: Raw customer records, including customer IDs and location attributes.
+
+      - name: raw_geolocation
+        description: Raw Brazilian geolocation reference data by ZIP code prefix.
+
+      - name: raw_orders
+        description: Raw order lifecycle data, including order status and key timestamps.
+
+      - name: raw_order_items
+        description: Raw order item records at order-item grain.
+
+      - name: raw_order_payments
+        description: Raw payment records linked to orders.
+
+      - name: raw_order_reviews
+        description: Raw customer review records linked to orders.
+
+      - name: raw_products
+        description: Raw product records, including category and product dimensions.
+
+      - name: raw_sellers
+        description: Raw seller records, including seller location attributes.
+
+      - name: raw_product_category_translation
+        description: Raw product category translation mapping from Portuguese to English.
