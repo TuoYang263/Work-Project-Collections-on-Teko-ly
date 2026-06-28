@@ -1,0 +1,161 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: "Customer dimension table with one row per customer_id. Contains customer identifiers and customer location attributes."
+    columns:
+      - name: customer_id
+        description: "Primary key of the customer dimension. This is the order-level customer identifier used by orders."
+        tests:
+          - not_null
+          - unique
+
+      - name: customer_unique_id
+        description: "Stable customer identifier used to identify the same customer across multiple orders."
+
+      - name: customer_zip_code_prefix
+        description: "Customer zip code prefix used for approximate geographic analysis."
+
+      - name: customer_city
+        description: "Customer city."
+
+      - name: customer_state
+        description: "Customer state."
+
+  - name: dim_sellers
+    description: "Seller dimension table with one row per seller_id. Contains seller identifiers and seller location attributes."
+    columns:
+      - name: seller_id
+        description: "Primary key of the seller dimension."
+        tests:
+          - not_null
+          - unique
+
+      - name: seller_zip_code_prefix
+        description: "Seller zip code prefix used for approximate geographic analysis."
+
+      - name: seller_city
+        description: "Seller city."
+
+      - name: seller_state
+        description: "Seller state."
+
+  - name: dim_products
+    description: "Product dimension table with one row per product_id. Contains product category, translated category, and product physical attributes."
+    columns:
+      - name: product_id
+        description: "Primary key of the product dimension."
+        tests:
+          - not_null
+          - unique
+
+      - name: product_category_name
+        description: "Original product category name from the source data."
+
+      - name: product_category_name_english
+        description: "English product category name from the product category translation table. Falls back to the original category or unknown when translation is unavailable."
+
+      - name: product_name_length
+        description: "Length of the product name."
+
+      - name: product_description_length
+        description: "Length of the product description."
+
+      - name: product_photos_qty
+        description: "Number of product photos."
+
+      - name: product_weight_g
+        description: "Product weight in grams."
+
+      - name: product_length_cm
+        description: "Product length in centimeters."
+
+      - name: product_height_cm
+        description: "Product height in centimeters."
+
+      - name: product_width_cm
+        description: "Product width in centimeters."
+
+  - name: dim_geolocation_zip_prefix
+    description: "Geolocation dimension table with one row per geolocation_zip_code_prefix. Provides representative, average, and median coordinates for approximate geographic analysis."
+    columns:
+      - name: geolocation_zip_code_prefix
+        description: "Primary key of the geolocation zip prefix dimension."
+        tests:
+          - not_null
+          - unique
+
+      - name: geolocation_city
+        description: "Representative city for the zip code prefix, selected based on the most frequent city-state combination."
+
+      - name: geolocation_state
+        description: "Representative state for the zip code prefix, selected based on the most frequent city-state combination."
+
+      - name: representative_geolocation_lat
+        description: "Representative latitude for the zip code prefix. Uses the median latitude to reduce sensitivity to outliers."
+
+      - name: representative_geolocation_lng
+        description: "Representative longitude for the zip code prefix. Uses the median longitude to reduce sensitivity to outliers."
+
+      - name: avg_geolocation_lat
+        description: "Average latitude across raw geolocation records for the zip code prefix."
+
+      - name: avg_geolocation_lng
+        description: "Average longitude across raw geolocation records for the zip code prefix."
+
+      - name: median_geolocation_lat
+        description: "Median latitude across raw geolocation records for the zip code prefix."
+
+      - name: median_geolocation_lng
+        description: "Median longitude across raw geolocation records for the zip code prefix."
+
+      - name: geolocation_record_count
+        description: "Number of raw geolocation records aggregated into this zip code prefix."
+
+  - name: dim_dates
+    description: "Calendar date dimension with one row per calendar date. The date range is generated from order, shipping, and review dates used across the mart layer."
+    columns:
+      - name: date_day
+        description: "Primary key of the date dimension. One row per calendar date."
+        tests:
+          - not_null
+          - unique
+
+      - name: year
+        description: "Calendar year."
+
+      - name: quarter
+        description: "Calendar quarter."
+
+      - name: month
+        description: "Calendar month number."
+
+      - name: month_name
+        description: "Calendar month name."
+
+      - name: iso_week
+        description: "Week number based on the ISO 8601 calendar, where weeks start on Monday."
+
+      - name: day_of_month
+        description: "Day of month."
+
+      - name: day_of_week
+        description: "Day of week number. In BigQuery, Sunday is 1 and Saturday is 7."
+
+      - name: day_name
+        description: "Day of week name."
+
+      - name: week_start_date
+        description: "Start date of the week."
+
+      - name: month_start_date
+        description: "Start date of the month."
+
+      - name: quarter_start_date
+        description: "Start date of the quarter."
+
+      - name: year_start_date
+        description: "Start date of the year."
+
+      - name: is_weekend
+        description: "Boolean flag indicating whether the date falls on a weekend."

@@ -78,7 +78,7 @@ The mart layer is built on top of the dbt staging layer. All marts depend on cle
 | dim_sellers | stg_sellers |
 | dim_products | stg_products, stg_product_category_translation |
 | dim_geolocation_zip_prefix | stg_geolocation |
-| dim_dates | stg_orders |
+| dim_dates | stg_orders, stg_order_items, stg_order_reviews |
 
 ### Intermediate lineage
 
@@ -115,6 +115,8 @@ The customer dimension uses customer_id as the primary key because orders refere
 
 The raw geolocation table contains multiple records per zip code prefix.  
 The mart creates one row per zip code prefix using aggregated latitude and longitude values.
+
+Representative latitude and longitude use median coordinates to reduce sensitivity to outliers. Average coordinates are also retained for transparency.
 
 ### Order-level and item-level facts
 
