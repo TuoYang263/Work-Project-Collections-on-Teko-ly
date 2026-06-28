@@ -44,6 +44,14 @@ models:
       +materialized: view
       +schema: staging
 
+    # Intermediate models contain reusable transformations and aggregations
+    # between staging and marts.
+    # In BigQuery, if profiles.yml uses dataset: olist,
+    # this will create models under the dataset: olist_intermediate.
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+
     # Mart models will contain BI-ready fact and dimension tables later.
     # In BigQuery, if profiles.yml uses dataset: olist,
     # this will create models under the dataset: olist_marts.
