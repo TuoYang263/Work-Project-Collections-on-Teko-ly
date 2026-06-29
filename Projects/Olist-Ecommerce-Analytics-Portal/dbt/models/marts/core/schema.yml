@@ -159,3 +159,271 @@ models:
 
       - name: is_weekend
         description: "Boolean flag indicating whether the date falls on a weekend."
+
+  - name: fct_orders
+    description: "Order-level fact table with one row per order_id. Contains order lifecycle dates, status, aggregated item metrics, payment metrics, review metrics, and delivery performance indicators."
+    columns:
+      - name: order_id
+        description: "Primary key of the order fact table."
+        tests:
+          - not_null
+          - unique
+
+      - name: customer_id
+        description: "Foreign key to dim_customers."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_id
+
+      - name: order_status
+        description: "Current status of the order."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['delivered', 'shipped', 'canceled', 'unavailable', 'invoiced', 'processing', 'created', 'approved']
+
+      - name: order_purchase_date
+        description: "Date when the order was purchased. Foreign key to dim_dates."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_dates')
+              field: date_day
+
+      - name: order_approved_date
+        description: "Date when the order was approved."
+
+      - name: order_delivered_carrier_date_day
+        description: "Date when the order was delivered to the carrier."
+
+      - name: order_delivered_customer_date_day
+        description: "Date when the order was delivered to the customer."
+
+      - name: order_estimated_delivery_date_day
+        description: "Estimated customer delivery date."
+
+      - name: order_total_items
+        description: "Total number of order item rows in the order."
+
+      - name: item_total_value
+        description: "Total item price value for the order."
+
+      - name: freight_total_value
+        description: "Total freight value for the order."
+
+      - name: order_gross_value
+        description: "Total gross order value, calculated as item total value plus freight total value."
+
+      - name: payment_total_value
+        description: "Total payment value for the order."
+
+      - name: avg_review_score
+        description: "Average review score for the order."
+
+      - name: is_delivered
+        description: "Boolean flag indicating whether the order status is delivered."
+
+      - name: is_late_delivery
+        description: "Boolean flag indicating whether the actual customer delivery date is later than the estimated delivery date."
+
+      - name: days_purchase_to_approval
+        description: "Number of days between purchase timestamp and approval timestamp."
+
+      - name: days_purchase_to_carrier
+        description: "Number of days between purchase timestamp and carrier delivery timestamp."
+
+      - name: days_purchase_to_customer_delivery
+        description: "Number of days between purchase timestamp and customer delivery timestamp."
+
+      - name: days_estimated_vs_actual_delivery
+        description: "Difference in days between actual customer delivery date and estimated delivery date. Positive values indicate late delivery."
+
+  - name: fct_order_items
+    description: "Order item-level fact table with one row per order_id and order_item_id. Supports item-level sales, product, seller, price, and freight analysis."
+    columns:
+      - name: order_item_key
+        description: "Primary key of the order item fact table, generated from order_id and order_item_id."
+        tests:
+          - not_null
+          - unique
+
+      - name: order_id
+        description: "Foreign key to fct_orders."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('fct_orders')
+              field: order_id
+
+      - name: order_item_id
+        description: "Sequential item number within an order."
+
+      - name: customer_id
+        description: "Foreign key to dim_customers."
+        tests:
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_id
+
+      - name: product_id
+        description: "Foreign key to dim_products."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_products')
+              field: product_id
+
+      - name: seller_id
+        description: "Foreign key to dim_sellers."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_sellers')
+              field: seller_id
+
+      - name: order_status
+        description: "Order status copied from the order header."
+
+      - name: order_purchase_date
+        description: "Order purchase date. Foreign key to dim_dates."
+        tests:
+          - relationships:
+              to: ref('dim_dates')
+              field: date_day
+
+      - name: shipping_limit_date_day
+        description: "Shipping limit date. Foreign key to dim_dates."
+        tests:
+          - relationships:
+              to: ref('dim_dates')
+              field: date_day
+
+      - name: price
+        description: "Item price value."
+
+      - name: freight_value
+        description: "Freight value for the order item."
+
+      - name: item_gross_value
+        description: "Item gross value, calculated as price plus freight value."
+
+  - name: fct_order_payments
+    description: "Payment-level fact table with one row per order_id and payment_sequential. Supports payment method, installment, and payment value analysis."
+    columns:
+      - name: order_payment_key
+        description: "Primary key of the payment fact table, generated from order_id and payment_sequential."
+        tests:
+          - not_null
+          - unique
+
+      - name: order_id
+        description: "Foreign key to fct_orders."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('fct_orders')
+              field: order_id
+
+      - name: payment_sequential
+        description: "Sequential payment number within an order."
+
+      - name: customer_id
+        description: "Foreign key to dim_customers."
+        tests:
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_id
+
+      - name: order_purchase_date
+        description: "Order purchase date. Foreign key to dim_dates."
+        tests:
+          - relationships:
+              to: ref('dim_dates')
+              field: date_day
+
+      - name: payment_type
+        description: "Payment method used for the order."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['credit_card', 'boleto', 'voucher', 'debit_card', 'not_defined']
+
+      - name: payment_installments
+        description: "Number of payment installments."
+
+      - name: payment_value
+        description: "Payment amount."
+        tests:
+          - not_null
+
+  - name: fct_order_reviews
+    description: "Review-level fact table with one row per review_id and order_id. Uses review_key as the primary key because review_id is not unique in the source dataset."
+    columns:
+      - name: review_key
+        description: "Primary key of the review fact table, generated from review_id and order_id."
+        tests:
+          - not_null
+          - unique
+
+      - name: review_id
+        description: "Review identifier from the source data. This field is not unique in the source dataset."
+        tests:
+          - not_null
+
+      - name: order_id
+        description: "Foreign key to fct_orders."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('fct_orders')
+              field: order_id
+
+      - name: customer_id
+        description: "Foreign key to dim_customers."
+        tests:
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_id
+
+      - name: order_purchase_date
+        description: "Order purchase date. Foreign key to dim_dates."
+        tests:
+          - relationships:
+              to: ref('dim_dates')
+              field: date_day
+
+      - name: review_score
+        description: "Customer review score from 1 to 5."
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5]
+              quote: false
+
+      - name: review_creation_date
+        description: "Date when the review was created."
+
+      - name: review_creation_date_day
+        description: "Review creation date. Foreign key to dim_dates."
+        tests:
+          - relationships:
+              to: ref('dim_dates')
+              field: date_day
+
+      - name: review_answer_timestamp
+        description: "Timestamp when the review was answered."
+
+      - name: review_answer_date_day
+        description: "Review answer date. Foreign key to dim_dates."
+        tests:
+          - relationships:
+              to: ref('dim_dates')
+              field: date_day
+
+      - name: has_review_comment_title
+        description: "Boolean flag indicating whether the review has a non-empty comment title."
+
+      - name: has_review_comment_message
+        description: "Boolean flag indicating whether the review has a non-empty comment message."

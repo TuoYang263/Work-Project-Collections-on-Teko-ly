@@ -47,7 +47,7 @@ Staging inputs:
 | dim_sellers | One row per seller_id | seller_id | stg_sellers |
 | dim_products | One row per product_id | product_id | stg_products, stg_product_category_translation |
 | dim_geolocation_zip_prefix | One row per geolocation_zip_code_prefix | geolocation_zip_code_prefix | stg_geolocation |
-| dim_dates | One row per calendar date | date_day | stg_orders |
+| dim_dates | One row per calendar date | date_day | stg_orders, stg_order_items, stg_order_reviews |
 
 ### Facts
 
@@ -56,7 +56,7 @@ Staging inputs:
 | fct_orders | One row per order_id | order_id | stg_orders, int_order_items_agg, int_order_payments_agg, int_order_reviews_agg |
 | fct_order_items | One row per order_id + order_item_id | order_item_key | stg_order_items, stg_orders |
 | fct_order_payments | One row per order_id + payment_sequential | order_payment_key | stg_order_payments, stg_orders |
-| fct_order_reviews | One row per review_id | review_id | stg_order_reviews, stg_orders |
+| fct_order_reviews | One row per review_id + order_id | review_key | stg_order_reviews, stg_orders |
 
 ## Intermediate Models
 
@@ -95,7 +95,7 @@ The mart layer is built on top of the dbt staging layer. All marts depend on cle
 | fct_orders | stg_orders, int_order_items_agg, int_order_payments_agg, int_order_reviews_agg | One row per order_id |
 | fct_order_items | stg_order_items, stg_orders | One row per order_id + order_item_id |
 | fct_order_payments | stg_order_payments, stg_orders | One row per order_id + payment_sequential |
-| fct_order_reviews | stg_order_reviews, stg_orders | One row per review_id |
+| fct_order_reviews | stg_order_reviews, stg_orders | One row per review_id + order_id |
 
 ### Modeling note
 
@@ -128,6 +128,7 @@ Order lifecycle analysis and item-level sales analysis are separated:
 
 Reviews are stored in a separate review-grain fact table.  
 Order-level review metrics are also aggregated into fct_orders through int_order_reviews_agg.
+The source review_id is not unique in the dataset, so fct_order_reviews uses a generated review_key based on review_id and order_id as the primary key.
 
 ## Validation Plan
 
