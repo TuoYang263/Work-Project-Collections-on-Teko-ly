@@ -2,111 +2,451 @@
 
 ## Overview
 
-This project uses the Olist Brazilian E-Commerce public dataset to build an analytics engineering project around e-commerce reporting.
+This project is a portfolio analytics engineering project built on the Olist Brazilian E-Commerce public dataset.
 
-The focus is not only on creating dashboards, but also on showing how the data is understood, modeled, checked, and prepared for business use.
+The goal is to demonstrate how raw e-commerce data can be transformed into a documented, tested, and BI-ready dimensional model using BigQuery and dbt.
 
-The project will include BigQuery, dbt, dimensional modeling, data quality checks, pipeline monitoring, Power BI, and a custom React/Node TypeScript analytics portal.
+The current implementation focuses on the warehouse and transformation foundation:
 
-The current milestone is **M1 - Project Setup & Source Understanding**.
+- BigQuery raw layer for source-aligned data
+- dbt staging layer for cleaning and standardization
+- dbt intermediate layer for reusable aggregations
+- dbt marts layer with fact and dimension tables
+- dbt tests for primary keys, relationships, accepted values, and important business fields
+- dbt docs and lineage for model documentation and impact understanding
+- GitHub Projects milestone workflow for enterprise-style project tracking
 
-## Goals
+The project title includes pipeline monitoring and portal direction, but the current completed scope is intentionally focused on the analytics engineering foundation. Orchestration, monitoring tables, and AI-assisted pipeline intelligence are planned as future milestones.
 
-The main goals of this project are to:
+---
 
-- understand the source data and business entities
-- design a clear dimensional model for e-commerce analytics
-- prepare BigQuery datasets for raw, staging, and reporting layers
-- use dbt for transformation logic and data quality checks
-- build reporting-ready tables for BI use
-- track data freshness, pipeline status, and quality issues
-- present the final results through Power BI and a custom React/Node TypeScript analytics portal
+## What this project demonstrates
 
-## Current Milestone
+This project is designed to show practical data engineering and analytics engineering skills rather than only dashboard building.
 
-### M1 - Project Setup & Source Understanding
+It demonstrates:
 
-M1 is only about setting up the project foundation.
+- Designing a layered data warehouse structure
+- Loading and organizing raw source data in BigQuery
+- Building dbt models with clear separation between staging, intermediate, and marts layers
+- Applying dimensional modeling and star schema principles
+- Defining fact and dimension table grain explicitly
+- Writing dbt data tests for data quality and relationship validation
+- Generating dbt documentation and lineage
+- Documenting decisions, validation results, and milestone progress
+- Managing project work through GitHub Projects and milestone-based delivery
 
-Scope of M1:
+---
 
-- create the project folder structure
-- prepare the first documentation files
-- review the Olist source data
-- document source tables and key fields
-- create metadata placeholder files
-- draft the BigQuery dataset naming plan
-- prepare the GitHub Projects board structure
+## Current status
 
-Out of scope for M1:
+| Milestone | Status | Summary |
+|---|---:|---|
+| M1 - Project Setup & Source Understanding | Completed | Repository structure, source data review, documentation foundation, GitHub Project board |
+| M2 - BigQuery Raw Layer | Completed | 9 Olist source CSV files loaded into BigQuery `olist_raw` |
+| M3 - Staging Layer Planning | Completed | Staging design, naming rules, source-to-staging mapping |
+| M4 - dbt Staging Layer | Completed | 9 staging views, dbt sources, documentation, 39 dbt tests |
+| M5 - Dimensional Modeling / Analytics Marts | Completed | Intermediate models, dimensions, facts, mart tests, dbt docs validation |
+| M6 - README / dbt docs / Project Showcase Cleanup | In progress | Portfolio-ready README, architecture docs, dbt docs screenshots, project presentation cleanup |
 
-- dbt model development
-- BigQuery table creation
-- Power BI dashboard development
-- React/Node portal development
-- pipeline deployment
-- Azure orchestration
+---
 
-## Planned Data Flow
+## Tech stack
 
-The planned flow is:
+| Area | Tools |
+|---|---|
+| Cloud data warehouse | Google BigQuery |
+| Transformation | dbt Core, dbt-bigquery |
+| Modeling approach | Dimensional modeling, star schema, layered warehouse design |
+| Data quality | dbt tests: `not_null`, `unique`, `relationships`, `accepted_values` |
+| Documentation | Markdown docs, dbt docs, dbt lineage graph |
+| Project workflow | Git, GitHub, GitHub Projects, milestone-based delivery |
+
+---
+
+## Architecture
+
+The implemented data flow is:
 
 ```text
 Olist CSV source data
         ↓
-BigQuery raw layer
+BigQuery raw dataset: olist_raw
         ↓
-dbt staging models
+dbt staging views: olist_staging
         ↓
-dimensional model
+dbt intermediate views: olist_intermediate
         ↓
-reporting marts
+dbt marts tables: olist_marts
         ↓
-data quality and pipeline monitoring tables
+dbt tests + dbt docs + lineage
         ↓
-Power BI dashboard + React/Node TypeScript analytics portal
+BI-ready analytics layer
 ```
 
-Deployment is not part of M1.
+Layer responsibilities:
 
-The first version will focus on local development and a clear BigQuery/dbt workflow. A scheduled workflow with GitHub Actions may be added later. Azure-based orchestration can also be considered later if the project needs a more production-like runner.
+| Layer | Purpose | Example objects |
+|---|---|---|
+| Raw | Preserve source-aligned data loaded from CSV files | `raw_orders`, `raw_order_items`, `raw_products` |
+| Staging | Clean, rename, cast, and standardize source data | `stg_orders`, `stg_order_items`, `stg_products` |
+| Intermediate | Create reusable business aggregations | `int_order_items_agg`, `int_order_payments_agg`, `int_order_reviews_agg` |
+| Marts | Provide BI-ready dimensional models | `fct_orders`, `dim_customers`, `dim_products` |
+| Documentation / quality | Validate and explain the data model | dbt tests, dbt docs, lineage graph |
 
-## Repository Structure
+More details are documented in:
+
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/source_data_overview.md`](docs/source_data_overview.md)
+- [`docs/staging_layer_plan.md`](docs/staging_layer_plan.md)
+- [`docs/m5_dimensional_modeling_design.md`](docs/m5_dimensional_modeling_design.md)
+- [`docs/m5_dbt_marts_validation.md`](docs/m5_dbt_marts_validation.md)
+
+---
+
+## dbt model layers
+
+### Staging models
+
+The staging layer contains 9 source-aligned dbt models built as BigQuery views:
+
+- `stg_customers`
+- `stg_geolocation`
+- `stg_orders`
+- `stg_order_items`
+- `stg_order_payments`
+- `stg_order_reviews`
+- `stg_products`
+- `stg_sellers`
+- `stg_product_category_translation`
+
+The staging layer is responsible for light cleaning, type casting, column standardization, and preparing source data for downstream modeling.
+
+### Intermediate models
+
+The intermediate layer contains reusable order-level aggregation models:
+
+- `int_order_items_agg`
+- `int_order_payments_agg`
+- `int_order_reviews_agg`
+
+These models keep repeated aggregation logic out of the final fact tables and make the mart layer easier to read and validate.
+
+### Mart models
+
+The marts layer contains BI-ready fact and dimension tables.
+
+Dimensions:
+
+- `dim_customers`
+- `dim_sellers`
+- `dim_products`
+- `dim_geolocation_zip_prefix`
+- `dim_dates`
+
+Facts:
+
+- `fct_orders`
+- `fct_order_items`
+- `fct_order_payments`
+- `fct_order_reviews`
+
+---
+
+## Dimensional model
+
+The mart layer follows a star schema style design. Each model has an explicit grain and primary key.
+
+### Dimensions
+
+| Model | Grain | Primary key | Purpose |
+|---|---|---|---|
+| `dim_customers` | One row per customer | `customer_id` | Customer location and customer-level attributes |
+| `dim_sellers` | One row per seller | `seller_id` | Seller location and seller-level attributes |
+| `dim_products` | One row per product | `product_id` | Product attributes and translated product category |
+| `dim_geolocation_zip_prefix` | One row per zip code prefix | `geolocation_zip_code_prefix` | Representative geographic coordinates by zip prefix |
+| `dim_dates` | One row per calendar date | `date_day` | Shared date dimension for order, shipping, and review dates |
+
+### Facts
+
+| Model | Grain | Primary key | Purpose |
+|---|---|---|---|
+| `fct_orders` | One row per order | `order_id` | Order lifecycle, delivery, payment, and review summary metrics |
+| `fct_order_items` | One row per order item | `order_item_key` | Item-level sales, product, seller, price, and freight analysis |
+| `fct_order_payments` | One row per order payment sequence | `order_payment_key` | Payment type, installments, and payment value analysis |
+| `fct_order_reviews` | One row per review and order | `review_key` | Review score and review timing analysis |
+
+---
+
+## Key modeling decisions
+
+### Review fact grain correction
+
+During M5 validation, `review_id` was found not to be unique in the source dataset.
+
+To model the true source grain correctly, `fct_order_reviews` was changed to one row per `review_id + order_id`. A generated `review_key` is used as the primary key.
+
+This is an important modeling decision because it avoids forcing the source data into an incorrect grain just to satisfy a test.
+
+### Geolocation representative coordinates
+
+The raw geolocation table contains multiple latitude and longitude records per zip code prefix.
+
+`dim_geolocation_zip_prefix` uses median latitude and longitude as representative coordinates to reduce the impact of outliers. Average latitude and longitude are also retained for transparency.
+
+The coordinates are intended for approximate geographic analysis, not precise routing.
+
+### Date dimension coverage
+
+`dim_dates` is generated from order, shipping, and review-related dates used across the mart layer.
+
+This supports relationship tests from fact tables to the shared date dimension and makes date-based reporting more consistent.
+
+---
+
+## Data quality and validation
+
+The project uses dbt tests to validate model assumptions and analytical relationships.
+
+Test coverage includes:
+
+- Primary key `not_null` and `unique` tests
+- Foreign key relationship tests between facts and dimensions
+- Accepted values tests for fields such as order status, payment type, and review score
+- Not null tests for important business keys and measures
+
+### M4 staging validation
+
+```text
+dbt run --select staging
+PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9
+
+dbt test --select staging
+PASS=39 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=39
+```
+
+### M5 marts validation
+
+```text
+dbt build --select intermediate marts
+PASS=67 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=67
+```
+
+The M5 build included:
+
+- 3 intermediate view models
+- 9 mart table models
+- 55 data tests
+
+Validation details are documented in:
+
+- [`docs/m4_dbt_staging_validation.md`](docs/m4_dbt_staging_validation.md)
+- [`docs/m5_dbt_marts_validation.md`](docs/m5_dbt_marts_validation.md)
+
+---
+
+## dbt docs and lineage
+
+dbt docs are used to review:
+
+- Model descriptions
+- Column descriptions
+- Data tests
+- Model dependencies
+- Upstream and downstream lineage
+- `Depends On` and `Referenced By` relationships
+
+Useful commands:
+
+```bash
+cd dbt
+dbt docs generate
+dbt docs serve --port 8081
+```
+
+### dbt docs project overview
+
+The dbt docs overview shows the implemented project structure, including staging, intermediate, and marts models.
+
+![dbt docs project overview](assets/screenshots/dbt_docs/dbt_docs_project_overview.jpg)
+
+### `fct_orders` lineage
+
+The `fct_orders` lineage graph shows how raw order items, payments, reviews, and orders flow through staging and intermediate models before being joined into the order-level fact table.
+
+![fct_orders lineage](assets/screenshots/dbt_docs/fct_orders_lineage.jpg)
+
+### `fct_order_reviews` lineage
+
+The `fct_order_reviews` lineage graph supports the M5 review grain correction. The model uses both order review data and order context, and is modeled at one row per `review_id + order_id`.
+
+![fct_order_reviews lineage](assets/screenshots/dbt_docs/fct_order_reviews_lineage.jpg)
+
+### Model documentation and tests
+
+The dbt model detail view shows model descriptions, column documentation, data tests, upstream dependencies, and downstream references.
+
+![marts tests overview](assets/screenshots/dbt_docs/marts_tests_overview.png)
+
+---
+
+## Business analysis enabled by the mart layer
+
+The dimensional model supports analysis such as:
+
+- Order volume and order status trends
+- Revenue and freight analysis
+- Product category performance
+- Seller performance
+- Customer geography analysis
+- Delivery and shipping timing analysis
+- Payment method and installment analysis
+- Review score and customer satisfaction analysis
+
+The mart layer is intentionally designed to be consumed by BI tools or downstream analytical applications.
+
+---
+
+## Repository structure
 
 ```text
 .
-├── assets/                     # Images, diagrams, and screenshots
-├── bi/                         # Power BI files and notes
-├── data/                       # Local reference data only
-│   ├── raw/                    # Raw files if used locally
-│   └── sample/                 # Small sample files
-├── dbt/                        # Future dbt project
-├── docs/                       # Project documentation
-├── metadata/                   # Source metadata and planning files
-│   ├── bigquery/               # BigQuery dataset and table naming plans
-│   ├── project_management/     # GitHub Projects planning files
-│   └── source/                 # Source table notes
-├── portal/                     # Future React/Node TypeScript analytics portal
+├── assets/                     # Images, diagrams, and dbt docs screenshots
+├── bi/                         # Optional future BI files and notes
+├── data/                       # Local data folder; raw data is ignored by Git
+├── dbt/                        # dbt project
+│   ├── dbt_project.yml
+│   └── models/
+│       ├── staging/            # Source-aligned staging views
+│       ├── intermediate/       # Reusable aggregation models
+│       └── marts/core/         # Fact and dimension tables
+├── docs/                       # Architecture, validation, and modeling docs
+├── metadata/                   # Source, BigQuery, staging, and project planning metadata
+├── portal/                     # Placeholder for possible future portal work
 └── sql/                        # SQL exploration and helper scripts
 ```
 
-## Planned M1 Documentation
+Important documentation files:
 
-The following files will be created during M1:
-- `docs/architecture.md`
-- `docs/source_data_overview.md`
-- `docs/project_management.md`
-- `metadata/bigquery/dataset_naming_plan.md`
-- `metadata/source/source_tables_inventory.md`
-- `metadata/project_management/github_projects_plan.md`
+```text
+docs/architecture.md
+docs/source_data_overview.md
+docs/staging_layer_plan.md
+docs/m4_dbt_staging_validation.md
+docs/m5_dimensional_modeling_design.md
+docs/m5_dbt_marts_validation.md
+docs/project_management.md
+```
 
-## Status
-- M1 - Project Setup & Source Understanding: Completed
-- M2 - BigQuery Raw Layer: Completed
-- M3 - Staging Layer Planning: Completed
-- Current milestone: M4 - dbt Project Setup and Staging Model Implementation
+---
 
-## Note
+## How to run the dbt project
 
-This is a portfolio project, but it is structured like a practical analytics engineering workflow. The aim is to show clear thinking around data modeling, data quality, and pipeline visibility.
+This project uses a local dbt profile for BigQuery authentication.
 
+The local `profiles.yml` file is not committed to the repository because it contains environment-specific connection settings.
+
+From the repository root:
+
+```bash
+cd dbt
+```
+
+Validate dbt connection:
+
+```bash
+dbt debug
+```
+
+Build staging models:
+
+```bash
+dbt run --select staging
+dbt test --select staging
+```
+
+Build intermediate and mart models:
+
+```bash
+dbt build --select intermediate marts
+```
+
+Generate and serve dbt docs:
+
+```bash
+dbt docs generate
+dbt docs serve --port 8081
+```
+
+---
+
+## Project workflow
+
+The project is developed through controlled milestones on the branch:
+
+```text
+feature/olist-analytics-portal
+```
+
+GitHub Projects is used to organize work into cards, track milestone progress, and keep the workflow close to a practical enterprise delivery process.
+
+The current workflow emphasizes:
+
+- Small milestone-based delivery
+- Clear acceptance criteria
+- Documentation for each important design decision
+- Validation before moving to the next milestone
+- Separation between implemented scope and future scope
+
+---
+
+## Future work
+
+The following items are planned as future milestones and are not part of the current M6 implementation.
+
+### M7 - Google Cloud Scheduler + Cloud Run Job orchestration
+
+Add scheduled execution for dbt workflows using Google Cloud Scheduler and Cloud Run Jobs.
+
+### M8 - ADE-inspired metadata refresh and monitoring tables
+
+Borrow metadata-driven DataOps ideas from Agile Data Engine without directly integrating ADE.
+
+Planned direction:
+
+- Parse `manifest.json`
+- Parse `run_results.json`
+- Parse `catalog.json`
+- Load dbt artifact metadata into BigQuery `olist_monitoring` tables
+- Track model status, test results, row counts, execution metadata, and lineage metadata
+
+### M9 - AI-assisted pipeline intelligence layer
+
+Add a controlled AI-assisted explanation layer on top of dbt docs, dbt artifacts, and monitoring tables.
+
+The AI layer should help explain:
+
+- Pipeline health
+- Data quality issues
+- Failed tests
+- Validation results
+- Model lineage
+- Runtime performance
+- Downstream impact
+
+The AI layer will not replace dbt tests, dbt validation, or structured monitoring tables. It will only provide an explanation and analysis layer on top of validated metadata.
+
+---
+
+## Project positioning
+
+This project is a portfolio project, but it is structured like a practical analytics engineering workflow.
+
+The main value is not only the final tables, but also the engineering process behind them:
+
+- Understand the source system
+- Design the warehouse layers
+- Model facts and dimensions with explicit grain
+- Validate assumptions through dbt tests
+- Document lineage and decisions
+- Keep project scope controlled through milestones
