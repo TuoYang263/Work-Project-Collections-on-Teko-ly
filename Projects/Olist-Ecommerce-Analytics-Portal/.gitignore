@@ -30,3 +30,6 @@ dbt/.user.yml
 
 # local dbt profiles should stay outside the repo
 profiles.yml
+
+# logs
+logs/
