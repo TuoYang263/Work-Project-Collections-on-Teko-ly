@@ -14,7 +14,7 @@ The current completed scope focuses on the analytics engineering foundation:
 - dbt docs and lineage
 - milestone-based project workflow
 
-The project title includes pipeline monitoring and portal direction, but the current implemented architecture does not yet include orchestration, monitoring tables, BI dashboards, or a custom portal. These are planned as future milestones.
+The project title includes pipeline monitoring and portal direction, but the current implemented architecture does not yet include completed orchestration, monitoring tables, BI dashboards, or a custom portal. Orchestration is being addressed in M7, while monitoring tables and AI-assisted pipeline intelligence are reserved for later milestones.
 
 ---
 
@@ -28,7 +28,8 @@ M2 - BigQuery Raw Layer: completed
 M3 - Staging Layer Planning: completed
 M4 - dbt Staging Layer: completed
 M5 - Dimensional Modeling / Analytics Marts: completed
-M6 - README / dbt docs / Project Showcase Cleanup: in progress
+M6 - README / dbt docs / Project Showcase Cleanup: completed
+M7 - Google Cloud Scheduler + Cloud Run Job Orchestration: in progress
 ```
 
 Implemented warehouse and dbt layers:
@@ -48,6 +49,22 @@ dbt tests + dbt docs + lineage
         ↓
 BI-ready analytics layer
 ```
+
+M7 target orchestration flow:
+
+```text
+Cloud Scheduler
+        ↓
+Cloud Run Job
+        ↓
+Containerized dbt project
+        ↓
+dbt build --target prod
+        ↓
+BigQuery staging, intermediate, and marts datasets
+```
+
+The M7 orchestration layer is currently being designed and implemented. It is intended to make the existing dbt pipeline cloud-executable and schedulable without adding metadata refresh or AI-assisted monitoring logic.
 
 ---
 
@@ -451,6 +468,49 @@ assets/screenshots/dbt_docs/marts_tests_overview.png
 
 ---
 
+## M7 orchestration layer
+
+M7 introduces a lightweight cloud orchestration layer for the existing dbt-based analytics pipeline.
+
+The target orchestration architecture is:
+
+```text
+Cloud Scheduler
+    ↓
+Cloud Run Job
+    ↓
+Containerized dbt project
+    ↓
+BigQuery staging, intermediate, and marts datasets
+```
+
+Cloud Scheduler is responsible for triggering the pipeline on a schedule.
+
+Cloud Run Job is responsible for running the dbt pipeline as a batch job and exiting after completion.
+
+The expected Cloud Run Job execution command is:
+
+```bash
+dbt build --target prod
+```
+
+This allows dbt models and tests to run together as one scheduled transformation job.
+
+The orchestration layer is intentionally kept separate from modeling logic. dbt continues to own transformations, tests, documentation, and lineage. Cloud Scheduler and Cloud Run Job only provide scheduled cloud execution.
+
+M7 does not implement:
+
+- dbt artifact parsing
+- metadata refresh tables
+- `olist_monitoring` dataset
+- historical pipeline comparison
+- AI-assisted pipeline intelligence
+- React or custom portal integration
+
+Those capabilities are reserved for later milestones.
+
+---
+
 ## Project workflow architecture
 
 The project is developed on the branch:
@@ -468,10 +528,11 @@ Current completed milestones:
 - M3 - Staging Layer Planning
 - M4 - dbt Staging Layer
 - M5 - Dimensional Modeling / Analytics Marts
+- M6 - README / dbt docs / Project Showcase Cleanup
 
 Current milestone:
 
-- M6 - README / dbt docs / Project Showcase Cleanup
+- M7 - Google Cloud Scheduler + Cloud Run Job Orchestration
 
 GitHub Projects is used to organize cards, track milestone progress, and keep development work reviewable.
 
@@ -509,13 +570,13 @@ The current architecture does not yet include:
 - automated dbt artifact ingestion
 - AI-assisted pipeline intelligence
 
-These items are intentionally kept outside the current M6 scope.
+These items are intentionally kept outside the completed M6 scope. Cloud Scheduler and Cloud Run Job orchestration are being addressed in M7.
 
 ---
 
-## Future architecture direction
+## Current and future architecture direction
 
-Future milestones are planned as follows.
+Current and future milestones are planned as follows.
 
 ### M7 - Google Cloud Scheduler + Cloud Run Job orchestration
 
