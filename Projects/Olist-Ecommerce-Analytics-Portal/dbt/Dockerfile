@@ -12,6 +12,7 @@ RUN apt-get update \
         git \
         bash \
         ca-certificates \
+        gettext-base \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir --upgrade pip \

@@ -33,3 +33,6 @@ profiles.yml
 
 # logs
 logs/
+
+# dbt local/runtime profiles
+dbt/profiles.yml

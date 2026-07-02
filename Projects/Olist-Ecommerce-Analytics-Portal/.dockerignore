@@ -1,0 +1,23 @@
+# Local credentials and runtime-generated dbt profile
+dbt/profiles.yml
+
+# dbt artifacts
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/.user.yml
+
+# Local data and credentials
+data/raw/
+data/sample/
+.kaggle/
+kaggle.json
+.env
+.env.*
+
+# Python/cache/editor files
+__pycache__/
+*.pyc
+.vscode/
+.DS_Store
+Thumbs.db
