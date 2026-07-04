@@ -15,8 +15,10 @@ The current implementation focuses on the warehouse and transformation foundatio
 - dbt tests for primary keys, relationships, accepted values, and important business fields
 - dbt docs and lineage for model documentation and impact understanding
 - GitHub Projects milestone workflow for enterprise-style project tracking
+- Dockerized dbt execution for cloud deployment
+- Google Cloud Run Job and Cloud Scheduler orchestration
 
-The project title includes pipeline monitoring and portal direction, but the current completed scope is intentionally focused on the analytics engineering foundation. Orchestration, monitoring tables, and AI-assisted pipeline intelligence are planned as future milestones.
+The project title includes pipeline monitoring and portal direction. The current completed scope covers the analytics engineering foundation and a lightweight cloud orchestration layer. Monitoring tables, Power BI reporting, React portal integration, and AI-assisted pipeline intelligence are planned as later milestones.
 
 ---
 
@@ -35,6 +37,8 @@ It demonstrates:
 - Generating dbt documentation and lineage
 - Documenting decisions, validation results, and milestone progress
 - Managing project work through GitHub Projects and milestone-based delivery
+- Containerizing dbt workflows for cloud execution
+- Orchestrating scheduled dbt builds with Cloud Run Jobs and Cloud Scheduler
 
 ---
 
@@ -47,7 +51,8 @@ It demonstrates:
 | M3 - Staging Layer Planning | Completed | Staging design, naming rules, source-to-staging mapping |
 | M4 - dbt Staging Layer | Completed | 9 staging views, dbt sources, documentation, 39 dbt tests |
 | M5 - Dimensional Modeling / Analytics Marts | Completed | Intermediate models, dimensions, facts, mart tests, dbt docs validation |
-| M6 - README / dbt docs / Project Showcase Cleanup | In progress | Portfolio-ready README, architecture docs, dbt docs screenshots, project presentation cleanup |
+| M6 - README / dbt docs / Project Showcase Cleanup | Completed | Portfolio-ready README, architecture docs, dbt docs screenshots, project presentation cleanup |
+| M7 - Google Cloud Scheduler + Cloud Run Job Orchestration | Completed | Dockerized dbt execution, Artifact Registry image, Cloud Run Job, Cloud Scheduler trigger, orchestration validation |
 
 ---
 
@@ -59,6 +64,9 @@ It demonstrates:
 | Transformation | dbt Core, dbt-bigquery |
 | Modeling approach | Dimensional modeling, star schema, layered warehouse design |
 | Data quality | dbt tests: `not_null`, `unique`, `relationships`, `accepted_values` |
+| Cloud orchestration | Google Cloud Run Jobs, Google Cloud Scheduler |
+| Containerization / deployment | Docker, Artifact Registry |
+| Security / runtime configuration | Google Cloud service accounts, IAM, runtime-generated dbt profile |
 | Documentation | Markdown docs, dbt docs, dbt lineage graph |
 | Project workflow | Git, GitHub, GitHub Projects, milestone-based delivery |
 
@@ -94,6 +102,26 @@ Layer responsibilities:
 | Marts | Provide BI-ready dimensional models | `fct_orders`, `dim_customers`, `dim_products` |
 | Documentation / quality | Validate and explain the data model | dbt tests, dbt docs, lineage graph |
 
+### M7 cloud orchestration flow
+
+M7 adds a lightweight cloud orchestration layer for scheduled dbt execution.
+
+```text
+Cloud Scheduler
+        ↓
+Cloud Run Job
+        ↓
+Containerized dbt project
+        ↓
+dbt build --target prod
+        ↓
+BigQuery staging, intermediate, and marts datasets
+```
+
+The dbt project is packaged into a Docker image and stored in Artifact Registry. Cloud Run Job runs the containerized dbt pipeline as a batch job, while Cloud Scheduler triggers the job through an authenticated HTTP request.
+
+The orchestration layer is intentionally separated from modeling logic. dbt continues to own transformations, tests, documentation, and lineage. Cloud Scheduler and Cloud Run Job only provide scheduled cloud execution.
+
 More details are documented in:
 
 - [`docs/architecture.md`](docs/architecture.md)
@@ -101,6 +129,8 @@ More details are documented in:
 - [`docs/staging_layer_plan.md`](docs/staging_layer_plan.md)
 - [`docs/m5_dimensional_modeling_design.md`](docs/m5_dimensional_modeling_design.md)
 - [`docs/m5_dbt_marts_validation.md`](docs/m5_dbt_marts_validation.md)
+- [`docs/orchestration.md`](docs/orchestration.md)
+- [`docs/gcp_orchestration_commands.md`](docs/gcp_orchestration_commands.md)
 
 ---
 
@@ -243,6 +273,40 @@ Validation details are documented in:
 - [`docs/m4_dbt_staging_validation.md`](docs/m4_dbt_staging_validation.md)
 - [`docs/m5_dbt_marts_validation.md`](docs/m5_dbt_marts_validation.md)
 
+### M7 cloud orchestration validation
+
+M7 validated that the dbt pipeline can run as a containerized Cloud Run Job and be triggered by Cloud Scheduler.
+
+Validated orchestration flow:
+
+```text
+Cloud Scheduler force-run
+    ↓
+Cloud Run Job execution
+    ↓
+Containerized dbt build
+    ↓
+BigQuery staging, intermediate, and marts models refreshed
+```
+
+Validation result:
+
+```text
+Cloud Run Job: olist-dbt-build-job
+Cloud Run Job region: europe-north1
+Cloud Scheduler job: olist-dbt-daily-trigger
+Cloud Scheduler location: europe-west1
+Schedule: 0 6 * * *
+Time zone: Europe/Helsinki
+Manual Cloud Run Job execution: succeeded
+Scheduler-triggered Cloud Run Job execution: succeeded
+dbt result: PASS=115 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=115
+```
+
+Deployment commands and validation details are documented in:
+
+- [`docs/gcp_orchestration_commands.md`](docs/gcp_orchestration_commands.md)
+
 ---
 
 ## dbt docs and lineage
@@ -314,12 +378,12 @@ The mart layer is intentionally designed to be consumed by BI tools or downstrea
 ├── assets/                     # Images, diagrams, and dbt docs screenshots
 ├── bi/                         # Optional future BI files and notes
 ├── data/                       # Local data folder; raw data is ignored by Git
-├── dbt/                        # dbt project
+├── dbt/                        # dbt project and Cloud Run Job runtime files
 │   ├── dbt_project.yml
+│   ├── Dockerfile              # Container image definition for Cloud Run Job
+│   ├── profiles.yml.template   # Runtime-generated dbt profile template
+│   ├── run_dbt_job.sh          # Cloud Run Job entrypoint script
 │   └── models/
-│       ├── staging/            # Source-aligned staging views
-│       ├── intermediate/       # Reusable aggregation models
-│       └── marts/core/         # Fact and dimension tables
 ├── docs/                       # Architecture, validation, and modeling docs
 ├── metadata/                   # Source, BigQuery, staging, and project planning metadata
 ├── portal/                     # Placeholder for possible future portal work
@@ -336,6 +400,8 @@ docs/m4_dbt_staging_validation.md
 docs/m5_dimensional_modeling_design.md
 docs/m5_dbt_marts_validation.md
 docs/project_management.md
+docs/orchestration.md
+docs/gcp_orchestration_commands.md
 ```
 
 ---
@@ -402,11 +468,7 @@ The current workflow emphasizes:
 
 ## Future work
 
-The following items are planned as future milestones and are not part of the current M6 implementation.
-
-### M7 - Google Cloud Scheduler + Cloud Run Job orchestration
-
-Add scheduled execution for dbt workflows using Google Cloud Scheduler and Cloud Run Jobs.
+The following items are planned as future milestones after the completed BigQuery, dbt, and M7 cloud orchestration foundation.
 
 ### M8 - ADE-inspired metadata refresh and monitoring tables
 
