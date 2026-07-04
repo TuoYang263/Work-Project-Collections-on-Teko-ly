@@ -7,16 +7,16 @@ This document records the Google Cloud commands used to deploy and validate the 
 M7 uses:
 
 ```text
-Artifact Registry
+Cloud Scheduler trigger
     ↓
 Cloud Run Job
     ↓
 Containerized dbt project
     ↓
-Cloud Scheduler trigger
-    ↓
 BigQuery dbt models and tests
 ```
+
+Artifact Registry stores the Docker image used by the Cloud Run Job.
 
 The goal is to make the existing dbt pipeline cloud-executable and schedulable without adding M8 metadata refresh or M9 AI-assisted pipeline intelligence.
 
@@ -29,6 +29,7 @@ Set the following variables before running deployment commands.
 ```bash
 export PROJECT_ID="your-gcp-project-id"
 export REGION="europe-north1"
+export SCHEDULER_LOCATION="europe-west1"
 export BQ_LOCATION="EU"
 
 export ARTIFACT_REPO="olist-dbt-jobs"
@@ -56,6 +57,7 @@ Notes:
 - `REGION` is the Cloud Run and Artifact Registry region.
 - `BQ_LOCATION` should match the BigQuery dataset location.
 - `DBT_DATASET` should be set to `olist`, because dbt schema suffixes create `olist_staging`, `olist_intermediate`, and `olist_marts`.
+- `SCHEDULER_LOCATION` is the Cloud Scheduler location. It may differ from the Cloud Run Job region because not all Google Cloud services support the same regions.
 
 ---
 
@@ -125,6 +127,8 @@ Configure Docker authentication for Artifact Registry.
 gcloud auth configure-docker "${REGION}-docker.pkg.dev"
 ```
 
+If the Artifact Registry repository, service accounts, or Scheduler job already exist, skip the create command or use the corresponding update command.
+
 ---
 
 ## Build Docker image locally
@@ -147,6 +151,51 @@ Do not run the build command from inside the `dbt/` directory.
 
 ---
 
+## Local Docker smoke test
+
+Before deploying to Cloud Run Job, the Docker image can be tested locally with Google Application Default Credentials.
+
+First authenticate locally:
+
+```bash
+gcloud auth application-default login
+```
+
+Optionally verify that ADC is available:
+
+```bash
+gcloud auth application-default print-access-token > /dev/null
+```
+
+Do not commit or publish access tokens.
+
+Run the container locally from the repository root:
+
+```bash
+docker run --rm \
+  -e DBT_PROJECT_ID="${PROJECT_ID}" \
+  -e GOOGLE_CLOUD_PROJECT="${PROJECT_ID}" \
+  -e DBT_DATASET="olist" \
+  -e DBT_LOCATION="EU" \
+  -e DBT_THREADS="4" \
+  -e DBT_TARGET="prod" \
+  -e GOOGLE_APPLICATION_CREDENTIALS="/root/.config/gcloud/application_default_credentials.json" \
+  -v "$HOME/.config/gcloud:/root/.config/gcloud:ro" \
+  "${IMAGE_URI}"
+```
+
+Expected result:
+
+```text
+dbt debug succeeds
+dbt build succeeds
+PASS=115 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=115
+```
+
+This smoke test validates that the Docker image, entrypoint script, dbt profile generation, and dbt-bigquery connection work before deploying the image to Cloud Run Job.
+
+---
+
 ## Push Docker image
 
 ```bash
@@ -162,7 +211,7 @@ gcloud run jobs create "${CLOUD_RUN_JOB_NAME}" \
   --image="${IMAGE_URI}" \
   --region="${REGION}" \
   --service-account="${CLOUD_RUN_SA}" \
-  --set-env-vars="DBT_PROJECT_ID=${PROJECT_ID},DBT_DATASET=olist,DBT_LOCATION=${BQ_LOCATION},DBT_THREADS=4,DBT_TARGET=prod" \
+  --set-env-vars="DBT_PROJECT_ID=${PROJECT_ID},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},DBT_DATASET=olist,DBT_LOCATION=${BQ_LOCATION},DBT_THREADS=4,DBT_TARGET=prod" \
   --tasks=1 \
   --max-retries=1 \
   --task-timeout=3600 \
@@ -177,7 +226,7 @@ gcloud run jobs update "${CLOUD_RUN_JOB_NAME}" \
   --image="${IMAGE_URI}" \
   --region="${REGION}" \
   --service-account="${CLOUD_RUN_SA}" \
-  --set-env-vars="DBT_PROJECT_ID=${PROJECT_ID},DBT_DATASET=olist,DBT_LOCATION=${BQ_LOCATION},DBT_THREADS=4,DBT_TARGET=prod" \
+  --set-env-vars="DBT_PROJECT_ID=${PROJECT_ID},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},DBT_DATASET=olist,DBT_LOCATION=${BQ_LOCATION},DBT_THREADS=4,DBT_TARGET=prod" \
   --tasks=1 \
   --max-retries=1 \
   --task-timeout=3600 \
@@ -241,9 +290,9 @@ gcloud run jobs executions list \
 
 ```bash
 gcloud logging read \
-  "resource.type=cloud_run_job AND resource.labels.job_name=${CLOUD_RUN_JOB_NAME}" \
-  --limit=50 \
-  --format="value(textPayload)"
+  "resource.type=cloud_run_job AND resource.labels.job_name=\"${CLOUD_RUN_JOB_NAME}\"" \
+  --limit=120 \
+  --format="table(timestamp,textPayload)"
 ```
 
 ---
@@ -256,7 +305,7 @@ Because the target is a Google API endpoint under `googleapis.com`, the Schedule
 
 ```bash
 gcloud scheduler jobs create http "${SCHEDULER_JOB_NAME}" \
-  --location="${REGION}" \
+  --location="${SCHEDULER_LOCATION}" \
   --schedule="${SCHEDULER_CRON}" \
   --time-zone="${SCHEDULER_TIME_ZONE}" \
   --uri="https://run.googleapis.com/v2/projects/${PROJECT_ID}/locations/${REGION}/jobs/${CLOUD_RUN_JOB_NAME}:run" \
@@ -271,7 +320,16 @@ gcloud scheduler jobs create http "${SCHEDULER_JOB_NAME}" \
 
 ```bash
 gcloud scheduler jobs run "${SCHEDULER_JOB_NAME}" \
-  --location="${REGION}"
+  --location="${SCHEDULER_LOCATION}"
+
+gcloud scheduler jobs describe "${SCHEDULER_JOB_NAME}" \
+  --location="${SCHEDULER_LOCATION}" \
+  --format="yaml(name,schedule,timeZone,state,httpTarget.uri)"
+
+gcloud run jobs executions list \
+  --job="${CLOUD_RUN_JOB_NAME}" \
+  --region="${REGION}" \
+  --limit=5
 ```
 
 Expected result:
@@ -281,6 +339,7 @@ Cloud Scheduler successfully triggers the Cloud Run Job
 Cloud Run Job starts a new execution
 dbt debug and dbt build run inside the container
 BigQuery models are refreshed
+The Scheduler-triggered execution should show `RUN BY` as the Scheduler service account.
 ```
 
 ---
@@ -308,6 +367,64 @@ Cloud Scheduler validation:
 [ ] Scheduler force-run succeeds
 [ ] Cloud Run Job execution is created by Scheduler
 [ ] Scheduled execution logs are visible
+```
+
+---
+
+## M7 validation result
+
+The M7 orchestration flow was validated successfully.
+
+Validated flow:
+
+```text
+Cloud Scheduler force-run
+    ↓
+Cloud Run Job execution
+    ↓
+Containerized dbt build
+    ↓
+BigQuery staging, intermediate, and marts models refreshed
+```
+
+Validation details:
+
+```text
+Cloud Run Job region: europe-north1
+Cloud Scheduler location: europe-west1
+Cloud Run Job: olist-dbt-build-job
+Cloud Scheduler job: olist-dbt-daily-trigger
+Schedule: 0 6 * * *
+Time zone: Europe/Helsinki
+Scheduler-triggered execution: olist-dbt-build-job-bzrmf
+Manual execution: olist-dbt-build-job-9bf7z
+dbt result: PASS=115 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=115
+```
+
+The Scheduler-triggered execution was run by:
+
+```text
+olist-scheduler-invoker@<project-id>.iam.gserviceaccount.com
+```
+
+This confirms that Cloud Scheduler can trigger the Cloud Run Job through an authenticated OAuth request, and that the containerized dbt pipeline can refresh BigQuery models successfully.
+
+---
+
+## Optional: Pause Scheduler after validation
+
+To avoid unnecessary scheduled runs after validation, pause the Scheduler job:
+
+```bash
+gcloud scheduler jobs pause "${SCHEDULER_JOB_NAME}" \
+  --location="${SCHEDULER_LOCATION}"
+```
+
+Resume it later if needed:
+
+```bash
+gcloud scheduler jobs resume "${SCHEDULER_JOB_NAME}" \
+  --location="${SCHEDULER_LOCATION}"
 ```
 
 ---
