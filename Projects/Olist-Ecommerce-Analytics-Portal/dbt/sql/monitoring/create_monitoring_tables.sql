@@ -184,3 +184,31 @@ CLUSTER BY model_name, column_name
 OPTIONS (
     description = "Append-only dbt model and source column metadata snapshots generated from manifest.json and catalog.json."
 );
+
+CREATE TABLE IF NOT EXISTS `olist_monitoring.model_lineage_edges` (
+    monitoring_run_id STRING OPTIONS(description = "Generated unique identifier for each metadata ingestion run."),
+    dbt_invocation_id STRING OPTIONS(description = "dbt invocation_id from dbt artifacts."),
+
+    parent_unique_id STRING OPTIONS(description = "dbt unique_id of the upstream parent node."),
+    parent_name STRING OPTIONS(description = "Name of the upstream parent node."),
+    parent_resource_type STRING OPTIONS(description = "Resource type of the upstream parent node, such as source, model, seed, or snapshot."),
+
+    child_unique_id STRING OPTIONS(description = "dbt unique_id of the downstream child node."),
+    child_name STRING OPTIONS(description = "Name of the downstream child node."),
+    child_resource_type STRING OPTIONS(description = "Resource type of the downstream child node, such as model or test."),
+
+    dependency_type STRING OPTIONS(description = "Type of dependency relationship, such as depends_on_node."),
+
+    ingested_at TIMESTAMP OPTIONS(description = "Timestamp when metadata was loaded into BigQuery.")
+)
+-- Partition lineage edges by ingestion date because each pipeline run appends
+-- a new snapshot of dbt dependency relationships.
+PARTITION BY DATE(ingested_at)
+
+-- Cluster by parent and child names to support lineage lookup and downstream
+-- impact analysis from failed or changed upstream nodes.
+CLUSTER BY parent_name, child_name
+
+OPTIONS (
+    description = "Append-only dbt lineage dependency edges generated from manifest.json."
+);
