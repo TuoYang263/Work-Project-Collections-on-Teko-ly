@@ -44,3 +44,37 @@ CLUSTER BY status, environment
 OPTIONS (
     description = "Append-only pipeline-level dbt run history generated from dbt artifacts."
 );
+
+CREATE TABLE IF NOT EXISTS `olist_monitoring.model_run_results` (
+    monitoring_run_id STRING OPTIONS(description = "Generated unique identifier for each metadata ingestion run."),
+    dbt_invocation_id STRING OPTIONS(description = "dbt invocation_id from dbt artifacts."),
+
+    unique_id STRING OPTIONS(description = "dbt unique_id for the executed model node."),
+    model_name STRING OPTIONS(description = "dbt model name."),
+    resource_type STRING OPTIONS(description = "dbt resource type, such as model, seed, or snapshot."),
+    package_name STRING OPTIONS(description = "dbt package name."),
+
+    database_name STRING OPTIONS(description = "Target database or BigQuery project name."),
+    schema_name STRING OPTIONS(description = "Target BigQuery dataset name."),
+    alias STRING OPTIONS(description = "Final relation alias used by dbt."),
+    materialized STRING OPTIONS(description = "dbt materialization type, such as view, table, or incremental."),
+
+    status STRING OPTIONS(description = "Execution status of the model, such as success, error, skipped, or unknown."),
+    execution_time_seconds FLOAT64 OPTIONS(description = "Model execution time in seconds from run_results.json."),
+    thread_id STRING OPTIONS(description = "dbt thread identifier used during model execution."),
+    message STRING OPTIONS(description = "dbt execution message if available."),
+
+    adapter_response_json STRING OPTIONS(description = "Raw adapter response serialized as JSON."),
+    ingested_at TIMESTAMP OPTIONS(description = "Timestamp when metadata was loaded into BigQuery.")
+)
+-- Partition model run results by ingestion date because execution records
+-- are appended after each pipeline run.
+PARTITION BY DATE(ingested_at)
+
+-- Cluster by model name and status to support common monitoring queries,
+-- such as finding failed models or checking runtime trends for a specific model.
+CLUSTER BY model_name, status
+
+OPTIONS (
+    description = "Append-only dbt model execution history generated from run_results.json and manifest.json."
+);
