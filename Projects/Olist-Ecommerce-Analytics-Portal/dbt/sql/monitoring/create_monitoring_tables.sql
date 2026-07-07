@@ -154,3 +154,33 @@ CLUSTER BY model_name, materialized
 OPTIONS (
     description = "Append-only dbt model metadata snapshots generated from manifest.json and catalog.json."
 );
+
+CREATE TABLE IF NOT EXISTS `olist_monitoring.model_column_snapshots` (
+    monitoring_run_id STRING OPTIONS(description = "Generated unique identifier for each metadata ingestion run."),
+    dbt_invocation_id STRING OPTIONS(description = "dbt invocation_id from dbt artifacts."),
+
+    model_unique_id STRING OPTIONS(description = "dbt unique_id of the parent model or source."),
+    model_name STRING OPTIONS(description = "Name of the parent model or source."),
+    resource_type STRING OPTIONS(description = "dbt resource type of the parent node, such as model or source."),
+
+    column_name STRING OPTIONS(description = "Column name from manifest.json or catalog.json."),
+    data_type STRING OPTIONS(description = "Column data type from catalog.json if available."),
+    column_index INT64 OPTIONS(description = "Column ordinal position if available."),
+
+    description STRING OPTIONS(description = "dbt column description."),
+    tests_json STRING OPTIONS(description = "Related dbt column tests serialized as JSON if available."),
+    catalog_column_metadata_json STRING OPTIONS(description = "Raw catalog column metadata serialized as JSON."),
+
+    ingested_at TIMESTAMP OPTIONS(description = "Timestamp when metadata was loaded into BigQuery.")
+)
+-- Partition column metadata snapshots by ingestion date because each pipeline
+-- run appends a new snapshot of model and source columns.
+PARTITION BY DATE(ingested_at)
+
+-- Cluster by model and column name to support documentation coverage,
+-- schema inspection, and future column-level impact analysis.
+CLUSTER BY model_name, column_name
+
+OPTIONS (
+    description = "Append-only dbt model and source column metadata snapshots generated from manifest.json and catalog.json."
+);
