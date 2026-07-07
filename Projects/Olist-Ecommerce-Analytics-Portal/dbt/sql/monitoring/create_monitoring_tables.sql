@@ -114,3 +114,43 @@ CLUSTER BY model_name, status, test_metadata_name
 OPTIONS (
     description = "Append-only dbt test execution history generated from run_results.json and manifest.json."
 );
+
+CREATE TABLE IF NOT EXISTS `olist_monitoring.model_metadata_snapshots` (
+    monitoring_run_id STRING OPTIONS(description = "Generated unique identifier for each metadata ingestion run."),
+    dbt_invocation_id STRING OPTIONS(description = "dbt invocation_id from dbt artifacts."),
+
+    unique_id STRING OPTIONS(description = "dbt unique_id for the model node."),
+    model_name STRING OPTIONS(description = "dbt model name."),
+    resource_type STRING OPTIONS(description = "dbt resource type, such as model, seed, snapshot, or source."),
+    package_name STRING OPTIONS(description = "dbt package name."),
+
+    database_name STRING OPTIONS(description = "Target database or BigQuery project name."),
+    schema_name STRING OPTIONS(description = "Target BigQuery dataset name."),
+    alias STRING OPTIONS(description = "Final relation alias used by dbt."),
+    relation_name STRING OPTIONS(description = "Fully qualified relation name if available."),
+    materialized STRING OPTIONS(description = "dbt materialization type, such as view, table, or incremental."),
+
+    path STRING OPTIONS(description = "Relative dbt model path."),
+    original_file_path STRING OPTIONS(description = "Original file path of the dbt model or source definition."),
+    description STRING OPTIONS(description = "dbt model description."),
+
+    tags_json STRING OPTIONS(description = "dbt tags serialized as JSON."),
+    meta_json STRING OPTIONS(description = "dbt meta configuration serialized as JSON."),
+
+    row_count INT64 OPTIONS(description = "Model row count from catalog.json if available."),
+    bytes INT64 OPTIONS(description = "Model table size in bytes from catalog.json if available."),
+    catalog_metadata_json STRING OPTIONS(description = "Raw catalog metadata serialized as JSON."),
+
+    ingested_at TIMESTAMP OPTIONS(description = "Timestamp when metadata was loaded into BigQuery.")
+)
+-- Partition model metadata snapshots by ingestion date because each pipeline
+-- run appends a new snapshot of model-level metadata.
+PARTITION BY DATE(ingested_at)
+
+-- Cluster by model name and materialization to support model inventory,
+-- documentation, and row count change analysis.
+CLUSTER BY model_name, materialized
+
+OPTIONS (
+    description = "Append-only dbt model metadata snapshots generated from manifest.json and catalog.json."
+);
