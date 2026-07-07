@@ -78,3 +78,39 @@ CLUSTER BY model_name, status
 OPTIONS (
     description = "Append-only dbt model execution history generated from run_results.json and manifest.json."
 );
+
+CREATE TABLE IF NOT EXISTS `olist_monitoring.test_run_results` (
+    monitoring_run_id STRING OPTIONS(description = "Generated unique identifier for each metadata ingestion run."),
+    dbt_invocation_id STRING OPTIONS(description = "dbt invocation_id from dbt artifacts."),
+
+    unique_id STRING OPTIONS(description = "dbt unique_id for the executed test node."),
+    test_name STRING OPTIONS(description = "dbt test node name."),
+    test_type STRING OPTIONS(description = "dbt test type, such as generic or singular."),
+    test_metadata_name STRING OPTIONS(description = "dbt generic test name, such as not_null, unique, relationships, or accepted_values."),
+
+    model_unique_id STRING OPTIONS(description = "dbt unique_id of the model or source tested by this test."),
+    model_name STRING OPTIONS(description = "Name of the model or source tested by this test."),
+    column_name STRING OPTIONS(description = "Column name tested by this test, if applicable."),
+
+    status STRING OPTIONS(description = "Execution status of the test, such as pass, fail, warn, error, skipped, or unknown."),
+    severity STRING OPTIONS(description = "Configured dbt test severity, such as warn or error."),
+    failures INT64 OPTIONS(description = "Number of failing records reported by dbt, if available."),
+    execution_time_seconds FLOAT64 OPTIONS(description = "Test execution time in seconds from run_results.json."),
+    thread_id STRING OPTIONS(description = "dbt thread identifier used during test execution."),
+    message STRING OPTIONS(description = "dbt test execution or failure message if available."),
+
+    adapter_response_json STRING OPTIONS(description = "Raw adapter response serialized as JSON."),
+    ingested_at TIMESTAMP OPTIONS(description = "Timestamp when metadata was loaded into BigQuery.")
+)
+-- Partition test run results by ingestion date because test execution records
+-- are appended after each pipeline run.
+PARTITION BY DATE(ingested_at)
+
+-- Cluster by model name, status, and test metadata name to support common
+-- monitoring queries, such as finding failed tests for a model or tracking
+-- recurring failures by test type.
+CLUSTER BY model_name, status, test_metadata_name
+
+OPTIONS (
+    description = "Append-only dbt test execution history generated from run_results.json and manifest.json."
+);
