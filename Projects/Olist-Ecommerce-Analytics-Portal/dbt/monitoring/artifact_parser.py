@@ -183,6 +183,71 @@ def build_model_run_result_records(
     return model_run_records
 
 
+def normalize_test_status(status: str | None) -> str | None:
+    if status == "success":
+        return "pass"
+
+    return status
+
+
+def build_test_run_result_records(
+    manifest: dict,
+    run_results: dict,
+    pipeline_run_record: dict,
+) -> list[dict]:
+    test_run_records = []
+
+    for result in run_results.get("results", []):
+        unique_id = result.get("unique_id")
+        node = get_node_by_unique_id(manifest, unique_id)
+        resource_type = node.get("resource_type")
+
+        if resource_type != "test":
+            continue
+
+        config = node.get("config", {})
+        test_metadata = node.get("test_metadata", {})
+        attached_node_unique_id = node.get("attached_node")
+
+        attached_node = get_node_by_unique_id(
+            manifest=manifest,
+            unique_id=attached_node_unique_id,
+        )
+
+        test_type = "generic" if test_metadata else "singular"
+
+        test_run_records.append(
+            {
+                "monitoring_run_id": pipeline_run_record["monitoring_run_id"],
+                "dbt_invocation_id": pipeline_run_record["dbt_invocation_id"],
+                "unique_id": unique_id,
+                "test_name": node.get("name"),
+                "test_type": test_type,
+                "test_metadata_name": test_metadata.get("name"),
+                "model_unique_id": attached_node_unique_id,
+                "model_name": attached_node.get("name"),
+                "column_name": node.get("column_name"),
+                "status": normalize_test_status(result.get("status")),
+                "severity": (
+                    str(config.get("severity")).lower()
+                    if config.get("severity")
+                    else None
+                ),
+                "failures": result.get("failures"),
+                "execution_time_seconds": result.get("execution_time"),
+                "thread_id": result.get("thread_id"),
+                "message": result.get("message"),
+                "adapter_response_json": json.dumps(
+                    result.get("adapter_response", {}),
+                    ensure_ascii=False,
+                ),
+                "ingested_at": pipeline_run_record["ingested_at"],
+            }
+        )
+
+    return test_run_records
+
+
 def main() -> None:
     manifest = load_json(ARTIFACT_DIR / "manifest.json")
     run_results = load_json(ARTIFACT_DIR / "run_results.json")
@@ -200,6 +265,12 @@ def main() -> None:
         pipeline_run_record=pipeline_run_record,
     )
 
+    test_run_records = build_test_run_result_records(
+        manifest=manifest,
+        run_results=run_results,
+        pipeline_run_record=pipeline_run_record,
+    )
+
     print("pipeline_run_record")
     print("===================")
     print(json.dumps(pipeline_run_record, indent=2, ensure_ascii=False))
@@ -209,6 +280,12 @@ def main() -> None:
     print("========================")
     print(f"total model run records: {len(model_run_records)}")
     print(json.dumps(model_run_records[:3], indent=2, ensure_ascii=False))
+    print()
+
+    print("test_run_records sample")
+    print("=======================")
+    print(f"total test run records: {len(test_run_records)}")
+    print(json.dumps(test_run_records[:3], indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
