@@ -248,6 +248,64 @@ def build_test_run_result_records(
     return test_run_records
 
 
+def get_catalog_node_by_unique_id(catalog: dict, unique_id: str) -> dict:
+    return catalog.get("nodes", {}).get(unique_id, {})
+
+
+def get_catalog_stat_value(catalog_node: dict, stat_name: str):
+    return catalog_node.get("stats", {}).get(stat_name, {}).get("value")
+
+
+def build_model_metadata_snapshot_records(
+    manifest: dict,
+    catalog: dict,
+    pipeline_run_record: dict,
+) -> list[dict]:
+    model_metadata_records = []
+
+    for unique_id, node in manifest.get("nodes", {}).items():
+        resource_type = node.get("resource_type")
+
+        if resource_type not in {"model", "seed", "snapshot"}:
+            continue
+
+        config = node.get("config", {})
+        catalog_node = get_catalog_node_by_unique_id(
+            catalog=catalog,
+            unique_id=unique_id,
+        )
+
+        model_metadata_records.append(
+            {
+                "monitoring_run_id": pipeline_run_record["monitoring_run_id"],
+                "dbt_invocation_id": pipeline_run_record["dbt_invocation_id"],
+                "unique_id": unique_id,
+                "model_name": node.get("name"),
+                "resource_type": resource_type,
+                "package_name": node.get("package_name"),
+                "database_name": node.get("database"),
+                "schema_name": node.get("schema"),
+                "alias": node.get("alias"),
+                "relation_name": node.get("relation_name"),
+                "materialized": config.get("materialized"),
+                "path": node.get("path"),
+                "original_file_path": node.get("original_file_path"),
+                "description": node.get("description"),
+                "tags_json": json.dumps(node.get("tags", []), ensure_ascii=False),
+                "meta_json": json.dumps(node.get("meta", {}), ensure_ascii=False),
+                "row_count": get_catalog_stat_value(catalog_node, "num_rows"),
+                "bytes": get_catalog_stat_value(catalog_node, "num_bytes"),
+                "catalog_metadata_json": json.dumps(
+                    catalog_node.get("metadata", {}),
+                    ensure_ascii=False,
+                ),
+                "ingested_at": pipeline_run_record["ingested_at"],
+            }
+        )
+
+    return model_metadata_records
+
+
 def main() -> None:
     manifest = load_json(ARTIFACT_DIR / "manifest.json")
     run_results = load_json(ARTIFACT_DIR / "run_results.json")
@@ -271,6 +329,12 @@ def main() -> None:
         pipeline_run_record=pipeline_run_record,
     )
 
+    model_metadata_records = build_model_metadata_snapshot_records(
+        manifest=manifest,
+        catalog=catalog,
+        pipeline_run_record=pipeline_run_record,
+    )
+
     print("pipeline_run_record")
     print("===================")
     print(json.dumps(pipeline_run_record, indent=2, ensure_ascii=False))
@@ -286,6 +350,12 @@ def main() -> None:
     print("=======================")
     print(f"total test run records: {len(test_run_records)}")
     print(json.dumps(test_run_records[:3], indent=2, ensure_ascii=False))
+    print()
+
+    print("model_metadata_records sample")
+    print("=============================")
+    print(f"total model metadata records: {len(model_metadata_records)}")
+    print(json.dumps(model_metadata_records[:3], indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
