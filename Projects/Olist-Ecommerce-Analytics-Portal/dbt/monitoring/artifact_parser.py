@@ -139,6 +139,50 @@ def build_pipeline_run_record(
     }
 
 
+def build_model_run_result_records(
+    manifest: dict,
+    run_results: dict,
+    pipeline_run_record: dict,
+) -> list[dict]:
+    model_run_records = []
+
+    for result in run_results.get("results", []):
+        unique_id = result.get("unique_id")
+        node = get_node_by_unique_id(manifest, unique_id)
+        resource_type = node.get("resource_type")
+
+        if resource_type not in {"model", "seed", "snapshot"}:
+            continue
+
+        config = node.get("config", {})
+
+        model_run_records.append(
+            {
+                "monitoring_run_id": pipeline_run_record["monitoring_run_id"],
+                "dbt_invocation_id": pipeline_run_record["dbt_invocation_id"],
+                "unique_id": unique_id,
+                "model_name": node.get("name"),
+                "resource_type": resource_type,
+                "package_name": node.get("package_name"),
+                "database_name": node.get("database"),
+                "schema_name": node.get("schema"),
+                "alias": node.get("alias"),
+                "materialized": config.get("materialized"),
+                "status": result.get("status"),
+                "execution_time_seconds": result.get("execution_time"),
+                "thread_id": result.get("thread_id"),
+                "message": result.get("message"),
+                "adapter_response_json": json.dumps(
+                    result.get("adapter_response", {}),
+                    ensure_ascii=False,
+                ),
+                "ingested_at": pipeline_run_record["ingested_at"],
+            }
+        )
+
+    return model_run_records
+
+
 def main() -> None:
     manifest = load_json(ARTIFACT_DIR / "manifest.json")
     run_results = load_json(ARTIFACT_DIR / "run_results.json")
@@ -150,7 +194,21 @@ def main() -> None:
         catalog=catalog,
     )
 
+    model_run_records = build_model_run_result_records(
+        manifest=manifest,
+        run_results=run_results,
+        pipeline_run_record=pipeline_run_record,
+    )
+
+    print("pipeline_run_record")
+    print("===================")
     print(json.dumps(pipeline_run_record, indent=2, ensure_ascii=False))
+    print()
+
+    print("model_run_records sample")
+    print("========================")
+    print(f"total model run records: {len(model_run_records)}")
+    print(json.dumps(model_run_records[:3], indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
