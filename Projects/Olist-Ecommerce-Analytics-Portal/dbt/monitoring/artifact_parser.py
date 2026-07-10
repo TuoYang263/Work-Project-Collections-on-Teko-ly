@@ -249,7 +249,123 @@ def build_test_run_result_records(
 
 
 def get_catalog_node_by_unique_id(catalog: dict, unique_id: str) -> dict:
-    return catalog.get("nodes", {}).get(unique_id, {})
+    nodes = catalog.get("nodes", {})
+    sources = catalog.get("sources", {})
+
+    if unique_id in nodes:
+        return nodes[unique_id]
+
+    if unique_id in sources:
+        return sources[unique_id]
+
+    return {}
+
+
+def build_column_tests_lookup(manifest: dict) -> dict[tuple[str, str], list[dict]]:
+    column_tests_lookup = {}
+
+    for test_unique_id, test_node in manifest.get("nodes", {}).items():
+        if test_node.get("resource_type") != "test":
+            continue
+
+        attached_node_unique_id = test_node.get("attached_node")
+        column_name = test_node.get("column_name")
+
+        if not attached_node_unique_id or not column_name:
+            continue
+
+        config = test_node.get("config", {})
+        test_metadata = test_node.get("test_metadata", {})
+
+        test_summary = {
+            "unique_id": test_unique_id,
+            "test_name": test_node.get("name"),
+            "test_metadata_name": test_metadata.get("name"),
+            "severity": (
+                str(config.get("severity")).lower() if config.get("severity") else None
+            ),
+        }
+
+        lookup_key = (attached_node_unique_id, column_name)
+        column_tests_lookup.setdefault(lookup_key, []).append(test_summary)
+
+    return column_tests_lookup
+
+
+def build_model_column_snapshot_records(
+    manifest: dict,
+    catalog: dict,
+    pipeline_run_record: dict,
+) -> list[dict]:
+    column_records = []
+    column_tests_lookup = build_column_tests_lookup(manifest)
+
+    parent_nodes = {}
+
+    for unique_id, node in manifest.get("nodes", {}).items():
+        if node.get("resource_type") in {"model", "seed", "snapshot"}:
+            parent_nodes[unique_id] = node
+
+    for unique_id, source in manifest.get("sources", {}).items():
+        parent_nodes[unique_id] = source
+
+    for parent_unique_id, parent_node in parent_nodes.items():
+        catalog_node = get_catalog_node_by_unique_id(
+            catalog=catalog,
+            unique_id=parent_unique_id,
+        )
+
+        manifest_columns = parent_node.get("columns", {}) or {}
+        catalog_columns = catalog_node.get("columns", {}) or {}
+
+        column_names = []
+
+        sorted_catalog_columns = sorted(
+            catalog_columns.items(),
+            key=lambda item: (
+                item[1].get("index") if item[1].get("index") is not None else 999999
+            ),
+        )
+
+        for column_name, _ in sorted_catalog_columns:
+            column_names.append(column_name)
+
+        for column_name in manifest_columns:
+            if column_name not in column_names:
+                column_names.append(column_name)
+
+        for column_name in column_names:
+            manifest_column = manifest_columns.get(column_name, {})
+            catalog_column = catalog_columns.get(column_name, {})
+
+            related_tests = column_tests_lookup.get((parent_unique_id, column_name), [])
+
+            column_records.append(
+                {
+                    "monitoring_run_id": pipeline_run_record["monitoring_run_id"],
+                    "dbt_invocation_id": pipeline_run_record["dbt_invocation_id"],
+                    "model_unique_id": parent_unique_id,
+                    "model_name": parent_node.get("name"),
+                    "resource_type": parent_node.get("resource_type"),
+                    "column_name": column_name,
+                    "data_type": catalog_column.get("type")
+                    or manifest_column.get("data_type"),
+                    "column_index": catalog_column.get("index"),
+                    "description": manifest_column.get("description")
+                    or catalog_column.get("comment"),
+                    "tests_json": json.dumps(
+                        related_tests,
+                        ensure_ascii=False,
+                    ),
+                    "catalog_column_metadata_json": json.dumps(
+                        catalog_column,
+                        ensure_ascii=False,
+                    ),
+                    "ingested_at": pipeline_run_record["ingested_at"],
+                }
+            )
+
+    return column_records
 
 
 def get_catalog_stat_value(catalog_node: dict, stat_name: str):
@@ -335,6 +451,12 @@ def main() -> None:
         pipeline_run_record=pipeline_run_record,
     )
 
+    model_column_records = build_model_column_snapshot_records(
+        manifest=manifest,
+        catalog=catalog,
+        pipeline_run_record=pipeline_run_record,
+    )
+
     print("pipeline_run_record")
     print("===================")
     print(json.dumps(pipeline_run_record, indent=2, ensure_ascii=False))
@@ -356,6 +478,12 @@ def main() -> None:
     print("=============================")
     print(f"total model metadata records: {len(model_metadata_records)}")
     print(json.dumps(model_metadata_records[:3], indent=2, ensure_ascii=False))
+    print()
+
+    print("model_column_records sample")
+    print("===========================")
+    print(f"total model column records: {len(model_column_records)}")
+    print(json.dumps(model_column_records[:5], indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
