@@ -16,6 +16,22 @@ def load_json(path: Path) -> dict:
         return json.load(file)
 
 
+def get_node_display_name(node: dict) -> str | None:
+    if not node:
+        return None
+
+    resource_type = node.get("resource_type")
+
+    if resource_type == "source":
+        source_name = node.get("source_name")
+        name = node.get("name")
+
+        if source_name and name:
+            return f"{source_name}.{name}"
+
+    return node.get("name")
+
+
 def get_node_by_unique_id(manifest: dict, unique_id: str) -> dict:
     nodes = manifest.get("nodes", {})
     sources = manifest.get("sources", {})
@@ -368,6 +384,58 @@ def build_model_column_snapshot_records(
     return column_records
 
 
+def build_model_lineage_edge_records(
+    manifest: dict,
+    pipeline_run_record: dict,
+) -> list[dict]:
+    lineage_records = []
+
+    allowed_child_resource_types = {"model", "seed", "snapshot", "test"}
+    allowed_parent_resource_types = {"source", "model", "seed", "snapshot"}
+
+    for child_unique_id, child_node in manifest.get("nodes", {}).items():
+        child_resource_type = child_node.get("resource_type")
+
+        if child_resource_type not in allowed_child_resource_types:
+            continue
+
+        parent_unique_ids = child_node.get("depends_on", {}).get("nodes", [])
+
+        for parent_unique_id in parent_unique_ids:
+            parent_node = get_node_by_unique_id(
+                manifest=manifest,
+                unique_id=parent_unique_id,
+            )
+            parent_resource_type = parent_node.get("resource_type")
+
+            if parent_resource_type not in allowed_parent_resource_types:
+                continue
+
+            lineage_records.append(
+                {
+                    "monitoring_run_id": pipeline_run_record["monitoring_run_id"],
+                    "dbt_invocation_id": pipeline_run_record["dbt_invocation_id"],
+                    "parent_unique_id": parent_unique_id,
+                    "parent_name": get_node_display_name(parent_node),
+                    "parent_resource_type": parent_resource_type,
+                    "child_unique_id": child_unique_id,
+                    "child_name": get_node_display_name(child_node),
+                    "child_resource_type": child_resource_type,
+                    "dependency_type": "depends_on_node",
+                    "ingested_at": pipeline_run_record["ingested_at"],
+                }
+            )
+
+    lineage_records.sort(
+        key=lambda record: (
+            record["parent_unique_id"] or "",
+            record["child_unique_id"] or "",
+        )
+    )
+
+    return lineage_records
+
+
 def get_catalog_stat_value(catalog_node: dict, stat_name: str):
     return catalog_node.get("stats", {}).get(stat_name, {}).get("value")
 
@@ -457,6 +525,11 @@ def main() -> None:
         pipeline_run_record=pipeline_run_record,
     )
 
+    model_lineage_records = build_model_lineage_edge_records(
+        manifest=manifest,
+        pipeline_run_record=pipeline_run_record,
+    )
+
     print("pipeline_run_record")
     print("===================")
     print(json.dumps(pipeline_run_record, indent=2, ensure_ascii=False))
@@ -484,6 +557,12 @@ def main() -> None:
     print("===========================")
     print(f"total model column records: {len(model_column_records)}")
     print(json.dumps(model_column_records[:5], indent=2, ensure_ascii=False))
+    print()
+
+    print("model_lineage_records sample")
+    print("============================")
+    print(f"total model lineage records: {len(model_lineage_records)}")
+    print(json.dumps(model_lineage_records[:10], indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
