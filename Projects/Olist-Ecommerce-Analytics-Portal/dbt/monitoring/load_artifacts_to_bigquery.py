@@ -4,6 +4,7 @@ from google.cloud import bigquery
 
 from artifact_parser import (
     ARTIFACT_DIR,
+    build_model_run_result_records,
     build_pipeline_run_record,
     load_json,
 )
@@ -58,12 +59,26 @@ def main() -> None:
         catalog=catalog,
     )
 
+    model_run_records = build_model_run_result_records(
+        manifest=manifest,
+        run_results=run_results,
+        pipeline_run_record=pipeline_run_record,
+    )
+
     insert_records(
         client=client,
         project_id=project_id,
         dataset_id=dataset_id,
         table_name="pipeline_runs",
         records=[pipeline_run_record],
+    )
+
+    insert_records(
+        client=client,
+        project_id=project_id,
+        dataset_id=dataset_id,
+        table_name="model_run_results",
+        records=model_run_records,
     )
 
 
