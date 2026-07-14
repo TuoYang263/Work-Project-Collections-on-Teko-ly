@@ -4,6 +4,7 @@ from google.cloud import bigquery
 
 from artifact_parser import (
     ARTIFACT_DIR,
+    build_model_column_snapshot_records,
     build_model_metadata_snapshot_records,
     build_model_run_result_records,
     build_pipeline_run_record,
@@ -79,6 +80,12 @@ def main() -> None:
         pipeline_run_record=pipeline_run_record,
     )
 
+    model_column_records = build_model_column_snapshot_records(
+        manifest=manifest,
+        catalog=catalog,
+        pipeline_run_record=pipeline_run_record,
+    )
+
     insert_records(
         client=client,
         project_id=project_id,
@@ -109,6 +116,14 @@ def main() -> None:
         dataset_id=dataset_id,
         table_name="model_metadata_snapshots",
         records=model_metadata_records,
+    )
+
+    insert_records(
+        client=client,
+        project_id=project_id,
+        dataset_id=dataset_id,
+        table_name="model_column_snapshots",
+        records=model_column_records,
     )
 
 
