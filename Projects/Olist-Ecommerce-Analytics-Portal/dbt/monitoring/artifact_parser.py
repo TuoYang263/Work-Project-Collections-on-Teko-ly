@@ -1,9 +1,19 @@
 from datetime import datetime, timezone
 from pathlib import Path
 import json
+import os
 import uuid
 
-ARTIFACT_DIR = Path("dbt/target")
+DEFAULT_ARTIFACT_DIR = Path(__file__).resolve().parents[1] / "target"
+
+ARTIFACT_DIR = Path(
+    os.getenv(
+        "DBT_ARTIFACT_DIR",
+        str(DEFAULT_ARTIFACT_DIR),
+    )
+)
+
+
 DEFAULT_JOB_NAME = "local-dbt-artifact-inspection"
 DEFAULT_ENVIRONMENT = "dev"
 
