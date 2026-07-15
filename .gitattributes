@@ -8,3 +8,6 @@
 *.json linguist-vendored
 *.parquet linguist-vendored
 *.html linguist-vendored
+
+# Keep Olist Cloud Run shell scripts compatible with Linux.
+Projects/Olist-Ecommerce-Analytics-Portal/**/*.sh text eol=lf
