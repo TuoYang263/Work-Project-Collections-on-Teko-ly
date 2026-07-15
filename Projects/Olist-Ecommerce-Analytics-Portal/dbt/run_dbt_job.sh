@@ -106,6 +106,12 @@ export GCP_PROJECT_ID="${GCP_PROJECT_ID:-${DBT_PROJECT_ID}}"
 # Explicitly expose the dbt target directory to the artifact parser.
 export DBT_ARTIFACT_DIR="${DBT_ARTIFACT_DIR:-$(pwd)/target}"
 
+# Configure the monitoring destination and pipeline identity.
+# Each value remains overridable through the Cloud Run Job environment.
+export MONITORING_DATASET_ID="${MONITORING_DATASET_ID:-olist_monitoring}"
+export MONITORING_JOB_NAME="${MONITORING_JOB_NAME:-olist-dbt-build-job}"
+export MONITORING_ENVIRONMENT="${MONITORING_ENVIRONMENT:-${DBT_TARGET}}"
+
 python monitoring/load_artifacts_to_bigquery.py
 
 echo "Olist dbt pipeline and metadata refresh completed successfully."

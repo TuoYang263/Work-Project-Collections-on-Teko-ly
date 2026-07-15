@@ -83,6 +83,9 @@ def build_pipeline_run_record(
 ) -> dict:
     ingested_at = datetime.now(timezone.utc).isoformat()
 
+    job_name = os.getenv("MONITORING_JOB_NAME", DEFAULT_JOB_NAME)
+    environment = os.getenv("MONITORING_ENVIRONMENT", DEFAULT_ENVIRONMENT)
+
     run_metadata = run_results.get("metadata", {})
     manifest_metadata = manifest.get("metadata", {})
 
@@ -141,8 +144,8 @@ def build_pipeline_run_record(
     return {
         "monitoring_run_id": monitoring_run_id,
         "dbt_invocation_id": dbt_invocation_id,
-        "job_name": DEFAULT_JOB_NAME,
-        "environment": DEFAULT_ENVIRONMENT,
+        "job_name": job_name,
+        "environment": environment,
         "dbt_version": dbt_version,
         "generated_at": run_metadata.get("generated_at"),
         "ingested_at": ingested_at,
