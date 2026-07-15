@@ -16,7 +16,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir dbt-bigquery
+    && pip install --no-cache-dir \
+        dbt-bigquery \
+        google-cloud-bigquery
 
 COPY dbt/ /app/dbt/
 

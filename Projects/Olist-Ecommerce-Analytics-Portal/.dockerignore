@@ -15,9 +15,9 @@ kaggle.json
 .env
 .env.*
 
-# Python/cache/editor files
-__pycache__/
-*.pyc
+# Python cache and editor files
+**/__pycache__/
+**/*.py[cod]
 .vscode/
 .DS_Store
 Thumbs.db
