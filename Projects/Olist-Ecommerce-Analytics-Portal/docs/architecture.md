@@ -2,25 +2,21 @@
 
 ## Purpose
 
-This document describes the implemented architecture of the Olist E-Commerce Analytics & Pipeline Monitoring Portal project.
+This document describes the implemented architecture of the Olist E-Commerce Analytics & Pipeline Monitoring Portal.
 
-The current completed scope focuses on the analytics engineering foundation:
+The completed architecture now includes:
 
-- BigQuery raw layer
-- dbt staging layer
-- dbt intermediate layer
-- dbt marts layer
-- dbt tests
-- dbt docs and lineage
-- milestone-based project workflow
+- BigQuery raw, staging, intermediate, marts, and monitoring datasets
+- dbt transformations, tests, documentation, and lineage
+- Dockerized dbt execution
+- Google Cloud Run Job and Cloud Scheduler orchestration
+- dbt artifact parsing and append-only pipeline monitoring history
 
-The project title includes pipeline monitoring and portal direction, but the current implemented architecture does not yet include completed orchestration, monitoring tables, BI dashboards, or a custom portal. Orchestration is being addressed in M7, while monitoring tables and AI-assisted pipeline intelligence are reserved for later milestones.
+The current completed implementation boundary is M8. M9 AI-assisted pipeline review remains future work.
 
 ---
 
 ## Architecture status
-
-Current architecture status:
 
 ```text
 M1 - Project Setup & Source Understanding: completed
@@ -29,10 +25,15 @@ M3 - Staging Layer Planning: completed
 M4 - dbt Staging Layer: completed
 M5 - Dimensional Modeling / Analytics Marts: completed
 M6 - README / dbt docs / Project Showcase Cleanup: completed
-M7 - Google Cloud Scheduler + Cloud Run Job Orchestration: in progress
+M7 - Google Cloud Scheduler + Cloud Run Job Orchestration: completed
+M8 - dbt Metadata Refresh & Pipeline Monitoring: completed
 ```
 
-Implemented warehouse and dbt layers:
+M8 cloud validation completed on 2026-07-15.
+
+---
+
+## End-to-end architecture
 
 ```text
 Olist CSV source data
@@ -50,75 +51,41 @@ dbt tests + dbt docs + lineage
 BI-ready analytics layer
 ```
 
-M7 target orchestration flow:
+The scheduled operational flow is:
 
 ```text
 Cloud Scheduler
-        ↓
+        ↓ authenticated OAuth request
 Cloud Run Job
         ↓
 Containerized dbt project
         ↓
+dbt debug --target prod
+        ↓
 dbt build --target prod
         ↓
-BigQuery staging, intermediate, and marts datasets
+BigQuery staging, intermediate, and marts refreshed
+        ↓
+preserve build manifest.json and run_results.json
+        ↓
+dbt docs generate --target prod
+        ↓
+keep catalog.json and restore build artifacts
+        ↓
+Python artifact parser and BigQuery loader
+        ↓
+BigQuery dataset: olist_monitoring
+        ↓
+Monitoring analytics and future M9 evidence layer
 ```
-
-The M7 orchestration layer is currently being designed and implemented. It is intended to make the existing dbt pipeline cloud-executable and schedulable without adding metadata refresh or AI-assisted monitoring logic.
-
----
-
-## High-level flow
-
-The project follows a layered analytics engineering architecture.
-
-```text
-Source files
-    Olist public CSV dataset
-        |
-        v
-Raw warehouse layer
-    BigQuery dataset: olist_raw
-    Source-aligned raw tables
-        |
-        v
-Staging transformation layer
-    dbt models: staging
-    BigQuery dataset: olist_staging
-    Cleaned, renamed, typed source views
-        |
-        v
-Intermediate transformation layer
-    dbt models: intermediate
-    BigQuery dataset: olist_intermediate
-    Reusable order-level aggregations
-        |
-        v
-Mart transformation layer
-    dbt models: marts/core
-    BigQuery dataset: olist_marts
-    Fact and dimension tables
-        |
-        v
-Quality and documentation layer
-    dbt tests
-    dbt docs
-    dbt lineage graph
-        |
-        v
-Consumption-ready analytics layer
-    BI-ready dimensional model
-```
-
-The architecture intentionally separates source ingestion, cleaning, reusable transformations, dimensional modeling, validation, and documentation.
 
 ---
 
 ## Source data
 
-The source data comes from the Olist Brazilian E-Commerce public dataset.
+The project uses the Olist Brazilian E-Commerce public dataset.
 
-The project uses 9 source CSV files:
+Nine source CSV files are used:
 
 - customers
 - geolocation
@@ -141,9 +108,21 @@ metadata/source/source_tables_inventory.md
 
 ---
 
-## BigQuery raw layer
+## BigQuery datasets
 
-The raw layer is implemented in BigQuery.
+| Dataset | Purpose |
+|---|---|
+| `olist_raw` | Source-aligned raw tables |
+| `olist_staging` | Cleaned and standardized dbt views |
+| `olist_intermediate` | Reusable transformation views |
+| `olist_marts` | BI-ready fact and dimension tables |
+| `olist_monitoring` | Append-only dbt pipeline monitoring history |
+
+All datasets use the EU BigQuery location.
+
+---
+
+## Raw layer
 
 Dataset:
 
@@ -151,7 +130,7 @@ Dataset:
 olist_raw
 ```
 
-Raw tables:
+Tables:
 
 - `raw_customers`
 - `raw_geolocation`
@@ -163,14 +142,7 @@ Raw tables:
 - `raw_sellers`
 - `raw_product_category_translation`
 
-The raw layer preserves source-aligned data. It is intended to stay close to the original CSV structure and provide a stable source for dbt transformations.
-
-Raw layer documentation:
-
-```text
-metadata/bigquery/dataset_naming_plan.md
-metadata/bigquery/raw_layer_validation.md
-```
+The raw layer stays close to the source structure and provides a stable input for dbt.
 
 ---
 
@@ -182,7 +154,7 @@ The dbt project is located under:
 dbt/
 ```
 
-Main dbt layers:
+Main model directories:
 
 ```text
 dbt/models/staging/
@@ -190,7 +162,7 @@ dbt/models/intermediate/
 dbt/models/marts/core/
 ```
 
-The transformation flow is:
+Transformation flow:
 
 ```text
 source()
@@ -202,13 +174,11 @@ intermediate models
 mart models
 ```
 
-This structure keeps each layer responsible for a specific type of transformation.
+Each layer has a distinct responsibility.
 
 ---
 
 ## Staging layer
-
-The staging layer is implemented as dbt models built from BigQuery raw tables.
 
 Dataset:
 
@@ -222,7 +192,7 @@ Materialization:
 views
 ```
 
-Staging models:
+Models:
 
 - `stg_customers`
 - `stg_geolocation`
@@ -237,14 +207,13 @@ Staging models:
 Responsibilities:
 
 - reference raw tables through dbt `source()`
-- standardize column names
-- cast timestamps and numeric fields
+- standardize names and data types
 - apply light cleaning
-- expose stable source-aligned views for downstream models
-- document important columns
-- validate source assumptions through dbt tests
+- expose stable source-aligned views
+- document important fields
+- validate source assumptions with dbt tests
 
-Validation result:
+Validated result:
 
 ```text
 dbt run --select staging
@@ -254,20 +223,9 @@ dbt test --select staging
 PASS=39 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=39
 ```
 
-Staging documentation:
-
-```text
-docs/staging_layer_plan.md
-docs/m4_dbt_staging_validation.md
-metadata/staging/source_to_staging_mapping.md
-metadata/staging/column_cleanup_rules.md
-```
-
 ---
 
 ## Intermediate layer
-
-The intermediate layer contains reusable aggregation models.
 
 Dataset:
 
@@ -275,7 +233,7 @@ Dataset:
 olist_intermediate
 ```
 
-Intermediate models:
+Models:
 
 - `int_order_items_agg`
 - `int_order_payments_agg`
@@ -283,22 +241,14 @@ Intermediate models:
 
 Responsibilities:
 
-- centralize repeated aggregation logic
-- prepare order-level measures for fact tables
-- reduce complexity inside the mart models
-- make the mart layer easier to validate and document
-
-Examples:
-
-- aggregate item count, product count, seller count, price, and freight by order
-- aggregate payment value, payment count, payment types, and installment metrics by order
-- aggregate review counts, review score metrics, and review timing fields by order
+- centralize reusable aggregation logic
+- prepare order-level measures
+- keep mart SQL readable
+- reduce repeated joins and aggregations
 
 ---
 
 ## Marts layer
-
-The marts layer contains BI-ready fact and dimension tables.
 
 Dataset:
 
@@ -306,63 +256,33 @@ Dataset:
 olist_marts
 ```
 
-The marts layer follows a star schema style design.
+The marts layer follows a star-schema style dimensional design.
 
-Dimensions:
+### Dimensions
 
-- `dim_customers`
-- `dim_sellers`
-- `dim_products`
-- `dim_geolocation_zip_prefix`
-- `dim_dates`
+| Model | Grain | Primary key | Purpose |
+|---|---|---|---|
+| `dim_customers` | One row per customer | `customer_id` | Customer attributes and location |
+| `dim_sellers` | One row per seller | `seller_id` | Seller attributes and location |
+| `dim_products` | One row per product | `product_id` | Product attributes and translated category |
+| `dim_geolocation_zip_prefix` | One row per zip prefix | `geolocation_zip_code_prefix` | Representative coordinates |
+| `dim_dates` | One row per calendar date | `date_day` | Shared reporting date dimension |
 
-Facts:
+### Facts
 
-- `fct_orders`
-- `fct_order_items`
-- `fct_order_payments`
-- `fct_order_reviews`
+| Model | Grain | Primary key | Purpose |
+|---|---|---|---|
+| `fct_orders` | One row per order | `order_id` | Order lifecycle and summary measures |
+| `fct_order_items` | One row per order item | `order_item_key` | Item-level sales, product, seller, and freight |
+| `fct_order_payments` | One row per payment sequence | `order_payment_key` | Payment method, installments, and value |
+| `fct_order_reviews` | One row per review and order | `review_key` | Review score and timing |
 
-Responsibilities:
-
-- provide business-friendly fact and dimension tables
-- make model grain explicit
-- define stable primary keys
-- support relationship tests between facts and dimensions
-- prepare data for BI tools and analytical applications
-
-Marts documentation:
+Validated M5 result:
 
 ```text
-docs/m5_dimensional_modeling_design.md
-docs/m5_dbt_marts_validation.md
-dbt/models/marts/core/schema.yml
+dbt build --select intermediate marts
+PASS=67 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=67
 ```
-
----
-
-## Dimensional model
-
-The dimensional model is designed around e-commerce business entities such as orders, customers, sellers, products, payments, reviews, geolocation, and dates.
-
-### Dimension tables
-
-| Model | Grain | Primary key | Purpose |
-|---|---|---|---|
-| `dim_customers` | One row per customer | `customer_id` | Customer attributes and location fields |
-| `dim_sellers` | One row per seller | `seller_id` | Seller attributes and location fields |
-| `dim_products` | One row per product | `product_id` | Product attributes and translated category |
-| `dim_geolocation_zip_prefix` | One row per zip code prefix | `geolocation_zip_code_prefix` | Representative geographic coordinates |
-| `dim_dates` | One row per calendar date | `date_day` | Shared date dimension for order, shipping, and review dates |
-
-### Fact tables
-
-| Model | Grain | Primary key | Purpose |
-|---|---|---|---|
-| `fct_orders` | One row per order | `order_id` | Order lifecycle, delivery, payment, and review summary metrics |
-| `fct_order_items` | One row per order item | `order_item_key` | Item-level price, freight, product, seller, and order analysis |
-| `fct_order_payments` | One row per order payment sequence | `order_payment_key` | Payment method, installment, and payment value analysis |
-| `fct_order_reviews` | One row per review and order | `review_key` | Review score and review timing analysis |
 
 ---
 
@@ -370,9 +290,9 @@ The dimensional model is designed around e-commerce business entities such as or
 
 ### Review fact grain
 
-During M5 validation, `review_id` was found not to be unique in the source dataset.
+`review_id` is not unique in the source data.
 
-Instead of forcing `review_id` to behave as a unique primary key, `fct_order_reviews` was modeled at the correct source grain:
+`fct_order_reviews` therefore uses the true source grain:
 
 ```text
 one row per review_id + order_id
@@ -380,99 +300,69 @@ one row per review_id + order_id
 
 A generated `review_key` is used as the primary key.
 
-This keeps the dimensional model aligned with the real data and avoids hiding a source data quality issue.
+### Geolocation coordinates
 
-### Geolocation representative coordinates
+The raw geolocation table contains multiple coordinates per zip-code prefix.
 
-The raw geolocation table contains multiple coordinates per zip code prefix.
+`dim_geolocation_zip_prefix` uses median latitude and longitude as representative coordinates and retains averages for transparency.
 
-`dim_geolocation_zip_prefix` uses median latitude and longitude as representative coordinates to reduce the impact of outliers.
-
-Average latitude and longitude are also retained for transparency.
-
-These coordinates are intended for approximate geographic analysis, not precise route planning.
+The coordinates are intended for approximate geographic analysis, not routing.
 
 ### Shared date dimension
 
-`dim_dates` is generated from order, shipping, and review-related dates.
-
-This allows fact tables to reference a shared date dimension and supports consistent time-based analysis.
+`dim_dates` is generated from order, shipping, and review dates and supports consistent date relationships across facts.
 
 ---
 
 ## Data quality architecture
 
-Data quality is implemented through dbt tests.
+Data quality is implemented with dbt tests.
 
 Test categories include:
 
-- primary key `not_null` tests
-- primary key `unique` tests
-- foreign key relationship tests
-- accepted values tests
-- important business field `not_null` tests
+- `not_null`
+- `unique`
+- `relationships`
+- `accepted_values`
+- important business-field checks
 
-The project uses dbt tests as structured validation checks, not as informal manual checks.
-
-M5 validation result:
+The full scheduled dbt build validated in M7 and M8 contains:
 
 ```text
-dbt build --select intermediate marts
-PASS=67 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=67
+21 model executions
+94 test executions
+PASS=115 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=115
 ```
 
-The M5 build included:
-
-- 3 intermediate view models
-- 9 mart table models
-- 55 data tests
+Tests remain the deterministic data-quality control layer. M8 stores their historical outcomes; M9 will not replace them.
 
 ---
 
-## Documentation and lineage architecture
-
-dbt docs are used as the main technical documentation and lineage review tool for dbt models.
+## Documentation and lineage
 
 dbt docs provide:
 
-- model descriptions
-- column descriptions
-- data test visibility
-- upstream dependencies
-- downstream dependencies
-- lineage graph
-- `Depends On` and `Referenced By` sections
+- model and column descriptions
+- data-test visibility
+- upstream and downstream dependencies
+- lineage graphs
+- `Depends On` and `Referenced By` relationships
 
-Useful commands:
+Useful local commands:
 
 ```bash
 cd dbt
 dbt docs generate
-dbt docs serve
+dbt docs serve --port 8081
 ```
 
-Recommended M6 screenshot folder:
-
-```text
-assets/screenshots/dbt_docs/
-```
-
-Recommended screenshots:
-
-```text
-assets/screenshots/dbt_docs/dbt_docs_project_overview.png
-assets/screenshots/dbt_docs/fct_orders_lineage.png
-assets/screenshots/dbt_docs/fct_order_reviews_lineage.png
-assets/screenshots/dbt_docs/marts_tests_overview.png
-```
+M8 additionally converts dbt lineage metadata into queryable BigQuery edges.
 
 ---
 
-## M7 orchestration layer
+## M7 orchestration architecture
 
-M7 introduces a lightweight cloud orchestration layer for the existing dbt-based analytics pipeline.
-
-The target orchestration architecture is:
+M7 introduced lightweight cloud orchestration.
 
 ```text
 Cloud Scheduler
@@ -481,144 +371,304 @@ Cloud Run Job
     ↓
 Containerized dbt project
     ↓
-BigQuery staging, intermediate, and marts datasets
-```
-
-Cloud Scheduler is responsible for triggering the pipeline on a schedule.
-
-Cloud Run Job is responsible for running the dbt pipeline as a batch job and exiting after completion.
-
-The expected Cloud Run Job execution command is:
-
-```bash
 dbt build --target prod
+    ↓
+BigQuery transformation datasets
 ```
 
-This allows dbt models and tests to run together as one scheduled transformation job.
+Implemented components:
 
-The orchestration layer is intentionally kept separate from modeling logic. dbt continues to own transformations, tests, documentation, and lineage. Cloud Scheduler and Cloud Run Job only provide scheduled cloud execution.
+```text
+Artifact Registry repository: olist-dbt-jobs
+Cloud Run Job: olist-dbt-build-job
+Cloud Run region: europe-north1
+Cloud Scheduler job: olist-dbt-daily-trigger
+Cloud Scheduler location: europe-west1
+Schedule: 0 6 * * *
+Time zone: Europe/Helsinki
+```
 
-M7 does not implement:
+Cloud Scheduler calls the Cloud Run Admin API through an authenticated OAuth request using the scheduler service account.
 
-- dbt artifact parsing
-- metadata refresh tables
-- `olist_monitoring` dataset
-- historical pipeline comparison
-- AI-assisted pipeline intelligence
-- React or custom portal integration
+M7 validation confirmed:
 
-Those capabilities are reserved for later milestones.
+- manual Cloud Run execution
+- Scheduler-triggered Cloud Run execution
+- containerized dbt build
+- BigQuery model refresh
+- `PASS=115`
 
 ---
 
-## Project workflow architecture
+## M8 monitoring architecture
 
-The project is developed on the branch:
+M8 extends the same Cloud Run Job after the dbt build.
+
+### Artifact preservation flow
+
+```text
+dbt build
+→ manifest.json + run_results.json
+→ temporary backup
+→ dbt docs generate
+→ catalog.json
+→ restore build manifest.json + run_results.json
+→ monitoring ingestion
+```
+
+This is replacement and restoration, not JSON merging.
+
+### Parser and loader
+
+```text
+dbt/monitoring/artifact_parser.py
+dbt/monitoring/load_artifacts_to_bigquery.py
+```
+
+The parser:
+
+- reads the three dbt artifacts
+- joins objects through `unique_id`
+- normalizes status and metadata
+- flattens nested JSON into six record collections
+
+The loader:
+
+- uses the Google Cloud BigQuery client
+- appends one complete monitoring run to `olist_monitoring`
+- keeps parser and database-loading responsibilities separate
+
+### Monitoring dataset
+
+```text
+olist_monitoring
+```
+
+Tables:
+
+| Table | Grain |
+|---|---|
+| `pipeline_runs` | One row per monitoring run |
+| `model_run_results` | One row per model execution per run |
+| `test_run_results` | One row per test execution per run |
+| `model_metadata_snapshots` | One row per model per run |
+| `model_column_snapshots` | One row per model/source column per run |
+| `model_lineage_edges` | One row per direct dependency edge per run |
+
+The tables are append-only, partitioned by ingestion date, and clustered for common monitoring queries.
+
+### Runtime identity
+
+Cloud Run writes:
+
+```text
+job_name=olist-dbt-build-job
+environment=prod
+monitoring dataset=olist_monitoring
+```
+
+Local development defaults remain:
+
+```text
+job_name=local-dbt-artifact-inspection
+environment=dev
+```
+
+### Validated M8 output
+
+Cloud Run and Cloud Scheduler validation completed on 2026-07-15.
+
+```text
+pipeline_runs                  1
+model_run_results             21
+test_run_results              94
+model_metadata_snapshots      21
+model_column_snapshots       259
+model_lineage_edges          146
+
+successful_models             21
+passed_tests                  94
+non_passing_tests              0
+```
+
+Validated Scheduler execution:
+
+```text
+olist-dbt-build-job-f59xf
+1 / 1 task completed successfully
+triggered by olist-scheduler-invoker
+```
+
+---
+
+## Monitoring data flow
+
+The monitoring architecture supports a second analytics path alongside the business marts.
+
+```text
+Business analytics path
+olist_raw → olist_staging → olist_intermediate → olist_marts
+```
+
+```text
+Pipeline analytics path
+dbt artifacts → artifact parser → olist_monitoring
+```
+
+`olist_marts` supports e-commerce business analysis.
+
+`olist_monitoring` supports pipeline health, data quality, runtime, schema, documentation, and lineage analysis.
+
+---
+
+## Security and runtime configuration
+
+The Cloud Run Job uses:
+
+```text
+Service account: olist-dbt-runner
+```
+
+The Scheduler uses:
+
+```text
+Service account: olist-scheduler-invoker
+```
+
+Credentials are not committed to Git.
+
+The dbt profile is generated at runtime from environment variables.
+
+Important runtime variables include:
+
+```text
+DBT_PROJECT_ID
+DBT_DATASET
+DBT_LOCATION
+DBT_THREADS
+DBT_TARGET
+GCP_PROJECT_ID
+DBT_ARTIFACT_DIR
+MONITORING_DATASET_ID
+MONITORING_JOB_NAME
+MONITORING_ENVIRONMENT
+```
+
+---
+
+## Container architecture
+
+The Docker image uses:
+
+```text
+python:3.11-slim
+dbt-bigquery
+google-cloud-bigquery
+```
+
+It copies the dbt project and monitoring scripts into:
+
+```text
+/app/dbt
+```
+
+The entrypoint is:
+
+```text
+/app/dbt/run_dbt_job.sh
+```
+
+The M8 production image tag is:
+
+```text
+olist-dbt-job:m8
+```
+
+Shell scripts are normalized to LF through `.gitattributes`, and Python cache files are excluded through `.dockerignore`.
+
+---
+
+## Project workflow
+
+Development branch:
 
 ```text
 feature/olist-analytics-portal
 ```
 
-The workflow is milestone-based.
+The project follows milestone-based delivery with:
 
-Current completed milestones:
-
-- M1 - Project Setup & Source Understanding
-- M2 - BigQuery Raw Layer
-- M3 - Staging Layer Planning
-- M4 - dbt Staging Layer
-- M5 - Dimensional Modeling / Analytics Marts
-- M6 - README / dbt docs / Project Showcase Cleanup
-
-Current milestone:
-
-- M7 - Google Cloud Scheduler + Cloud Run Job Orchestration
-
-GitHub Projects is used to organize cards, track milestone progress, and keep development work reviewable.
-
-The workflow emphasizes:
-
-- small controlled milestones
-- clear acceptance criteria
-- documentation before and after implementation
-- validation before moving to the next milestone
-- separation between completed scope and future work
+- controlled scope
+- explicit acceptance criteria
+- validation before progression
+- small commits
+- architecture and command documentation
+- separation between implemented and future capabilities
 
 ---
 
 ## Current implementation boundary
 
-The current architecture includes:
+Completed through M8:
 
-- BigQuery raw tables
-- dbt staging views
-- dbt intermediate views
-- dbt marts tables
-- dbt tests
-- dbt docs
-- dbt lineage review
-- Markdown documentation
-- GitHub Project workflow
-
-The current architecture does not yet include:
-
-- Power BI dashboard
-- React or Node portal
-- Google Cloud Scheduler
+- source inventory and raw loading
+- staging, intermediate, and mart dbt models
+- dimensional modeling
+- dbt tests and documentation
+- Dockerized dbt runtime
+- Artifact Registry deployment
 - Cloud Run Job orchestration
-- BigQuery monitoring tables
-- automated dbt artifact ingestion
-- AI-assisted pipeline intelligence
+- Cloud Scheduler triggering
+- append-only BigQuery monitoring tables
+- dbt artifact ingestion
+- model/test execution history
+- metadata and column snapshots
+- lineage edges
+- local and cloud end-to-end validation
 
-These items are intentionally kept outside the completed M6 scope. Cloud Scheduler and Cloud Run Job orchestration are being addressed in M7.
+Not yet implemented:
+
+- Power BI monitoring dashboard
+- React portal
+- alerting and notification delivery
+- automated root-cause analysis
+- AI-assisted pipeline reviewer
 
 ---
 
-## Current and future architecture direction
+## Future architecture direction
 
-Current and future milestones are planned as follows.
+### M9 - AI-assisted pipeline quality reviewer
 
-### M7 - Google Cloud Scheduler + Cloud Run Job orchestration
+M9 will build on the deterministic M8 evidence layer.
 
-Planned goal:
+Planned responsibilities:
 
-- run dbt workflows through scheduled Google Cloud execution
-- keep orchestration separate from modeling logic
-- make the pipeline easier to operate repeatedly
+- evaluate pipeline correctness and production readiness
+- explain failed tests and anomalies
+- identify documentation and test gaps
+- reason about lineage and downstream impact
+- compare specifications with implementation evidence
+- return strict evidence-based output
 
-### M8 - ADE-inspired metadata refresh and monitoring tables
+M9 will not replace:
 
-Planned goal:
-
-- borrow metadata-driven DataOps ideas from Agile Data Engine
-- parse dbt artifacts such as `manifest.json`, `run_results.json`, and `catalog.json`
-- load metadata into BigQuery `olist_monitoring` tables
-- track model status, tests, run results, row counts, and lineage metadata
-
-This will not be a direct Agile Data Engine integration.
-
-### M9 - AI-assisted pipeline intelligence layer
-
-Planned goal:
-
-- build an explanation layer on top of dbt docs, dbt artifacts, and monitoring tables
-- answer questions about pipeline health, data quality, failed tests, validation, lineage, and runtime performance
-- help interpret metadata rather than replace structured tests
-
-The AI layer will not replace dbt tests, dbt validation, or monitoring tables.
+- dbt tests
+- BigQuery monitoring tables
+- deterministic validation queries
+- human engineering judgment
 
 ---
 
 ## Design principles
 
-The architecture follows these principles:
-
-- keep source, staging, intermediate, and mart layers separated
-- preserve raw data as source-aligned as possible
-- make transformations explicit and testable
-- define fact and dimension grain clearly
-- avoid forcing source data into incorrect assumptions
-- use dbt tests for repeatable validation
-- use dbt docs and lineage for transparency
-- avoid expanding scope before the foundation is stable
-- keep the project understandable for both engineering and BI audiences
+- Keep source, staging, intermediate, mart, and monitoring layers separated.
+- Preserve raw data as source-aligned as possible.
+- Make transformation grain explicit.
+- Use dbt tests for repeatable quality validation.
+- Preserve monitoring history instead of overwriting the latest state.
+- Keep orchestration separate from modeling logic.
+- Keep parser logic separate from database loading.
+- Use runtime configuration instead of project-specific credentials in code.
+- Keep M8 deterministic and explainable.
+- Build AI capabilities only on top of validated evidence.

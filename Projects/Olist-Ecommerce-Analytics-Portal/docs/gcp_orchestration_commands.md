@@ -1,67 +1,98 @@
-# M7 GCP Orchestration Commands
+# M7-M8 GCP Orchestration and Monitoring Commands
 
 ## Purpose
 
-This document records the Google Cloud commands used to deploy and validate the M7 orchestration layer for the Olist E-Commerce Analytics & Pipeline Monitoring Portal project.
+This document records the commands used to deploy, update, execute, and validate the cloud orchestration and dbt artifact monitoring layers for the Olist E-Commerce Analytics & Pipeline Monitoring Portal.
 
-M7 uses:
+Completed flow:
 
 ```text
-Cloud Scheduler trigger
+Cloud Scheduler
     ↓
 Cloud Run Job
     ↓
-Containerized dbt project
+Containerized dbt build
     ↓
-BigQuery dbt models and tests
+dbt artifact preservation and catalog generation
+    ↓
+BigQuery monitoring ingestion
+    ↓
+Cross-table validation
 ```
 
-Artifact Registry stores the Docker image used by the Cloud Run Job.
-
-The goal is to make the existing dbt pipeline cloud-executable and schedulable without adding M8 metadata refresh or M9 AI-assisted pipeline intelligence.
+The commands are written with environment variables so the Google Cloud project ID is not hard-coded into the repository.
 
 ---
 
-## Variables
+## Working directory
 
-Set the following variables before running deployment commands.
+The Olist project is one project inside a larger portfolio repository.
+
+From the portfolio repository root:
 
 ```bash
-export PROJECT_ID="your-gcp-project-id"
-export REGION="europe-north1"
+cd Projects/Olist-Ecommerce-Analytics-Portal
+```
+
+Most commands in this document assume the current directory is the Olist project root.
+
+Confirm the location:
+
+```bash
+pwd
+git status
+```
+
+---
+
+## Common variables
+
+```bash
+export GCP_PROJECT_ID="$(gcloud config get-value project)"
+
+export CLOUD_RUN_REGION="europe-north1"
 export SCHEDULER_LOCATION="europe-west1"
 export BQ_LOCATION="EU"
 
-export ARTIFACT_REPO="olist-dbt-jobs"
+export AR_REPOSITORY="olist-dbt-jobs"
 export IMAGE_NAME="olist-dbt-job"
-export IMAGE_TAG="m7"
-export IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}/${IMAGE_NAME}:${IMAGE_TAG}"
+export IMAGE_TAG="m8"
+export REMOTE_IMAGE="${CLOUD_RUN_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}"
 
-export CLOUD_RUN_JOB_NAME="olist-dbt-build-job"
-export CLOUD_RUN_SA="olist-dbt-runner@${PROJECT_ID}.iam.gserviceaccount.com"
+export CLOUD_RUN_JOB="olist-dbt-build-job"
+export CLOUD_RUN_SA="olist-dbt-runner@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
 
-export SCHEDULER_JOB_NAME="olist-dbt-daily-trigger"
-export SCHEDULER_SA="olist-scheduler-invoker@${PROJECT_ID}.iam.gserviceaccount.com"
+export SCHEDULER_JOB="olist-dbt-daily-trigger"
+export SCHEDULER_SA="olist-scheduler-invoker@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
 export SCHEDULER_TIME_ZONE="Europe/Helsinki"
 export SCHEDULER_CRON="0 6 * * *"
 ```
 
-Set the active Google Cloud project:
+Verify important values:
 
 ```bash
-gcloud config set project "${PROJECT_ID}"
+printf 'GCP_PROJECT_ID=<%s>\n' "${GCP_PROJECT_ID}"
+printf 'REMOTE_IMAGE=<%s>\n' "${REMOTE_IMAGE}"
+
+declare -p \
+  GCP_PROJECT_ID \
+  CLOUD_RUN_REGION \
+  SCHEDULER_LOCATION \
+  AR_REPOSITORY \
+  IMAGE_NAME \
+  IMAGE_TAG \
+  REMOTE_IMAGE
 ```
 
-Notes:
+Set the active project when needed:
 
-- `REGION` is the Cloud Run and Artifact Registry region.
-- `BQ_LOCATION` should match the BigQuery dataset location.
-- `DBT_DATASET` should be set to `olist`, because dbt schema suffixes create `olist_staging`, `olist_intermediate`, and `olist_marts`.
-- `SCHEDULER_LOCATION` is the Cloud Scheduler location. It may differ from the Cloud Run Job region because not all Google Cloud services support the same regions.
+```bash
+gcloud config set project "${GCP_PROJECT_ID}"
+```
 
 ---
 
-## Enable required APIs
+## Enable required Google Cloud APIs
 
 ```bash
 gcloud services enable \
@@ -74,144 +105,556 @@ gcloud services enable \
 
 ---
 
-## Create service accounts
+## Service accounts
 
-Create a runtime service account for the Cloud Run Job.
+### Create Cloud Run runtime account
 
 ```bash
 gcloud iam service-accounts create olist-dbt-runner \
   --display-name="Olist dbt Cloud Run Job Runner"
 ```
 
-Create a service account for Cloud Scheduler to trigger the Cloud Run Job.
+### Create Scheduler invoker account
 
 ```bash
 gcloud iam service-accounts create olist-scheduler-invoker \
   --display-name="Olist Cloud Scheduler Invoker"
 ```
 
+Skip create commands when the accounts already exist.
+
 ---
 
-## Grant BigQuery permissions to the Cloud Run Job service account
+## BigQuery IAM
 
-The Cloud Run Job service account needs permission to run BigQuery jobs and write dbt-managed models.
-
-Simple project-level setup for the portfolio project:
+The Cloud Run runtime service account needs to run jobs and write data.
 
 ```bash
-gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
   --member="serviceAccount:${CLOUD_RUN_SA}" \
   --role="roles/bigquery.jobUser"
 
-gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
   --member="serviceAccount:${CLOUD_RUN_SA}" \
   --role="roles/bigquery.dataEditor"
 ```
 
-In a stricter production setup, `roles/bigquery.dataEditor` should be limited to the required datasets instead of the whole project.
+For a stricter production deployment, limit data-editor access to the required datasets.
 
 ---
 
-## Create Artifact Registry repository
+## Artifact Registry repository
+
+Create the Docker repository if it does not exist:
 
 ```bash
-gcloud artifacts repositories create "${ARTIFACT_REPO}" \
+gcloud artifacts repositories create "${AR_REPOSITORY}" \
   --repository-format=docker \
-  --location="${REGION}" \
+  --location="${CLOUD_RUN_REGION}" \
   --description="Docker images for Olist dbt Cloud Run Jobs"
 ```
 
-Configure Docker authentication for Artifact Registry.
+Configure Docker authentication:
 
 ```bash
-gcloud auth configure-docker "${REGION}-docker.pkg.dev"
+gcloud auth configure-docker \
+  "${CLOUD_RUN_REGION}-docker.pkg.dev" \
+  --quiet
 ```
-
-If the Artifact Registry repository, service accounts, or Scheduler job already exist, skip the create command or use the corresponding update command.
 
 ---
 
-## Build Docker image locally
+# M8 BigQuery monitoring setup
 
-Run this command from the repository root.
+## Create the monitoring dataset
 
 ```bash
-docker build -f dbt/Dockerfile -t "${IMAGE_URI}" .
+bq \
+  --project_id="${GCP_PROJECT_ID}" \
+  --location="${BQ_LOCATION}" \
+  query \
+  --use_legacy_sql=false \
+  < dbt/sql/monitoring/create_olist_monitoring_dataset.sql
 ```
 
-The final `.` is important because the Docker build context must be the repository root.
+## Create the six monitoring tables
 
-The Dockerfile copies the dbt project with:
-
-```dockerfile
-COPY dbt/ /app/dbt/
+```bash
+bq \
+  --project_id="${GCP_PROJECT_ID}" \
+  --location="${BQ_LOCATION}" \
+  query \
+  --use_legacy_sql=false \
+  < dbt/sql/monitoring/create_monitoring_tables.sql
 ```
 
-Do not run the build command from inside the `dbt/` directory.
+## List the dataset and tables
+
+```bash
+bq --project_id="${GCP_PROJECT_ID}" ls
+bq --project_id="${GCP_PROJECT_ID}" ls olist_monitoring
+```
+
+## Inspect table schemas
+
+```bash
+bq --project_id="${GCP_PROJECT_ID}" show olist_monitoring.pipeline_runs
+bq --project_id="${GCP_PROJECT_ID}" show olist_monitoring.model_run_results
+bq --project_id="${GCP_PROJECT_ID}" show olist_monitoring.test_run_results
+```
+
+## Validate table existence
+
+Before the first load, all row counts are expected to be zero.
+
+```bash
+bq \
+  --project_id="${GCP_PROJECT_ID}" \
+  --location="${BQ_LOCATION}" \
+  query \
+  --use_legacy_sql=false \
+  < dbt/sql/monitoring/validate_monitoring_tables.sql
+```
 
 ---
 
-## Local Docker smoke test
+# Local dbt artifact inspection and parsing
 
-Before deploying to Cloud Run Job, the Docker image can be tested locally with Google Application Default Credentials.
+## Inspect artifact files
 
-First authenticate locally:
-
-```bash
-gcloud auth application-default login
-```
-
-Optionally verify that ADC is available:
+The artifact directory is ignored by Git.
 
 ```bash
-gcloud auth application-default print-access-token > /dev/null
+python dbt/monitoring/inspect_artifacts.py
 ```
 
-Do not commit or publish access tokens.
+Validated artifact summary:
 
-Run the container locally from the repository root:
+```text
+manifest nodes: 115
+manifest sources: 9
+run_results results: 115
+catalog nodes: 21
+catalog sources: 9
+```
+
+## Format and run the parser
+
+```bash
+black dbt/monitoring/artifact_parser.py
+python dbt/monitoring/artifact_parser.py
+```
+
+Validated parser output:
+
+```text
+pipeline run records:            1
+model run records:              21
+test run records:               94
+model metadata records:         21
+model column records:          259
+model lineage records:         146
+```
+
+## Test runtime identity without loading BigQuery
+
+```bash
+MONITORING_JOB_NAME="olist-dbt-build-job" \
+MONITORING_ENVIRONMENT="prod" \
+python dbt/monitoring/artifact_parser.py
+```
+
+The pipeline record should show:
+
+```text
+job_name=olist-dbt-build-job
+environment=prod
+```
+
+---
+
+# Local BigQuery monitoring load
+
+## Verify the BigQuery Python client
+
+```bash
+python -c \
+  'from google.cloud import bigquery; print("BigQuery client OK")'
+```
+
+## Set the project and run the loader
+
+```bash
+export GCP_PROJECT_ID="$(gcloud config get-value project)"
+
+python dbt/monitoring/load_artifacts_to_bigquery.py
+```
+
+Expected output:
+
+```text
+Inserted 1 records into ...olist_monitoring.pipeline_runs.
+Inserted 21 records into ...olist_monitoring.model_run_results.
+Inserted 94 records into ...olist_monitoring.test_run_results.
+Inserted 21 records into ...olist_monitoring.model_metadata_snapshots.
+Inserted 259 records into ...olist_monitoring.model_column_snapshots.
+Inserted 146 records into ...olist_monitoring.model_lineage_edges.
+```
+
+The loader is append-only. Re-running it creates another monitoring run rather than overwriting prior history.
+
+---
+
+## Validate pipeline run records
+
+```bash
+bq \
+  --project_id="${GCP_PROJECT_ID}" \
+  --location="${BQ_LOCATION}" \
+  query \
+  --use_legacy_sql=false '
+SELECT
+  monitoring_run_id,
+  dbt_invocation_id,
+  job_name,
+  environment,
+  status,
+  models_total,
+  tests_total,
+  ingested_at
+FROM `olist_monitoring.pipeline_runs`
+ORDER BY ingested_at DESC
+LIMIT 5
+'
+```
+
+## Validate model execution records
+
+```bash
+bq \
+  --project_id="${GCP_PROJECT_ID}" \
+  --location="${BQ_LOCATION}" \
+  query \
+  --use_legacy_sql=false '
+SELECT
+  monitoring_run_id,
+  COUNT(*) AS model_record_count,
+  COUNTIF(status = "success") AS successful_models
+FROM `olist_monitoring.model_run_results`
+GROUP BY monitoring_run_id
+ORDER BY monitoring_run_id DESC
+LIMIT 5
+'
+```
+
+Expected latest-run values:
+
+```text
+model_record_count=21
+successful_models=21
+```
+
+## Validate test records
+
+```bash
+bq \
+  --project_id="${GCP_PROJECT_ID}" \
+  --location="${BQ_LOCATION}" \
+  query \
+  --use_legacy_sql=false '
+SELECT
+  monitoring_run_id,
+  COUNT(*) AS test_record_count,
+  COUNTIF(status = "pass") AS passed_tests,
+  COUNTIF(status = "fail") AS failed_tests,
+  COUNTIF(status = "warn") AS warned_tests,
+  COUNTIF(status = "error") AS error_tests
+FROM `olist_monitoring.test_run_results`
+GROUP BY monitoring_run_id
+ORDER BY monitoring_run_id DESC
+LIMIT 5
+'
+```
+
+Expected latest-run values:
+
+```text
+test_record_count=94
+passed_tests=94
+failed_tests=0
+warned_tests=0
+error_tests=0
+```
+
+## Validate model metadata snapshots
+
+```bash
+bq \
+  --project_id="${GCP_PROJECT_ID}" \
+  --location="${BQ_LOCATION}" \
+  query \
+  --use_legacy_sql=false '
+SELECT
+  monitoring_run_id,
+  COUNT(*) AS metadata_record_count,
+  COUNTIF(materialized = "table") AS table_models,
+  COUNTIF(materialized = "view") AS view_models,
+  COUNTIF(row_count IS NOT NULL) AS models_with_row_count
+FROM `olist_monitoring.model_metadata_snapshots`
+GROUP BY monitoring_run_id
+ORDER BY monitoring_run_id DESC
+LIMIT 5
+'
+```
+
+Validated output:
+
+```text
+metadata_record_count=21
+table_models=9
+view_models=12
+models_with_row_count=9
+```
+
+Views normally do not have physical row-count statistics in the catalog.
+
+## Validate model/source column snapshots
+
+```bash
+bq \
+  --project_id="${GCP_PROJECT_ID}" \
+  --location="${BQ_LOCATION}" \
+  query \
+  --use_legacy_sql=false '
+SELECT
+  monitoring_run_id,
+  COUNT(*) AS column_record_count,
+  COUNTIF(resource_type = "model") AS model_columns,
+  COUNTIF(resource_type = "source") AS source_columns,
+  COUNTIF(description IS NOT NULL AND description != "") AS documented_columns,
+  COUNTIF(tests_json != "[]") AS columns_with_tests
+FROM `olist_monitoring.model_column_snapshots`
+GROUP BY monitoring_run_id
+ORDER BY monitoring_run_id DESC
+LIMIT 5
+'
+```
+
+Validated output:
+
+```text
+column_record_count=259
+model_columns=207
+source_columns=52
+documented_columns=176
+columns_with_tests=58
+```
+
+## Validate lineage edges
+
+```bash
+bq \
+  --project_id="${GCP_PROJECT_ID}" \
+  --location="${BQ_LOCATION}" \
+  query \
+  --use_legacy_sql=false '
+SELECT
+  monitoring_run_id,
+  COUNT(*) AS lineage_record_count,
+  COUNTIF(
+    parent_resource_type = "source"
+    AND child_resource_type = "model"
+  ) AS source_to_model_edges,
+  COUNTIF(
+    parent_resource_type = "model"
+    AND child_resource_type = "model"
+  ) AS model_to_model_edges,
+  COUNTIF(child_resource_type = "test") AS model_to_test_edges
+FROM `olist_monitoring.model_lineage_edges`
+GROUP BY monitoring_run_id
+ORDER BY monitoring_run_id DESC
+LIMIT 5
+'
+```
+
+Validated output:
+
+```text
+lineage_record_count=146
+source_to_model_edges=9
+model_to_model_edges=21
+model_to_test_edges=116
+```
+
+A relationships test may depend on more than one model, so test lineage edges can exceed the number of test result rows.
+
+---
+
+## Validate the latest monitoring run across all six tables
+
+```bash
+bq \
+  --project_id="${GCP_PROJECT_ID}" \
+  --location="${BQ_LOCATION}" \
+  query \
+  --use_legacy_sql=false \
+  < dbt/sql/monitoring/validate_latest_monitoring_run.sql
+```
+
+Validated result:
+
+```text
+pipeline_status                 success
+models_total                    21
+model_run_result_count          21
+tests_total                     94
+test_run_result_count           94
+model_metadata_snapshot_count   21
+model_column_snapshot_count     259
+model_lineage_edge_count        146
+successful_models               21
+passed_tests                    94
+non_passing_tests                0
+```
+
+---
+
+# Repository and shell validation
+
+## Force Linux line endings for shell scripts
+
+Repository-root `.gitattributes`:
+
+```gitattributes
+*.sh text eol=lf
+```
+
+Renormalize the Cloud Run entrypoint:
+
+```bash
+git add .gitattributes
+
+git add --renormalize \
+  Projects/Olist-Ecommerce-Analytics-Portal/dbt/run_dbt_job.sh
+```
+
+## Ignore Python caches in Docker context
+
+Project `.dockerignore`:
+
+```dockerignore
+**/__pycache__/
+**/*.py[cod]
+```
+
+## Validate shell syntax and whitespace
+
+From the Olist project root:
+
+```bash
+bash -n dbt/run_dbt_job.sh
+git diff --check
+```
+
+No output indicates success.
+
+---
+
+# Docker image
+
+## Build the local M8 image
+
+Run from the Olist project root:
+
+```bash
+docker build \
+  -f dbt/Dockerfile \
+  -t olist-dbt-monitoring-test \
+  .
+```
+
+## Check monitoring files inside the image
 
 ```bash
 docker run --rm \
-  -e DBT_PROJECT_ID="${PROJECT_ID}" \
-  -e GOOGLE_CLOUD_PROJECT="${PROJECT_ID}" \
-  -e DBT_DATASET="olist" \
-  -e DBT_LOCATION="EU" \
-  -e DBT_THREADS="4" \
-  -e DBT_TARGET="prod" \
-  -e GOOGLE_APPLICATION_CREDENTIALS="/root/.config/gcloud/application_default_credentials.json" \
-  -v "$HOME/.config/gcloud:/root/.config/gcloud:ro" \
-  "${IMAGE_URI}"
+  --entrypoint bash \
+  olist-dbt-monitoring-test \
+  -c 'ls -l /app/dbt/monitoring'
 ```
 
-Expected result:
+Expected files include:
 
 ```text
-dbt debug succeeds
-dbt build succeeds
-PASS=115 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=115
+artifact_parser.py
+inspect_artifacts.py
+load_artifacts_to_bigquery.py
 ```
 
-This smoke test validates that the Docker image, entrypoint script, dbt profile generation, and dbt-bigquery connection work before deploying the image to Cloud Run Job.
+## Check the BigQuery Python dependency
+
+```bash
+docker run --rm \
+  --entrypoint python \
+  olist-dbt-monitoring-test \
+  -c 'from google.cloud import bigquery; print("BigQuery client OK")'
+```
+
+Expected:
+
+```text
+BigQuery client OK
+```
+
+## Tag the image for Artifact Registry
+
+```bash
+docker tag \
+  olist-dbt-monitoring-test \
+  "${REMOTE_IMAGE}"
+```
+
+## Push the M8 image
+
+```bash
+docker push "${REMOTE_IMAGE}"
+```
+
+Validated M8 push:
+
+```text
+image tag: m8
+```
+
+## List Artifact Registry images and tags
+
+```bash
+gcloud artifacts docker images list \
+  "${CLOUD_RUN_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPOSITORY}/${IMAGE_NAME}" \
+  --include-tags
+```
+
+The list should include:
+
+```text
+m7
+m8
+```
 
 ---
 
-## Push Docker image
+# Cloud Run Job deployment
+
+## Create the job
+
+Use this only for a new environment.
 
 ```bash
-docker push "${IMAGE_URI}"
-```
-
----
-
-## Create Cloud Run Job
-
-```bash
-gcloud run jobs create "${CLOUD_RUN_JOB_NAME}" \
-  --image="${IMAGE_URI}" \
-  --region="${REGION}" \
+gcloud run jobs create "${CLOUD_RUN_JOB}" \
+  --project="${GCP_PROJECT_ID}" \
+  --image="${REMOTE_IMAGE}" \
+  --region="${CLOUD_RUN_REGION}" \
   --service-account="${CLOUD_RUN_SA}" \
-  --set-env-vars="DBT_PROJECT_ID=${PROJECT_ID},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},DBT_DATASET=olist,DBT_LOCATION=${BQ_LOCATION},DBT_THREADS=4,DBT_TARGET=prod" \
+  --set-env-vars="DBT_PROJECT_ID=${GCP_PROJECT_ID},GOOGLE_CLOUD_PROJECT=${GCP_PROJECT_ID},DBT_DATASET=olist,DBT_LOCATION=${BQ_LOCATION},DBT_THREADS=4,DBT_TARGET=prod,MONITORING_DATASET_ID=olist_monitoring,MONITORING_JOB_NAME=${CLOUD_RUN_JOB},MONITORING_ENVIRONMENT=prod" \
   --tasks=1 \
   --max-retries=1 \
   --task-timeout=3600 \
@@ -219,249 +662,350 @@ gcloud run jobs create "${CLOUD_RUN_JOB_NAME}" \
   --cpu=1
 ```
 
-If the job already exists, update it instead:
+## Inspect the existing job before updating
 
 ```bash
-gcloud run jobs update "${CLOUD_RUN_JOB_NAME}" \
-  --image="${IMAGE_URI}" \
-  --region="${REGION}" \
-  --service-account="${CLOUD_RUN_SA}" \
-  --set-env-vars="DBT_PROJECT_ID=${PROJECT_ID},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},DBT_DATASET=olist,DBT_LOCATION=${BQ_LOCATION},DBT_THREADS=4,DBT_TARGET=prod" \
-  --tasks=1 \
-  --max-retries=1 \
-  --task-timeout=3600 \
-  --memory=1Gi \
-  --cpu=1
+gcloud run jobs describe "${CLOUD_RUN_JOB}" \
+  --project="${GCP_PROJECT_ID}" \
+  --region="${CLOUD_RUN_REGION}" \
+  --format=export \
+  > /tmp/olist-dbt-build-job.yaml
+```
+
+```bash
+grep -nE \
+  'image:|serviceAccount:|DBT_PROJECT_ID|DBT_TARGET|DBT_DATASET|DBT_LOCATION|MONITORING_DATASET_ID|MONITORING_JOB_NAME|MONITORING_ENVIRONMENT' \
+  /tmp/olist-dbt-build-job.yaml
+```
+
+## Update the existing job to image `m8`
+
+`--update-env-vars` preserves unrelated existing environment variables.
+
+```bash
+gcloud run jobs update "${CLOUD_RUN_JOB}" \
+  --project="${GCP_PROJECT_ID}" \
+  --region="${CLOUD_RUN_REGION}" \
+  --image="${REMOTE_IMAGE}" \
+  --update-env-vars="MONITORING_DATASET_ID=olist_monitoring,MONITORING_JOB_NAME=${CLOUD_RUN_JOB},MONITORING_ENVIRONMENT=prod"
+```
+
+## Verify the updated job configuration
+
+```bash
+gcloud run jobs describe "${CLOUD_RUN_JOB}" \
+  --project="${GCP_PROJECT_ID}" \
+  --region="${CLOUD_RUN_REGION}" \
+  --format=export \
+  > /tmp/olist-dbt-build-job-m8.yaml
+```
+
+```bash
+grep -nE \
+  'image:|DBT_PROJECT_ID|DBT_TARGET|DBT_DATASET|DBT_LOCATION|MONITORING_DATASET_ID|MONITORING_JOB_NAME|MONITORING_ENVIRONMENT' \
+  /tmp/olist-dbt-build-job-m8.yaml
+```
+
+Expected image:
+
+```text
+.../olist-dbt-job:m8
+```
+
+Expected monitoring variables:
+
+```text
+MONITORING_DATASET_ID=olist_monitoring
+MONITORING_JOB_NAME=olist-dbt-build-job
+MONITORING_ENVIRONMENT=prod
 ```
 
 ---
 
-## Grant Scheduler permission to run the Cloud Run Job
-
-For this project, Cloud Scheduler triggers the Cloud Run Job through the Cloud Run Admin API.
+## Grant Scheduler permission to execute the job
 
 ```bash
-gcloud run jobs add-iam-policy-binding "${CLOUD_RUN_JOB_NAME}" \
-  --region="${REGION}" \
+gcloud run jobs add-iam-policy-binding "${CLOUD_RUN_JOB}" \
+  --project="${GCP_PROJECT_ID}" \
+  --region="${CLOUD_RUN_REGION}" \
   --member="serviceAccount:${SCHEDULER_SA}" \
   --role="roles/run.invoker"
 ```
 
-If job-level IAM binding is not available in the local gcloud version, use a project-level binding instead:
+Fallback project-level binding:
 
 ```bash
-gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
   --member="serviceAccount:${SCHEDULER_SA}" \
   --role="roles/run.invoker"
 ```
 
 ---
 
-## Manually execute Cloud Run Job
+# Execute and inspect Cloud Run
+
+## Manual Cloud Run smoke test
 
 ```bash
-gcloud run jobs execute "${CLOUD_RUN_JOB_NAME}" \
-  --region="${REGION}" \
+gcloud run jobs execute "${CLOUD_RUN_JOB}" \
+  --project="${GCP_PROJECT_ID}" \
+  --region="${CLOUD_RUN_REGION}" \
   --wait
 ```
 
-Expected result:
+Validated M8 manual execution:
 
 ```text
-Cloud Run Job execution succeeds
-dbt debug succeeds
-dbt build succeeds
-BigQuery staging, intermediate, and marts models are refreshed
+1 / 1 task completed
+job_name=olist-dbt-build-job
+environment=prod
+status=success
+models_total=21
+tests_total=94
 ```
 
----
-
-## View Cloud Run Job executions
+## List recent executions
 
 ```bash
 gcloud run jobs executions list \
-  --job="${CLOUD_RUN_JOB_NAME}" \
-  --region="${REGION}"
+  --job="${CLOUD_RUN_JOB}" \
+  --project="${GCP_PROJECT_ID}" \
+  --region="${CLOUD_RUN_REGION}" \
+  --sort-by="~metadata.creationTimestamp" \
+  --limit=5
 ```
 
----
+## Describe the latest execution
 
-## View logs
+Some gcloud installations do not support `executions describe-latest`.
+
+Compatible approach:
+
+```bash
+LATEST_EXECUTION="$(
+  gcloud run jobs executions list \
+    --job="${CLOUD_RUN_JOB}" \
+    --project="${GCP_PROJECT_ID}" \
+    --region="${CLOUD_RUN_REGION}" \
+    --sort-by="~metadata.creationTimestamp" \
+    --limit=1 \
+    --format="value(metadata.name)"
+)"
+
+echo "${LATEST_EXECUTION}"
+
+gcloud run jobs executions describe "${LATEST_EXECUTION}" \
+  --project="${GCP_PROJECT_ID}" \
+  --region="${CLOUD_RUN_REGION}"
+```
+
+## View Cloud Run logs
 
 ```bash
 gcloud logging read \
-  "resource.type=cloud_run_job AND resource.labels.job_name=\"${CLOUD_RUN_JOB_NAME}\"" \
-  --limit=120 \
+  "resource.type=cloud_run_job AND resource.labels.job_name=\"${CLOUD_RUN_JOB}\"" \
+  --project="${GCP_PROJECT_ID}" \
+  --limit=150 \
   --format="table(timestamp,textPayload)"
 ```
 
 ---
 
-## Create Cloud Scheduler trigger
+# Cloud Scheduler
 
-Cloud Scheduler triggers the Cloud Run Job by sending an authenticated HTTP POST request to the Cloud Run Admin API.
+## Create the Scheduler trigger
 
-Because the target is a Google API endpoint under `googleapis.com`, the Scheduler job should use an OAuth token.
+Use this only in a new environment.
 
 ```bash
-gcloud scheduler jobs create http "${SCHEDULER_JOB_NAME}" \
+gcloud scheduler jobs create http "${SCHEDULER_JOB}" \
+  --project="${GCP_PROJECT_ID}" \
   --location="${SCHEDULER_LOCATION}" \
   --schedule="${SCHEDULER_CRON}" \
   --time-zone="${SCHEDULER_TIME_ZONE}" \
-  --uri="https://run.googleapis.com/v2/projects/${PROJECT_ID}/locations/${REGION}/jobs/${CLOUD_RUN_JOB_NAME}:run" \
+  --uri="https://run.googleapis.com/v2/projects/${GCP_PROJECT_ID}/locations/${CLOUD_RUN_REGION}/jobs/${CLOUD_RUN_JOB}:run" \
   --http-method=POST \
   --oauth-service-account-email="${SCHEDULER_SA}" \
   --oauth-token-scope="https://www.googleapis.com/auth/cloud-platform"
 ```
 
----
-
-## Force-run Cloud Scheduler job
+## Inspect the Scheduler job
 
 ```bash
-gcloud scheduler jobs run "${SCHEDULER_JOB_NAME}" \
-  --location="${SCHEDULER_LOCATION}"
-
-gcloud scheduler jobs describe "${SCHEDULER_JOB_NAME}" \
+gcloud scheduler jobs describe "${SCHEDULER_JOB}" \
+  --project="${GCP_PROJECT_ID}" \
   --location="${SCHEDULER_LOCATION}" \
   --format="yaml(name,schedule,timeZone,state,httpTarget.uri)"
-
-gcloud run jobs executions list \
-  --job="${CLOUD_RUN_JOB_NAME}" \
-  --region="${REGION}" \
-  --limit=5
 ```
 
-Expected result:
+## Force-run the Scheduler job
+
+```bash
+gcloud scheduler jobs run "${SCHEDULER_JOB}" \
+  --project="${GCP_PROJECT_ID}" \
+  --location="${SCHEDULER_LOCATION}"
+```
+
+Then list and describe the latest Cloud Run execution with the commands above.
+
+Validated Scheduler-triggered M8 execution:
 
 ```text
-Cloud Scheduler successfully triggers the Cloud Run Job
-Cloud Run Job starts a new execution
-dbt debug and dbt build run inside the container
-BigQuery models are refreshed
-The Scheduler-triggered execution should show `RUN BY` as the Scheduler service account.
+execution: olist-dbt-build-job-f59xf
+RUN BY: olist-scheduler-invoker service account
+tasks: 1 / 1 completed successfully
+elapsed time: approximately 1 minute 19 seconds
+```
+
+## Final Scheduler-triggered BigQuery validation
+
+```bash
+bq \
+  --project_id="${GCP_PROJECT_ID}" \
+  --location="${BQ_LOCATION}" \
+  query \
+  --use_legacy_sql=false \
+  < dbt/sql/monitoring/validate_latest_monitoring_run.sql
+```
+
+Validated output:
+
+```text
+models: 21 / 21 successful
+tests: 94 / 94 passed
+metadata snapshots: 21
+column snapshots: 259
+lineage edges: 146
+non-passing tests: 0
 ```
 
 ---
 
-## Validation checklist
+## Pause or resume the Scheduler
 
-Manual Cloud Run Job validation:
+Pause after portfolio validation to avoid unnecessary runs:
 
-```text
-[ ] Docker image builds successfully
-[ ] Docker image is pushed to Artifact Registry
-[ ] Cloud Run Job is created or updated
-[ ] Manual Cloud Run Job execution succeeds
-[ ] dbt debug succeeds
-[ ] dbt build succeeds
-[ ] BigQuery models refresh successfully
-[ ] Cloud Logging shows dbt output
+```bash
+gcloud scheduler jobs pause "${SCHEDULER_JOB}" \
+  --project="${GCP_PROJECT_ID}" \
+  --location="${SCHEDULER_LOCATION}"
 ```
 
-Cloud Scheduler validation:
+Resume later:
 
-```text
-[ ] Cloud Scheduler job is created
-[ ] Scheduler job uses authenticated OAuth trigger
-[ ] Scheduler force-run succeeds
-[ ] Cloud Run Job execution is created by Scheduler
-[ ] Scheduled execution logs are visible
+```bash
+gcloud scheduler jobs resume "${SCHEDULER_JOB}" \
+  --project="${GCP_PROJECT_ID}" \
+  --location="${SCHEDULER_LOCATION}"
 ```
 
 ---
 
-## M7 validation result
+# Troubleshooting
 
-The M7 orchestration flow was validated successfully.
+## Empty `GCP_PROJECT_ID`
 
-Validated flow:
+Symptom:
 
 ```text
-Cloud Scheduler force-run
-    ↓
-Cloud Run Job execution
-    ↓
-Containerized dbt build
-    ↓
-BigQuery staging, intermediate, and marts models refreshed
+Cannot start a job without a project id
 ```
 
-Validation details:
+Fix:
+
+```bash
+export GCP_PROJECT_ID="$(gcloud config get-value project)"
+echo "${GCP_PROJECT_ID}"
+```
+
+## `executions describe-latest` is unavailable
+
+Use `executions list` plus `executions describe` as documented above.
+
+## Shell script passes `bash -n` but fails at runtime
+
+Bash variable assignments cannot contain spaces around `=`:
+
+```bash
+ARTIFACT_BACKUP_DIR="$(mktemp -d)"
+```
+
+File-test brackets require spaces:
+
+```bash
+if [ ! -f "monitoring/load_artifacts_to_bigquery.py" ]; then
+```
+
+## CRLF warning for shell scripts
+
+Keep this in repository-root `.gitattributes`:
+
+```gitattributes
+*.sh text eol=lf
+```
+
+## BigQuery Preview does not show new streamed rows
+
+Use a `SELECT` query. The BigQuery Preview pane may lag behind streaming inserts.
+
+## Repeated local loads create several monitoring runs
+
+This is expected. The M8 tables are append-only and generate a new `monitoring_run_id` for each loader execution.
+
+## `dbt docs generate` replaces build artifacts
+
+The entrypoint script temporarily backs up the build `manifest.json` and `run_results.json`, generates `catalog.json`, and restores the build files before loading monitoring data.
+
+---
+
+# Final validation checklist
+
+## M7 orchestration
 
 ```text
-Cloud Run Job region: europe-north1
-Cloud Scheduler location: europe-west1
+[x] Dockerized dbt runtime
+[x] Artifact Registry image
+[x] Cloud Run Job
+[x] Cloud Scheduler OAuth trigger
+[x] Manual Cloud Run execution
+[x] Scheduler-triggered execution
+[x] dbt build PASS=115
+```
+
+## M8 monitoring
+
+```text
+[x] olist_monitoring dataset
+[x] Six monitoring tables
+[x] Artifact inspection
+[x] Six parser record types
+[x] Local BigQuery append loader
+[x] Latest-run cross-table validation
+[x] google-cloud-bigquery included in image
+[x] M8 image pushed to Artifact Registry
+[x] Cloud Run Job updated to m8
+[x] Manual cloud monitoring load
+[x] Scheduler-triggered monitoring load
+[x] Production job/environment identity
+[x] 21 models successful
+[x] 94 tests passed
+[x] 259 column snapshots
+[x] 146 lineage edges
+[x] 0 non-passing tests
+```
+
+---
+
+## Validated deployment summary
+
+```text
 Cloud Run Job: olist-dbt-build-job
-Cloud Scheduler job: olist-dbt-daily-trigger
+Cloud Run region: europe-north1
+Cloud Scheduler: olist-dbt-daily-trigger
+Scheduler location: europe-west1
 Schedule: 0 6 * * *
 Time zone: Europe/Helsinki
-Scheduler-triggered execution: olist-dbt-build-job-bzrmf
-Manual execution: olist-dbt-build-job-9bf7z
-dbt result: PASS=115 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=115
+Artifact Registry image: olist-dbt-job:m8
+Monitoring dataset: olist_monitoring
+Validation date: 2026-07-15
 ```
-
-The Scheduler-triggered execution was run by:
-
-```text
-olist-scheduler-invoker@<project-id>.iam.gserviceaccount.com
-```
-
-This confirms that Cloud Scheduler can trigger the Cloud Run Job through an authenticated OAuth request, and that the containerized dbt pipeline can refresh BigQuery models successfully.
-
----
-
-## Optional: Pause Scheduler after validation
-
-To avoid unnecessary scheduled runs after validation, pause the Scheduler job:
-
-```bash
-gcloud scheduler jobs pause "${SCHEDULER_JOB_NAME}" \
-  --location="${SCHEDULER_LOCATION}"
-```
-
-Resume it later if needed:
-
-```bash
-gcloud scheduler jobs resume "${SCHEDULER_JOB_NAME}" \
-  --location="${SCHEDULER_LOCATION}"
-```
-
----
-
-## Screenshot evidence
-
-Recommended screenshot directory:
-
-```text
-assets/screenshots/m7_orchestration/
-```
-
-Recommended screenshots:
-
-```text
-cloud_run_job_overview.png
-cloud_run_job_execution_success.png
-cloud_scheduler_trigger.png
-cloud_scheduler_success.png
-cloud_logging_dbt_success.png
-artifact_registry_image.png
-```
-
----
-
-## M7 boundary
-
-This document only covers orchestration deployment commands.
-
-M7 does not implement:
-
-- dbt artifact parsing
-- metadata refresh tables
-- `olist_monitoring` dataset
-- historical run comparison
-- AI-assisted pipeline intelligence
-- React or custom portal integration
-
-Those capabilities are reserved for later milestones.
-
