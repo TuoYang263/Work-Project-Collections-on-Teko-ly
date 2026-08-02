@@ -117,3 +117,397 @@ rules:
       issue, and then rerun the pipeline until the model completes successfully.
 
     implementation_status: DEFINED_NOT_IMPLEMENTED
+
+  - rule_id: M9-R003
+    version: "1.0.0"
+    name: Test Result Non-Passing
+    description: >
+      Detects a dbt test result in the selected pipeline run whose persisted
+      execution status is not pass.
+
+    dimensions:
+      - Correctness
+      - Data Quality / Integrity
+      - Reliability
+      - Business Readiness
+
+    default_severity: HIGH
+
+    applicability:
+      entity_type: test
+      evaluation_scope: selected_pipeline_run_test_results
+
+    required_evidence:
+      - source: test_run_results
+        fields:
+          - monitoring_run_id
+          - unique_id
+          - test_name
+          - status
+        requirements:
+          - monitoring_run_id must match the selected pipeline run
+          - unique_id must be non-null and non-empty
+          - test_name must be non-null and non-empty
+          - status must be non-null and non-empty
+        context_fields:
+          - model_unique_id
+          - model_name
+          - test_type
+          - test_metadata_name
+          - column_name
+          - severity
+          - failures
+          - message
+          - adapter_response_json
+
+    trigger_logic:
+      field: test_run_results.status
+      normalization: trim_and_lowercase
+      operator: not_equals
+      comparison_value: pass
+
+    severity_logic:
+      field: test_run_results.status
+      normalization: trim_and_lowercase
+      mapping:
+        warn: MEDIUM
+      fallback: HIGH
+
+    can_prove:
+      - The test has a persisted non-passing status for the selected pipeline run.
+      - The configured test did not produce a passing result for that pipeline run.
+
+    cannot_prove:
+      - The root cause of the non-passing test result.
+      - That the entire affected model is incorrect or unusable.
+      - That every important business rule is covered by configured dbt tests.
+      - That downstream systems outside the recorded dbt lineage were affected.
+
+    risk: >
+      A non-passing test means that a configured data-quality condition was not
+      confirmed successfully. The affected model may contain invalid records or
+      may remain insufficiently validated for downstream use.
+
+    recommendation: >
+      Inspect the test status, severity, failure count, execution message, and
+      affected model or column. Correct the underlying data, transformation, test,
+      or configuration issue and rerun the pipeline until the test passes. If a
+      warning is intentionally accepted, document the reason and expected impact.
+
+    implementation_status: DEFINED_NOT_IMPLEMENTED
+
+  - rule_id: M9-R004
+    version: "1.0.0"
+    name: Model Missing from Current Run
+    description: >
+      Detects a model that existed in the immediately previous comparable
+      successful pipeline run but is absent from the selected successful run.
+
+    dimensions:
+      - Reliability
+      - Observability
+      - Business Readiness
+
+    default_severity: MEDIUM
+
+    applicability:
+      entity_type: model
+      evaluation_scope: selected_vs_previous_comparable_run_model_inventory
+      selected_run_statuses:
+        - success
+      minimum_comparable_runs: 1
+
+    baseline_policy:
+      run_source: pipeline_runs
+      match_fields:
+        - job_name
+        - environment
+      eligible_statuses:
+        - success
+      order_field: generated_at
+      selection: immediately_previous_comparable_run
+
+    required_evidence:
+      - source: pipeline_runs
+        role: selected_run
+        fields:
+          - monitoring_run_id
+          - job_name
+          - environment
+          - generated_at
+          - status
+      - source: pipeline_runs
+        role: baseline_run
+        fields:
+          - monitoring_run_id
+          - job_name
+          - environment
+          - generated_at
+          - status
+      - source: model_metadata_snapshots
+        role: selected_inventory
+        fields:
+          - monitoring_run_id
+          - unique_id
+          - model_name
+          - resource_type
+      - source: model_metadata_snapshots
+        role: baseline_inventory
+        fields:
+          - monitoring_run_id
+          - unique_id
+          - model_name
+          - resource_type
+
+    trigger_logic:
+      operation: set_difference
+      baseline_set: baseline_inventory.model_metadata_snapshots.unique_id
+      current_set: selected_inventory.model_metadata_snapshots.unique_id
+      operator: baseline_minus_current_not_empty
+      filters:
+        resource_type_in:
+          - model
+
+    can_prove:
+      - A model present in the previous comparable successful run is absent from the selected successful run.
+      - The current and previous model inventories differ for the identified model unique_id.
+
+    cannot_prove:
+      - Whether the model was deleted, renamed, disabled, or excluded intentionally.
+      - Whether the absence was caused by code, configuration, selection syntax, or deployment behavior.
+      - Whether every downstream consumer was affected.
+
+    risk: >
+      A model missing from the current run may indicate an unintended inventory
+      change and may leave downstream models or consumers without an expected
+      current output.
+
+    recommendation: >
+      Review the dbt project changes, model selection, enablement configuration,
+      deployment inputs, and lineage impact. Confirm whether the absence was
+      intentional before accepting the current run as production-ready.
+
+    implementation_status: DEFINED_NOT_IMPLEMENTED
+
+  - rule_id: M9-R005
+    version: "1.0.0"
+    name: Row-Count Anomaly
+    description: >
+      Detects a material change in a model's current row count relative to the
+      median row count from recent comparable successful pipeline runs.
+
+    dimensions:
+      - Data Quality / Integrity
+      - Reliability
+      - Observability
+      - Business Readiness
+
+    default_severity: MEDIUM
+
+    applicability:
+      entity_type: model
+      evaluation_scope: selected_run_vs_recent_comparable_history
+      selected_run_statuses:
+        - success
+      minimum_comparable_runs: 1
+
+    baseline_policy:
+      run_source: pipeline_runs
+      match_fields:
+        - job_name
+        - environment
+      eligible_statuses:
+        - success
+      order_field: generated_at
+      selection: recent_comparable_runs_before_selected
+      window_size: 5
+      minimum_observations_per_model: 1
+      aggregation: median
+
+    required_evidence:
+      - source: pipeline_runs
+        role: selected_run
+        fields:
+          - monitoring_run_id
+          - job_name
+          - environment
+          - generated_at
+          - status
+      - source: pipeline_runs
+        role: historical_runs
+        fields:
+          - monitoring_run_id
+          - job_name
+          - environment
+          - generated_at
+          - status
+      - source: model_metadata_snapshots
+        role: current_model_metrics
+        fields:
+          - monitoring_run_id
+          - unique_id
+          - model_name
+          - resource_type
+          - row_count
+      - source: model_metadata_snapshots
+        role: historical_model_metrics
+        fields:
+          - monitoring_run_id
+          - unique_id
+          - model_name
+          - resource_type
+          - row_count
+
+    trigger_logic:
+      metric_field: model_metadata_snapshots.row_count
+      match_key: unique_id
+      direction: absolute_change
+      operator: relative_change_greater_than_or_equal
+      relative_change_threshold: 0.30
+      minimum_absolute_change: 100
+      threshold_combination: all
+      zero_baseline_policy: absolute_change_greater_than_or_equal_minimum
+
+    severity_logic:
+      metric: absolute_relative_change
+      bands:
+        - minimum_value: 1.00
+          severity: HIGH
+        - minimum_value: 0.30
+          severity: MEDIUM
+      fallback: MEDIUM
+
+    can_prove:
+      - The current row count differs materially from the selected historical baseline.
+      - The configured relative and absolute change thresholds were both met.
+
+    cannot_prove:
+      - That duplicate rows exist.
+      - That records are missing.
+      - That a join produced row multiplication.
+      - That the observed business-volume change is illegitimate.
+      - The root cause of the row-count change.
+
+    risk: >
+      A material row-count change may indicate an upstream volume shift, missing
+      data, duplicate production, filtering change, join behavior change, or an
+      intentional business change that requires review.
+
+    recommendation: >
+      Compare the current and historical row counts, inspect upstream model and
+      source changes, review recent transformation changes, and validate relevant
+      business-volume expectations before classifying the anomaly as an error.
+
+    implementation_status: DEFINED_NOT_IMPLEMENTED
+
+  - rule_id: M9-R006
+    version: "1.0.0"
+    name: Runtime Regression
+    description: >
+      Detects a material increase in a model's current execution time relative
+      to the median runtime from recent comparable successful executions.
+
+    dimensions:
+      - Reliability
+      - Observability
+      - Maintainability
+      - Business Readiness
+
+    default_severity: MEDIUM
+
+    applicability:
+      entity_type: model
+      evaluation_scope: selected_run_vs_recent_comparable_execution_history
+      current_model_statuses:
+        - success
+      minimum_comparable_runs: 1
+
+    baseline_policy:
+      run_source: pipeline_runs
+      match_fields:
+        - job_name
+        - environment
+      eligible_statuses:
+        - success
+      order_field: generated_at
+      selection: recent_comparable_runs_before_selected
+      window_size: 5
+      minimum_observations_per_model: 1
+      aggregation: median
+
+    required_evidence:
+      - source: pipeline_runs
+        role: selected_run
+        fields:
+          - monitoring_run_id
+          - job_name
+          - environment
+          - generated_at
+          - status
+      - source: pipeline_runs
+        role: historical_runs
+        fields:
+          - monitoring_run_id
+          - job_name
+          - environment
+          - generated_at
+          - status
+      - source: model_run_results
+        role: current_model_execution
+        fields:
+          - monitoring_run_id
+          - unique_id
+          - model_name
+          - status
+          - execution_time_seconds
+      - source: model_run_results
+        role: historical_model_executions
+        fields:
+          - monitoring_run_id
+          - unique_id
+          - model_name
+          - status
+          - execution_time_seconds
+
+    trigger_logic:
+      metric_field: model_run_results.execution_time_seconds
+      match_key: unique_id
+      direction: increase_only
+      operator: relative_and_absolute_increase
+      relative_increase_threshold: 0.50
+      minimum_absolute_increase_seconds: 5.0
+      threshold_combination: all
+      zero_or_negative_baseline_result: NOT_EVALUATED
+
+    severity_logic:
+      metric: runtime_increase
+      bands:
+        - minimum_relative_increase: 1.00
+          minimum_absolute_increase_seconds: 30.0
+          severity: HIGH
+        - minimum_relative_increase: 0.50
+          minimum_absolute_increase_seconds: 5.0
+          severity: MEDIUM
+      fallback: MEDIUM
+
+    can_prove:
+      - The current successful model execution is materially slower than the selected historical baseline.
+      - The configured relative and absolute runtime-increase thresholds were both met.
+
+    cannot_prove:
+      - Whether the regression was caused by SQL logic, data volume, BigQuery resource conditions, or infrastructure.
+      - Whether the regression will persist in future runs.
+      - Whether the model output is incorrect.
+      - Whether every downstream service-level objective was breached.
+
+    risk: >
+      A material runtime regression may delay downstream models, scheduled
+      reports, operational consumers, or the completion of the overall pipeline.
+
+    recommendation: >
+      Compare current and historical execution evidence, inspect recent model and
+      upstream changes, review data-volume growth and BigQuery execution details,
+      and confirm whether the slowdown is persistent before escalating it as a
+      confirmed performance defect.
+
+    implementation_status: DEFINED_NOT_IMPLEMENTED
