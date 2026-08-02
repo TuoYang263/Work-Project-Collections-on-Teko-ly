@@ -1,0 +1,119 @@
+# Version of the rule catalog structure.
+catalog_version: "1.0.0"
+
+# Global constraints applied to every deterministic rule evaluation.
+evaluation_policy:
+  missing_required_evidence_result: NOT_EVALUATED
+  deterministic_rules_are_source_of_truth: true
+  findings_are_immutable_to_llm: true
+  severity_is_immutable_to_llm: true
+  anomaly_is_not_automatically_error: true
+
+# Deterministic rules are added and validated incrementally.
+rules:
+  - rule_id: M9-R001
+    version: "1.0.0"
+    name: Pipeline Run Unsuccessful
+    description: >
+      Detects when the selected pipeline run has a non-success status.
+
+    dimensions:
+      - Reliability
+      - Business Readiness
+
+    default_severity: HIGH
+
+    applicability:
+      entity_type: pipeline_run
+      evaluation_scope: selected_pipeline_run
+
+    required_evidence:
+      - source: pipeline_runs
+        record_requirement: exactly_one
+        value_requirements:
+          monitoring_run_id: non_null_non_empty
+          status: non_null_non_empty
+
+    trigger_logic:
+      field: pipeline_runs.status
+      normalization: trim_and_lowercase
+      operator: not_equals
+      comparison_value: success
+
+    can_prove:
+      - The selected pipeline run has a recorded status other than success.
+      - The run must not be treated as a confirmed successful pipeline execution.
+
+    cannot_prove:
+      - Which model or test caused the unsuccessful run.
+      - Whether every produced dataset is incorrect or unusable.
+      - Whether the failure was caused by data, code, infrastructure, or configuration.
+
+    risk: >
+      An unsuccessful pipeline run may leave downstream models, reports, or
+      consumers with incomplete, stale, or unavailable data.
+
+    recommendation: >
+      Inspect model and test execution evidence, identify the failure cause,
+      assess downstream impact, and confirm a successful rerun before treating
+      the pipeline outputs as current and reliable.
+
+    implementation_status: DEFINED_NOT_IMPLEMENTED
+
+  - rule_id: M9-R002
+    version: "1.0.0"
+    name: Model Execution Non-Success
+    description: >
+      Detects a model execution in the selected pipeline run whose persisted
+      execution status is not success.
+
+    dimensions:
+      - Reliability
+      - Business Readiness
+
+    default_severity: HIGH
+
+    applicability:
+      entity_type: model
+      evaluation_scope: selected_pipeline_run_model_results
+
+    required_evidence:
+      - source: model_run_results
+        fields:
+          - monitoring_run_id
+          - unique_id
+          - model_name
+          - status
+        requirements:
+          - monitoring_run_id must match the selected pipeline run
+          - unique_id must be non-null and non-empty
+          - model_name must be non-null and non-empty
+          - status must be non-null and non-empty
+
+    trigger_logic:
+      field: model_run_results.status
+      normalization: trim_and_lowercase
+      operator: not_equals
+      comparison_value: success
+
+    can_prove:
+      - The model has a persisted status other than success for the selected pipeline run.
+      - The model must not be treated as successfully executed for that pipeline run.
+
+    cannot_prove:
+      - The root cause of the non-successful model execution.
+      - Whether the failure was caused by model SQL, upstream data, dbt configuration, BigQuery, or infrastructure.
+      - Whether the model contains incorrect business data.
+      - Whether every downstream consumer was affected.
+
+    risk: >
+      A non-successful model execution may leave the model unavailable, stale,
+      or inconsistent with the rest of the pipeline and may prevent downstream
+      models or consumers from receiving current data.
+
+    recommendation: >
+      Inspect the model execution message and adapter response, review relevant
+      upstream model results and downstream lineage, correct the underlying
+      issue, and then rerun the pipeline until the model completes successfully.
+
+    implementation_status: DEFINED_NOT_IMPLEMENTED
