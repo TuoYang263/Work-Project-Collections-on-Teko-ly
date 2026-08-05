@@ -60,13 +60,24 @@ def validate(path: Path) -> None:
     }
     rules_by_id = {rule["rule_id"]: rule for rule in rules}
 
+    expected_implementation_status = {
+        "M9-R001": "IMPLEMENTED",
+        "M9-R002": "IMPLEMENTED",
+        "M9-R003": "IMPLEMENTED",
+        "M9-R004": "DEFINED_NOT_IMPLEMENTED",
+        "M9-R005": "DEFINED_NOT_IMPLEMENTED",
+        "M9-R006": "DEFINED_NOT_IMPLEMENTED",
+    }
+
     for rule_id, rule in rules_by_id.items():
         missing_fields = required_rule_fields - set(rule)
         assert not missing_fields, (
             f"{rule_id} missing fields: {sorted(missing_fields)}"
         )
         assert rule["version"] == "1.0.0"
-        assert rule["implementation_status"] == "DEFINED_NOT_IMPLEMENTED"
+        assert rule["implementation_status"] == (
+            expected_implementation_status[rule_id]
+        )
         assert rule["default_severity"] in {
             "LOW", "MEDIUM", "HIGH", "CRITICAL"
         }

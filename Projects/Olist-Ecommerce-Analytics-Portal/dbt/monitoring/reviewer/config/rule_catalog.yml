@@ -58,7 +58,7 @@ rules:
       assess downstream impact, and confirm a successful rerun before treating
       the pipeline outputs as current and reliable.
 
-    implementation_status: DEFINED_NOT_IMPLEMENTED
+    implementation_status: IMPLEMENTED
 
   - rule_id: M9-R002
     version: "1.0.0"
@@ -116,7 +116,7 @@ rules:
       upstream model results and downstream lineage, correct the underlying
       issue, and then rerun the pipeline until the model completes successfully.
 
-    implementation_status: DEFINED_NOT_IMPLEMENTED
+    implementation_status: IMPLEMENTED
 
   - rule_id: M9-R003
     version: "1.0.0"
@@ -194,7 +194,7 @@ rules:
       or configuration issue and rerun the pipeline until the test passes. If a
       warning is intentionally accepted, document the reason and expected impact.
 
-    implementation_status: DEFINED_NOT_IMPLEMENTED
+    implementation_status: IMPLEMENTED
 
   - rule_id: M9-R004
     version: "1.0.0"
