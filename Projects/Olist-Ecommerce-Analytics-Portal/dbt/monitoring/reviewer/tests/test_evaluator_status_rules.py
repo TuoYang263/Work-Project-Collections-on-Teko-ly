@@ -197,6 +197,47 @@ class StatusRuleEvaluatorTests(unittest.TestCase):
         self.assertEqual(len(r002_items), 1)
         self.assertEqual(r002_items[0].result, "PASS")
 
+    def test_evaluation_evidence_is_immutable(self) -> None:
+        evidence = self._base_evidence()
+        evidence["model_run_results"][0]["status"] = "error"
+
+        evaluations = self.evaluator.evaluate_status_rules(
+            selected_run_id="run-001",
+            evidence=evidence,
+        )
+
+        r002 = next(
+            item
+            for item in evaluations
+            if item.rule_id == "M9-R002"
+        )
+
+        with self.assertRaises(TypeError):
+            r002.evidence["status"] = "success"
+
+    def test_to_dict_returns_detached_mutable_copy(self) -> None:
+        evidence = self._base_evidence()
+        evidence["model_run_results"][0]["status"] = "error"
+
+        evaluations = self.evaluator.evaluate_status_rules(
+            selected_run_id="run-001",
+            evidence=evidence,
+        )
+
+        r002 = next(
+            item
+            for item in evaluations
+            if item.rule_id == "M9-R002"
+        )
+
+        payload = r002.to_dict()
+        payload["evidence"]["status"] = "success"
+
+        self.assertEqual(
+            r002.evidence["status"],
+            "error",
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
