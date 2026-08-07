@@ -4,7 +4,6 @@ import sys
 import unittest
 from pathlib import Path
 
-
 REVIEWER_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REVIEWER_ROOT / "src"
 
@@ -19,9 +18,7 @@ from pipeline_reviewer import (  # noqa: E402
 class StatusRuleEvaluatorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        catalog_path = (
-            REVIEWER_ROOT / "config" / "rule_catalog.yml"
-        )
+        catalog_path = REVIEWER_ROOT / "config" / "rule_catalog.yml"
         cls.catalog = load_rule_catalog(catalog_path)
         cls.evaluator = DeterministicEvaluator(cls.catalog)
 
@@ -59,12 +56,8 @@ class StatusRuleEvaluatorTests(unittest.TestCase):
         )
 
         self.assertEqual(len(evaluations), 3)
-        self.assertTrue(
-            all(item.result == "PASS" for item in evaluations)
-        )
-        self.assertTrue(
-            all(item.severity is None for item in evaluations)
-        )
+        self.assertTrue(all(item.result == "PASS" for item in evaluations))
+        self.assertTrue(all(item.severity is None for item in evaluations))
 
     def test_status_values_are_trimmed_and_lowercased(self) -> None:
         evidence = self._base_evidence()
@@ -77,9 +70,7 @@ class StatusRuleEvaluatorTests(unittest.TestCase):
             evidence=evidence,
         )
 
-        self.assertTrue(
-            all(item.result == "PASS" for item in evaluations)
-        )
+        self.assertTrue(all(item.result == "PASS" for item in evaluations))
 
     def test_model_error_and_test_failure_trigger_high(self) -> None:
         evidence = self._base_evidence()
@@ -90,10 +81,7 @@ class StatusRuleEvaluatorTests(unittest.TestCase):
             selected_run_id="run-001",
             evidence=evidence,
         )
-        by_rule = {
-            item.rule_id: item
-            for item in evaluations
-        }
+        by_rule = {item.rule_id: item for item in evaluations}
 
         self.assertEqual(
             by_rule["M9-R002"].result,
@@ -120,11 +108,7 @@ class StatusRuleEvaluatorTests(unittest.TestCase):
             selected_run_id="run-001",
             evidence=evidence,
         )
-        r003 = next(
-            item
-            for item in evaluations
-            if item.rule_id == "M9-R003"
-        )
+        r003 = next(item for item in evaluations if item.rule_id == "M9-R003")
 
         self.assertEqual(r003.result, "TRIGGERED")
         self.assertEqual(r003.severity, "MEDIUM")
@@ -139,11 +123,7 @@ class StatusRuleEvaluatorTests(unittest.TestCase):
             selected_run_id="run-001",
             evidence=evidence,
         )
-        r002 = next(
-            item
-            for item in evaluations
-            if item.rule_id == "M9-R002"
-        )
+        r002 = next(item for item in evaluations if item.rule_id == "M9-R002")
 
         self.assertEqual(r002.result, "NOT_EVALUATED")
         self.assertIsNone(r002.severity)
@@ -164,11 +144,7 @@ class StatusRuleEvaluatorTests(unittest.TestCase):
             selected_run_id="run-001",
             evidence=evidence,
         )
-        r001 = next(
-            item
-            for item in evaluations
-            if item.rule_id == "M9-R001"
-        )
+        r001 = next(item for item in evaluations if item.rule_id == "M9-R001")
 
         self.assertEqual(r001.result, "NOT_EVALUATED")
         self.assertIn("exactly one", r001.reason)
@@ -188,11 +164,7 @@ class StatusRuleEvaluatorTests(unittest.TestCase):
             selected_run_id="run-001",
             evidence=evidence,
         )
-        r002_items = [
-            item
-            for item in evaluations
-            if item.rule_id == "M9-R002"
-        ]
+        r002_items = [item for item in evaluations if item.rule_id == "M9-R002"]
 
         self.assertEqual(len(r002_items), 1)
         self.assertEqual(r002_items[0].result, "PASS")
@@ -206,11 +178,7 @@ class StatusRuleEvaluatorTests(unittest.TestCase):
             evidence=evidence,
         )
 
-        r002 = next(
-            item
-            for item in evaluations
-            if item.rule_id == "M9-R002"
-        )
+        r002 = next(item for item in evaluations if item.rule_id == "M9-R002")
 
         with self.assertRaises(TypeError):
             r002.evidence["status"] = "success"
@@ -224,11 +192,7 @@ class StatusRuleEvaluatorTests(unittest.TestCase):
             evidence=evidence,
         )
 
-        r002 = next(
-            item
-            for item in evaluations
-            if item.rule_id == "M9-R002"
-        )
+        r002 = next(item for item in evaluations if item.rule_id == "M9-R002")
 
         payload = r002.to_dict()
         payload["evidence"]["status"] = "success"

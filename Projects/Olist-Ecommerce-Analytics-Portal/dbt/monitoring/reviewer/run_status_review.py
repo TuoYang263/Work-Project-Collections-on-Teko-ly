@@ -6,7 +6,6 @@ import os
 import sys
 from pathlib import Path
 
-
 REVIEWER_ROOT = Path(__file__).resolve().parent
 SRC_ROOT = REVIEWER_ROOT / "src"
 sys.path.insert(0, str(SRC_ROOT))

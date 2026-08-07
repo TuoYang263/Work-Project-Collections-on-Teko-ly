@@ -13,13 +13,13 @@ class EvaluationError(ValueError):
 class DeterministicEvaluator:
     STATUS_RULE_IDS = ("M9-R001", "M9-R002", "M9-R003")
 
+    
+
     def __init__(self, catalog: Mapping[str, Any]) -> None:
         rules = catalog.get("rules")
 
         if not isinstance(rules, list):
-            raise EvaluationError(
-                "Catalog field 'rules' must be a list"
-            )
+            raise EvaluationError("Catalog field 'rules' must be a list")
 
         self._rules_by_id = {
             rule["rule_id"]: rule
@@ -34,9 +34,7 @@ class DeterministicEvaluator:
         ]
 
         if missing_rules:
-            raise EvaluationError(
-                f"Required status rules are missing: {missing_rules}"
-            )
+            raise EvaluationError(f"Required status rules are missing: {missing_rules}")
 
     def evaluate_status_rules(
         self,
@@ -44,9 +42,7 @@ class DeterministicEvaluator:
         evidence: Mapping[str, Sequence[Mapping[str, Any]]],
     ) -> list[RuleEvaluation]:
         if not selected_run_id.strip():
-            raise EvaluationError(
-                "selected_run_id must be non-empty"
-            )
+            raise EvaluationError("selected_run_id must be non-empty")
 
         evaluations: list[RuleEvaluation] = []
 
@@ -73,9 +69,7 @@ class DeterministicEvaluator:
         source_rows = evidence.get(source, [])
 
         if not isinstance(source_rows, Sequence):
-            raise EvaluationError(
-                f"Evidence source '{source}' must be a sequence"
-            )
+            raise EvaluationError(f"Evidence source '{source}' must be a sequence")
 
         selected_rows = [
             dict(row)
@@ -83,9 +77,7 @@ class DeterministicEvaluator:
             if row.get("monitoring_run_id") == selected_run_id
         ]
 
-        record_requirement = evidence_definition.get(
-            "record_requirement"
-        )
+        record_requirement = evidence_definition.get("record_requirement")
 
         if record_requirement == "exactly_one":
             if len(selected_rows) != 1:
@@ -130,13 +122,9 @@ class DeterministicEvaluator:
         evidence_definition: Mapping[str, Any],
         row: dict[str, Any],
     ) -> RuleEvaluation:
-        required_fields = self._required_fields(
-            evidence_definition
-        )
+        required_fields = self._required_fields(evidence_definition)
         missing_fields = [
-            field
-            for field in required_fields
-            if self._is_missing(row.get(field))
+            field for field in required_fields if self._is_missing(row.get(field))
         ]
 
         entity_type = rule["applicability"]["entity_type"]
@@ -150,8 +138,7 @@ class DeterministicEvaluator:
                 rule=rule,
                 source=source,
                 reason=(
-                    "Missing required evidence fields: "
-                    f"{sorted(missing_fields)}"
+                    "Missing required evidence fields: " f"{sorted(missing_fields)}"
                 ),
                 entity_id=entity_id,
                 evidence=row,
@@ -162,8 +149,7 @@ class DeterministicEvaluator:
 
         if operator != "not_equals":
             raise EvaluationError(
-                f"Unsupported operator for {rule['rule_id']}: "
-                f"{operator}"
+                f"Unsupported operator for {rule['rule_id']}: " f"{operator}"
             )
 
         metric_field = trigger_logic["field"].split(".")[-1]
@@ -179,20 +165,12 @@ class DeterministicEvaluator:
 
         triggered = actual_value != comparison_value
         result = "TRIGGERED" if triggered else "PASS"
-        severity = (
-            self._resolve_severity(rule, actual_value)
-            if triggered
-            else None
-        )
+        severity = self._resolve_severity(rule, actual_value) if triggered else None
 
         reason = (
-            f"Normalized value '{actual_value}' does not equal "
-            f"'{comparison_value}'"
+            f"Normalized value '{actual_value}' does not equal " f"'{comparison_value}'"
             if triggered
-            else (
-                f"Normalized value '{actual_value}' equals "
-                f"'{comparison_value}'"
-            )
+            else (f"Normalized value '{actual_value}' equals " f"'{comparison_value}'")
         )
 
         return RuleEvaluation(
@@ -215,23 +193,18 @@ class DeterministicEvaluator:
         if isinstance(fields, list):
             return list(fields)
 
-        value_requirements = evidence_definition.get(
-            "value_requirements"
-        )
+        value_requirements = evidence_definition.get("value_requirements")
 
         if isinstance(value_requirements, dict):
             return list(value_requirements)
 
         raise EvaluationError(
-            "Required evidence must define either 'fields' or "
-            "'value_requirements'"
+            "Required evidence must define either 'fields' or " "'value_requirements'"
         )
 
     @staticmethod
     def _is_missing(value: Any) -> bool:
-        return value is None or (
-            isinstance(value, str) and not value.strip()
-        )
+        return value is None or (isinstance(value, str) and not value.strip())
 
     @staticmethod
     def _normalize(value: Any, normalization: str | None) -> Any:
@@ -240,14 +213,10 @@ class DeterministicEvaluator:
 
         if normalization == "trim_and_lowercase":
             if not isinstance(value, str):
-                raise EvaluationError(
-                    "trim_and_lowercase requires a string value"
-                )
+                raise EvaluationError("trim_and_lowercase requires a string value")
             return value.strip().lower()
 
-        raise EvaluationError(
-            f"Unsupported normalization: {normalization}"
-        )
+        raise EvaluationError(f"Unsupported normalization: {normalization}")
 
     @staticmethod
     def _entity_id(

@@ -11,6 +11,7 @@ from .evidence_loader import (
     QueryExecutor,
 )
 from .models import RuleEvaluation
+from .baseline import median_baseline
 from .review_service import StatusReview, StatusReviewService
 
 __all__ = [
@@ -27,4 +28,5 @@ __all__ = [
     "StatusReview",
     "StatusReviewService",
     "load_rule_catalog",
+    "median_baseline",
 ]

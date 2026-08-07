@@ -17,13 +17,9 @@ def load_rule_catalog(path: str | Path) -> dict[str, Any]:
         raise CatalogError(f"Rule catalog not found: {catalog_path}")
 
     try:
-        catalog = yaml.safe_load(
-            catalog_path.read_text(encoding="utf-8")
-        )
+        catalog = yaml.safe_load(catalog_path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
-        raise CatalogError(
-            f"Invalid YAML in rule catalog: {catalog_path}"
-        ) from exc
+        raise CatalogError(f"Invalid YAML in rule catalog: {catalog_path}") from exc
 
     if not isinstance(catalog, dict):
         raise CatalogError("Rule catalog must be a YAML mapping")
@@ -32,11 +28,7 @@ def load_rule_catalog(path: str | Path) -> dict[str, Any]:
     if not isinstance(rules, list):
         raise CatalogError("Rule catalog field 'rules' must be a list")
 
-    rule_ids = [
-        rule.get("rule_id")
-        for rule in rules
-        if isinstance(rule, dict)
-    ]
+    rule_ids = [rule.get("rule_id") for rule in rules if isinstance(rule, dict)]
 
     if len(rule_ids) != len(set(rule_ids)):
         raise CatalogError("Rule catalog contains duplicate rule IDs")

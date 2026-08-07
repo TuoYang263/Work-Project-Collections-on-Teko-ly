@@ -11,7 +11,9 @@ class BigQueryDependencyError(RuntimeError):
 class BigQueryQueryExecutor:
     """Thin adapter from google-cloud-bigquery to the loader QueryExecutor."""
 
-    def __init__(self, client: Any | None = None, project_id: str | None = None) -> None:
+    def __init__(
+        self, client: Any | None = None, project_id: str | None = None
+    ) -> None:
         bigquery = self._import_bigquery()
         self._bigquery = bigquery
         self._client = client or bigquery.Client(project=project_id)
@@ -22,18 +24,42 @@ class BigQueryQueryExecutor:
         parameters: Mapping[str, Any],
     ) -> Sequence[Mapping[str, Any]]:
         query_parameters = [
-            self._bigquery.ScalarQueryParameter(
-                name,
-                self._parameter_type(value),
-                value,
-            )
+            self._build_query_parameter(name, value)
             for name, value in parameters.items()
         ]
-        job_config = self._bigquery.QueryJobConfig(
-            query_parameters=query_parameters
-        )
+        job_config = self._bigquery.QueryJobConfig(query_parameters=query_parameters)
         query_job = self._client.query(sql, job_config=job_config)
         return [dict(row.items()) for row in query_job.result()]
+
+    def _build_query_parameter(
+        self,
+        name: str,
+        value: Any,
+    ) -> Any:
+        if isinstance(value, (list, tuple)):
+            if not value:
+                raise TypeError(f"BigQuery array parameter {name!r} must be non-empty")
+
+            element_type = self._parameter_type(value[0])
+
+            for item in value[1:]:
+                if self._parameter_type(item) != element_type:
+                    raise TypeError(
+                        f"BigQuery array parameter {name!r} "
+                        "must contain values of one scalar type"
+                    )
+
+            return self._bigquery.ArrayQueryParameter(
+                name,
+                element_type,
+                list(value),
+            )
+
+        return self._bigquery.ScalarQueryParameter(
+            name,
+            self._parameter_type(value),
+            value,
+        )
 
     @staticmethod
     def _parameter_type(value: Any) -> str:
@@ -47,8 +73,7 @@ class BigQueryQueryExecutor:
             return "STRING"
 
         raise TypeError(
-            "Unsupported BigQuery scalar parameter type: "
-            f"{type(value).__name__}"
+            "Unsupported BigQuery scalar parameter type: " f"{type(value).__name__}"
         )
 
     @staticmethod
