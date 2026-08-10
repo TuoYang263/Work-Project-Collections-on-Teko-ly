@@ -24,10 +24,22 @@ class StatusReviewService:
 
     def review_run(self, monitoring_run_id: str) -> StatusReview:
         bundle = self._loader.load_status_evidence(monitoring_run_id)
-        evaluations = self._evaluator.evaluate_status_rules(
+
+        status_evaluations = self._evaluator.evaluate_status_rules(
             selected_run_id=bundle.monitoring_run_id,
             evidence=bundle.evidence,
         )
+        historical_evaluations = self._evaluator.evaluate_historical_rules(
+            selected_run_id=bundle.monitoring_run_id,
+            comparable_run_ids=bundle.comparable_run_ids,
+            evidence=bundle.evidence,
+        )
+
+        evaluations = [
+            *status_evaluations,
+            *historical_evaluations,
+        ]
+
         return StatusReview(
             monitoring_run_id=bundle.monitoring_run_id,
             evaluations=tuple(evaluations),
@@ -42,10 +54,22 @@ class StatusReviewService:
             job_name=job_name,
             environment=environment,
         )
-        evaluations = self._evaluator.evaluate_status_rules(
+
+        status_evaluations = self._evaluator.evaluate_status_rules(
             selected_run_id=bundle.monitoring_run_id,
             evidence=bundle.evidence,
         )
+        historical_evaluations = self._evaluator.evaluate_historical_rules(
+            selected_run_id=bundle.monitoring_run_id,
+            comparable_run_ids=bundle.comparable_run_ids,
+            evidence=bundle.evidence,
+        )
+
+        evaluations = [
+            *status_evaluations,
+            *historical_evaluations,
+        ]
+
         return StatusReview(
             monitoring_run_id=bundle.monitoring_run_id,
             evaluations=tuple(evaluations),

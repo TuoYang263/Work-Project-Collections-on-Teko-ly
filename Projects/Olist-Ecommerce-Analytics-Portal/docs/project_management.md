@@ -6,7 +6,7 @@ This document describes how the Olist E-Commerce Analytics & Pipeline Monitoring
 
 The goal is to keep the project structured, realistic, reviewable, and easy to continue across milestones.
 
-This document has been refreshed during **M6 - README / dbt docs / Project Showcase Cleanup** to reflect the current completed project scope and updated roadmap.
+This document has been refreshed after **M9 - Evidence-Grounded Pipeline Quality Reviewer** to reflect the completed implementation and the next M10/M11 roadmap.
 
 ---
 
@@ -18,7 +18,7 @@ Each milestone should produce a clear and reviewable output, such as documentati
 
 The project should avoid doing too many things at once. Each stage should be completed, validated, documented, and committed before moving to the next stage.
 
-Current M6 scope is intentionally documentation and project showcase cleanup only. It does not add new pipeline features.
+The project is currently completed through M9. M10 is the next implementation milestone.
 
 ---
 
@@ -66,39 +66,37 @@ General commit prefixes:
 
 | Milestone | Focus | Status | Output |
 |---|---|---:|---|
-| M1 | Project setup and source understanding | Completed | Folder structure, README skeleton, source inventory, naming plan, GitHub Project setup |
+| M1 | Project setup and source understanding | Completed | Folder structure, source inventory, naming plan, GitHub Project setup |
 | M2 | BigQuery raw layer | Completed | BigQuery `olist_raw` dataset and 9 source-aligned raw tables |
 | M3 | Staging layer planning | Completed | Staging design, source-to-staging mapping, cleanup rules |
 | M4 | dbt staging layer | Completed | dbt project setup, sources, 9 staging views, schema docs, 39 dbt tests |
 | M5 | Dimensional modeling / analytics marts | Completed | Intermediate models, dimensions, facts, mart tests, dbt docs validation |
-| M6 | README / dbt docs / project showcase cleanup | In progress | Portfolio-ready README, as-built architecture docs, dbt docs screenshots, roadmap cleanup |
-| M7 | Google Cloud Scheduler + Cloud Run Job orchestration | Future | Scheduled dbt execution using Google Cloud services |
-| M8 | ADE-inspired metadata refresh / monitoring tables | Future | dbt artifact parsing and BigQuery `olist_monitoring` tables |
-| M9 | AI-assisted pipeline intelligence layer | Future | Explanation layer on top of tests, artifacts, metadata tables, and docs |
+| M6 | README / dbt docs / project showcase cleanup | Completed | Portfolio-ready README, as-built architecture docs, dbt docs screenshots, roadmap cleanup |
+| M7 | Google Cloud Scheduler + Cloud Run Job orchestration | Completed | Scheduled containerized dbt execution |
+| M8 | dbt metadata refresh / monitoring tables | Completed | dbt artifact parsing and append-only `olist_monitoring` history |
+| M9 | Evidence-grounded pipeline quality reviewer | Completed | R001-R006, historical baselines, finding package, Vertex AI explanation |
+| M10 | Window control and operational / analytics portal | Planned | Watermark/state control, monitoring UI, findings, analytics, geospatial slice |
+| M11 | Replay, backfill, and recovery | Planned | Controlled replay, backfill, resume, idempotency, consistency validation |
 
 ---
 
-## Current M6 Scope
+## Current Project Scope
 
-M6 includes:
+The implemented project boundary is M9.
 
-- refreshing `README.md` as a portfolio-ready project showcase
-- updating `docs/architecture.md` from planned architecture to as-built architecture
-- adding dbt docs and lineage screenshots under `assets/screenshots/dbt_docs/`
-- highlighting the M5 dimensional model and validation summary
-- documenting dbt docs / lineage review
-- updating project management and roadmap documentation
-- keeping future orchestration, monitoring, and AI work clearly separated from the current implemented scope
+Completed capabilities now include:
 
-M6 does not include:
+- BigQuery raw, staging, intermediate, marts, and monitoring datasets
+- dbt modeling, tests, documentation, and lineage
+- Cloud Run Job and Cloud Scheduler orchestration
+- append-only dbt artifact monitoring history
+- deterministic pipeline quality rules R001-R006
+- historical model inventory, row-count, and runtime comparison
+- finding package generation
+- optional Vertex AI explanation with strict finding-ID validation
+- AI skip and failure fallback behavior
 
-- building a Power BI dashboard
-- building a React or Node portal
-- adding Google Cloud Scheduler or Cloud Run orchestration
-- parsing dbt artifacts into monitoring tables
-- creating BigQuery `olist_monitoring` tables
-- adding an AI module
-- adding new dbt models or expanding the mart layer
+M10 and M11 are intentionally separate. M9 should not continue growing with portal, watermark, replay, or backfill logic.
 
 ---
 
@@ -128,10 +126,15 @@ The project should follow these principles:
 - M3 - Staging Layer Planning
 - M4 - dbt Staging Layer
 - M5 - Dimensional Modeling / Analytics Marts
-
-### In progress
-
 - M6 - README / dbt docs / Project Showcase Cleanup
+- M7 - Google Cloud Scheduler + Cloud Run Job Orchestration
+- M8 - dbt Metadata Refresh & Pipeline Monitoring
+- M9 - Evidence-Grounded Pipeline Quality Reviewer
+
+### Next
+
+- M10 - Window Control and Operational / Analytics Portal
+- M11 - Replay, Backfill, and Recovery
 
 ---
 
@@ -255,38 +258,112 @@ docs/m5_dimensional_modeling_design.md
 docs/m5_dbt_marts_validation.md
 ```
 
+### M6 Summary
+
+M6 cleaned up the project showcase and documentation after the core dbt analytics layer was complete.
+
+Main outputs:
+
+- README refresh
+- as-built architecture documentation
+- dbt docs and lineage review
+- roadmap cleanup
+
+### M7 Summary
+
+M7 moved the dbt pipeline into a scheduled Google Cloud execution path.
+
+Implemented flow:
+
+```text
+Cloud Scheduler
+→ Cloud Run Job
+→ containerized dbt build
+→ BigQuery
+```
+
+Manual and Scheduler-triggered executions were validated.
+
+### M8 Summary
+
+M8 added append-only pipeline monitoring history from dbt artifacts.
+
+Implemented monitoring tables:
+
+```text
+pipeline_runs
+model_run_results
+test_run_results
+model_metadata_snapshots
+model_column_snapshots
+model_lineage_edges
+```
+
+The validated cloud run recorded 21 successful models, 94 passed tests, 259 column snapshots, and 146 lineage edges.
+
+### M9 Summary
+
+M9 added the evidence-grounded pipeline quality reviewer.
+
+Implemented rules:
+
+```text
+R001 pipeline run unsuccessful
+R002 model execution non-success
+R003 test result non-passing
+R004 model missing from current run
+R005 row-count anomaly
+R006 runtime regression
+```
+
+The reviewer keeps deterministic rules as the source of truth. Vertex AI only explains triggered findings.
+
+Final validation on 2026-08-10:
+
+```text
+179 evaluations
+166 PASS
+1 TRIGGERED
+12 NOT_EVALUATED
+53 unit tests passed
+Vertex AI status: SUCCESS
+```
+
+The real triggered finding was an R006 runtime regression for `fct_order_payments`.
+
+Detailed M9 implementation notes:
+
+```text
+docs/m9_expert_system_closing.md
+```
+
 ---
 
 ## Future Roadmap
 
-### M7 - Google Cloud Scheduler + Cloud Run Job orchestration
+### M10 - Window Control and Operational / Analytics Portal
 
-Future goal:
+Main goal:
 
-- schedule dbt execution using Google Cloud Scheduler and Cloud Run Jobs
-- keep orchestration separate from modeling logic
-- make the pipeline easier to run repeatedly
+- add explicit window and watermark state
+- advance the watermark only after successful processing
+- preserve retry and attempt history
+- expose pipeline status, run history, findings, and evidence in a usable portal
+- add an analytics area backed by governed BigQuery data
+- start geospatial analytics with a small Brazil state-level slice using CARTO and deck.gl
 
-### M8 - ADE-inspired metadata refresh and monitoring tables
+The first portal version should stay small and verifiable rather than trying to build every dashboard at once.
 
-Future goal:
+### M11 - Replay, Backfill, and Recovery
 
-- borrow metadata-driven DataOps ideas from Agile Data Engine
-- parse dbt artifacts:
-  - `manifest.json`
-  - `run_results.json`
-  - `catalog.json`
-- load dbt artifact metadata into BigQuery `olist_monitoring` tables
-- track model status, test results, row counts, execution metadata, runtime metadata, and lineage metadata
+Main goal:
 
-This will not be a direct Agile Data Engine integration.
+- replay one historical window
+- backfill multiple windows
+- resume after partial failure
+- keep business writes idempotent
+- keep monitoring history append-only
+- validate incremental and replay consistency
+- keep normal production watermark behavior separate from backfill control
 
-### M9 - AI-assisted pipeline intelligence layer
-
-Future goal:
-
-- build an explanation layer on top of dbt docs, dbt artifacts, monitoring tables, and validation outputs
-- answer questions about pipeline health, data quality, failed tests, validation, lineage, runtime performance, and downstream impact
-- help interpret metadata rather than replace structured tests
-
-The AI layer will not replace dbt tests, dbt validation, or monitoring tables.
+M11 should focus on recovery depth rather than adding another large feature surface.

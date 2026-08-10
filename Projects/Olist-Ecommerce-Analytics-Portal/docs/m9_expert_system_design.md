@@ -4,14 +4,17 @@
 
 - Project: Olist E-Commerce Analytics & Pipeline Monitoring Portal
 - Branch: `feature/olist-analytics-portal`
-- Current milestone: M9.1 — Expert system design
+- Milestone: M9 — Evidence-Grounded Pipeline Quality Reviewer
 - M8 completion commit: `92298ab docs: complete M8 monitoring documentation`
-- Design status: Initial MVP design
-- Implementation status: Not started
+- Design status: Implemented MVP design reference
+- Implementation status: Completed on 2026-08-10
+- Closing document: `docs/m9_expert_system_closing.md`
 
-This document defines the initial architecture, evidence boundaries, review dimensions, and rule readiness for M9.
+This document preserves the M9 design thinking, evidence boundaries, and original rule roadmap.
 
-M9 must remain a lightweight, explainable, and evidence-driven extension of the existing M8 monitoring layer.
+The implemented M9 boundary is smaller than some early design ideas in this file. The completed MVP implements R001-R006, historical baselines, a finding package, and a controlled Vertex AI explanation layer. Graph impact traversal, R007-R010, MCP protocol support, a Markdown reporter, and portal work were not required for M9 completion.
+
+M9 remains a lightweight, explainable, and evidence-driven extension of the M8 monitoring layer.
 
 ---
 
@@ -681,26 +684,24 @@ It does not prove the full set of external dashboards, manual SQL consumers, or 
 
 ---
 
-## 13. Initial Deterministic Rule Readiness
+## 13. Deterministic Rule Status
 
-| Rule ID | Rule | Readiness |
+| Rule ID | Rule | Final M9 status |
 |---|---|---|
-| M9-R001 | Pipeline Run Unsuccessful | `READY` |
-| M9-R002 | Model Execution Non-Success | `READY` |
-| M9-R003 | Test Result Non-Passing | `READY` |
-| M9-R004 | Model Missing from Current Run | `READY` |
-| M9-R005 | Row-Count Anomaly | `READY` |
-| M9-R006 | Runtime Regression | `READY` |
-| M9-R007 | Schema Drift Detected | `READY` |
-| M9-R008 | Missing Model Description | `READY` |
-| M9-R009 | Low Column Documentation Coverage | `READY` |
-| M9-R010 | Declared Key Tests Missing | `BLOCKED_BY_MISSING_EXPECTATION` |
+| M9-R001 | Pipeline Run Unsuccessful | `IMPLEMENTED` |
+| M9-R002 | Model Execution Non-Success | `IMPLEMENTED` |
+| M9-R003 | Test Result Non-Passing | `IMPLEMENTED` |
+| M9-R004 | Model Missing from Current Run | `IMPLEMENTED` |
+| M9-R005 | Row-Count Anomaly | `IMPLEMENTED` |
+| M9-R006 | Runtime Regression | `IMPLEMENTED` |
+| M9-R007 | Schema Drift Detected | `DEFERRED` |
+| M9-R008 | Missing Model Description | `DEFERRED` |
+| M9-R009 | Low Column Documentation Coverage | `DEFERRED` |
+| M9-R010 | Declared Key Tests Missing | `DEFERRED / MISSING EXPECTATION` |
 
-R010 is not blocked by missing dbt test metadata.
+The early design identified R007-R010 as possible follow-up rules. They were not needed to complete the M9 MVP and remain backlog items rather than partially implemented features.
 
-The current fact base already contains test-to-model, test-to-column, and test-type evidence.
-
-It is blocked because M9 does not yet have an explicit knowledge-base declaration of each model's expected grain or primary key.
+R010 still requires an explicit knowledge-base declaration of expected model grain or primary key before it can be evaluated safely.
 
 ---
 
@@ -784,106 +785,88 @@ A corresponding missing-evidence record should explain:
 
 ---
 
-## 15. Current M9.1 Status
+## 15. M9 Implementation Outcome
 
 Completed:
 
-- M9 positioning defined
-- scope and non-scope defined
-- five-layer architecture defined
-- core entities and relationships defined
-- initial rubric defined
-- six BigQuery table schemas verified
-- 98 persisted fields inventoried
-- evidence availability matrix created
-- initial rule readiness classified
-- MCP-ready service boundaries and future read-only resource/tool concepts defined
+- rule catalog for R001-R006
+- BigQuery evidence loading for current and comparable historical runs
+- deterministic status and historical rule evaluation
+- median baseline helper
+- explicit `PASS`, `TRIGGERED`, and `NOT_EVALUATED` behavior
+- immutable evaluation evidence
+- finding package builder
+- deterministic finding IDs
+- Vertex AI structured explanation
+- finding-ID validation
+- AI `SKIPPED`, `SUCCESS`, and `UNAVAILABLE` runtime states
+- unit tests and rule catalog validation
+- real BigQuery and Vertex AI integration validation
 
-Not yet completed:
+Final validation:
 
-- detailed rule catalog file
-- strict JSON Schema
-- model expectations file
-- evidence extraction query
-- Python evidence package
-- deterministic rule implementation
-- JSON reporter
-- Markdown reporter
-- LLM integration
-- guardrail implementation
+```text
+179 evaluations
+166 PASS
+1 TRIGGERED
+12 NOT_EVALUATED
+53 unit tests passed
+Vertex AI status: SUCCESS
+```
+
+Deferred from the early design:
+
+- R007-R010
+- graph impact traversal
+- Markdown report generation
+- MCP protocol implementation
+- portal UI
+- automated remediation
+
+Detailed implementation and command notes are in:
+
+```text
+docs/m9_expert_system_closing.md
+```
 
 ---
 
 ## 16. Post-M9 Product Sequence
 
-After M9 is complete, the next priority is to build a usable pipeline monitoring product rather than moving immediately into additional analytics or modeling work.
+The next priority is M10: a usable operational and analytics portal built on the M8 evidence and M9 findings.
 
-The immediate sequence is:
+Current direction:
 
 ```text
-M9 Expert System
-        |
-        v
-Lightweight FastAPI Backend
-        |
-        v
-React Pipeline Monitoring MVP
+M8 monitoring history
+        +
+M9 deterministic findings
+        ↓
+M10 window / watermark control
+        ↓
+controlled service boundary
+        ↓
+Next.js + React + TypeScript portal
+        ↓
+overview / reliability / findings / analytics
 ```
 
-The React MVP should consume:
+The analytics area will use BigQuery as the governed analytical source. Geospatial analytics will start with a small state-level Brazil slice using CARTO and deck.gl.
 
-- `olist_monitoring`;
-- deterministic M9 review reports;
-- optional controlled LLM explanations;
-- lineage impact and model history.
+M11 will follow with replay, backfill, recovery, resume, idempotency, and consistency validation.
 
-The first React MVP should focus on:
-
-1. latest pipeline status;
-2. run history;
-3. model and test results;
-4. deterministic findings and evidence;
-5. downstream impact.
-
-React must not access BigQuery directly.
-
-A lightweight Python/FastAPI service deployed to Cloud Run should provide controlled endpoints and reuse the same service layer that may later support MCP resources and read-only tools.
-
-Power BI business analytics, historical replay, broader production hardening, and the separate Data Vault 2.0 prototype remain in the wider roadmap.
-
-Their timing and implementation depth will be reconsidered after the React MVP based on project progress, user value, development effort, and cost.
-
-The separate Data Vault 2.0 prototype will continue to use another independent Olist-related dataset and will not modify the main Olist platform.
+React must not become the source of truth for pipeline state or rule evaluation. The existing monitoring tables and deterministic reviewer remain authoritative.
 
 ---
 
 ## 17. Next Planned Step
 
-The next M9.1 step is to create:
+M9 is complete.
+
+The next implementation milestone is:
 
 ```text
-dbt/monitoring/reviewer/config/rule_catalog.yml
+M10 - Window Control and Operational / Analytics Portal
 ```
 
-The first version will define the initial deterministic rules without implementing them.
-
-Each rule definition should include:
-
-```text
-rule_id
-version
-name
-description
-dimensions
-default_severity
-applicability
-required_evidence
-trigger_logic
-can_prove
-cannot_prove
-risk
-recommendation
-implementation_status
-```
-
-No Python rule engine should be written before the rule catalog has been reviewed.
+No additional M9 rule expansion is required before starting M10.

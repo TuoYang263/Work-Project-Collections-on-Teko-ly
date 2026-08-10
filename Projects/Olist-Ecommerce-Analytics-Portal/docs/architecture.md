@@ -11,8 +11,12 @@ The completed architecture now includes:
 - Dockerized dbt execution
 - Google Cloud Run Job and Cloud Scheduler orchestration
 - dbt artifact parsing and append-only pipeline monitoring history
+- deterministic pipeline review rules R001-R006
+- historical model inventory, row-count, and runtime comparison
+- compact finding packages for triggered issues
+- optional Vertex AI explanations with response validation and fallback behavior
 
-The current completed implementation boundary is M8. M9 AI-assisted pipeline review remains future work.
+The current completed implementation boundary is M9.
 
 ---
 
@@ -27,9 +31,12 @@ M5 - Dimensional Modeling / Analytics Marts: completed
 M6 - README / dbt docs / Project Showcase Cleanup: completed
 M7 - Google Cloud Scheduler + Cloud Run Job Orchestration: completed
 M8 - dbt Metadata Refresh & Pipeline Monitoring: completed
+M9 - Evidence-Grounded Pipeline Quality Reviewer: completed
 ```
 
 M8 cloud validation completed on 2026-07-15.
+
+M9 reviewer and Vertex AI integration validation completed on 2026-08-10.
 
 ---
 
@@ -76,7 +83,15 @@ Python artifact parser and BigQuery loader
         ↓
 BigQuery dataset: olist_monitoring
         ↓
-Monitoring analytics and future M9 evidence layer
+M9 evidence loader
+        ↓
+Deterministic reviewer: R001-R006
+        ↓
+Finding package
+        ↓
+Optional Vertex AI explanation
+        ↓
+Validated final review JSON
 ```
 
 ---
@@ -334,7 +349,7 @@ The full scheduled dbt build validated in M7 and M8 contains:
 PASS=115 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=115
 ```
 
-Tests remain the deterministic data-quality control layer. M8 stores their historical outcomes; M9 will not replace them.
+dbt tests remain the deterministic data-quality control layer. M8 stores their historical outcomes. M9 adds a separate deterministic review layer on top of that evidence and does not replace dbt tests.
 
 ---
 
@@ -521,6 +536,92 @@ dbt artifacts → artifact parser → olist_monitoring
 
 ---
 
+## M9 pipeline quality reviewer
+
+M9 reads the append-only monitoring history created by M8 and evaluates pipeline reliability rules.
+
+Current rule groups:
+
+```text
+Status rules
+R001 - Pipeline Run Unsuccessful
+R002 - Model Execution Non-Success
+R003 - Test Result Non-Passing
+
+Historical rules
+R004 - Model Missing from Current Run
+R005 - Row-Count Anomaly
+R006 - Runtime Regression
+```
+
+Historical comparisons use previous successful runs with the same `job_name` and `environment`. R005 and R006 use a median baseline from up to five recent comparable runs.
+
+Each evaluation returns one of:
+
+```text
+PASS
+TRIGGERED
+NOT_EVALUATED
+```
+
+`NOT_EVALUATED` is used when the reviewer does not have enough reliable evidence. For example, BigQuery views normally have no physical `row_count`, so R005 does not treat a missing value as zero or as a pass.
+
+### Finding package
+
+Only `TRIGGERED` evaluations are copied into the finding package sent to the explanation layer. The package keeps the monitoring run ID, evaluation summary, deterministic finding IDs, rule result, severity, entity, evidence, and reason.
+
+### Vertex AI explanation boundary
+
+Vertex AI is an optional explanation layer. It can explain a deterministic finding, describe likely impact, and suggest investigation steps. It cannot create findings, change severity, change rule results, or replace evidence.
+
+The structured response is checked before it is accepted. Returned finding IDs must exactly match the deterministic finding IDs.
+
+Runtime states are:
+
+```text
+SKIPPED     no triggered findings; Vertex is not called
+SUCCESS     explanation generated and validated
+UNAVAILABLE AI call or validation failed; deterministic review remains valid
+```
+
+### Final M9 validation
+
+Validated on 2026-08-10:
+
+```text
+monitoring_run_id: 20260810T030139Z_35356a7d
+total evaluations: 179
+PASS: 166
+TRIGGERED: 1
+NOT_EVALUATED: 12
+
+triggered rule: M9-R006
+model: fct_order_payments
+current runtime: about 22.507 seconds
+historical median: about 2.898 seconds
+relative increase: about 676.57%
+
+Vertex AI status: SUCCESS
+AI findings: 1
+```
+
+Final code validation:
+
+```text
+53 unit tests passed
+R001-R006 rule catalog validation passed
+```
+
+M9 was validated from the repository CLI against BigQuery and Vertex AI. It is not yet part of the scheduled Cloud Run Job execution path. That operational integration belongs to a later milestone.
+
+Detailed implementation notes:
+
+```text
+docs/m9_expert_system_closing.md
+```
+
+---
+
 ## Security and runtime configuration
 
 The Cloud Run Job uses:
@@ -578,11 +679,13 @@ The entrypoint is:
 /app/dbt/run_dbt_job.sh
 ```
 
-The M8 production image tag is:
+The current scheduled Cloud Run production image remains the M8 image:
 
 ```text
 olist-dbt-job:m8
 ```
+
+M9 reviewer code has been validated locally against cloud services but has not yet been added to the scheduled container path.
 
 Shell scripts are normalized to LF through `.gitattributes`, and Python cache files are excluded through `.dockerignore`.
 
@@ -609,7 +712,7 @@ The project follows milestone-based delivery with:
 
 ## Current implementation boundary
 
-Completed through M8:
+Completed through M9:
 
 - source inventory and raw loading
 - staging, intermediate, and mart dbt models
@@ -624,39 +727,58 @@ Completed through M8:
 - model/test execution history
 - metadata and column snapshots
 - lineage edges
-- local and cloud end-to-end validation
+- deterministic reviewer rules R001-R006
+- historical comparison baselines
+- finding package generation
+- Vertex AI structured explanation
+- AI response validation and fallback behavior
+- local and cloud-backed end-to-end validation
 
 Not yet implemented:
 
-- Power BI monitoring dashboard
-- React portal
+- M10 window and watermark control
+- M10 operational and analytics portal
+- React / Next.js monitoring UI
+- geospatial analytics with CARTO and deck.gl
+- M11 replay, backfill, recovery, and resume workflows
 - alerting and notification delivery
-- automated root-cause analysis
-- AI-assisted pipeline reviewer
 
 ---
 
 ## Future architecture direction
 
-### M9 - AI-assisted pipeline quality reviewer
+### M10 - Window control and operational / analytics portal
 
-M9 will build on the deterministic M8 evidence layer.
+M10 will build a usable operational product on top of the M8 and M9 outputs.
 
-Planned responsibilities:
+Main direction:
 
-- evaluate pipeline correctness and production readiness
-- explain failed tests and anomalies
-- identify documentation and test gaps
-- reason about lineage and downstream impact
-- compare specifications with implementation evidence
-- return strict evidence-based output
+```text
+Window / watermark control
+        ↓
+controlled pipeline execution state
+        ↓
+BigQuery monitoring + M9 findings
+        ↓
+Next.js / React portal
+        ↓
+overview, reliability, findings, analytics
+```
 
-M9 will not replace:
+The analytics area will use BigQuery as the governed analytical source. The first geospatial slice will use a small state-level Brazil aggregate with CARTO and deck.gl rather than adding a large mapping scope at once.
 
-- dbt tests
-- BigQuery monitoring tables
-- deterministic validation queries
-- human engineering judgment
+### M11 - Replay, backfill, and recovery
+
+M11 will add controlled historical recovery behavior:
+
+- one-window replay
+- multi-window backfill
+- failure and resume handling
+- idempotency checks
+- incremental-versus-replay consistency validation
+- audit history
+
+Backfill and recovery must not silently move the normal production watermark backward.
 
 ---
 
@@ -670,5 +792,8 @@ M9 will not replace:
 - Keep orchestration separate from modeling logic.
 - Keep parser logic separate from database loading.
 - Use runtime configuration instead of project-specific credentials in code.
-- Keep M8 deterministic and explainable.
-- Build AI capabilities only on top of validated evidence.
+- Keep monitoring evidence append-only and queryable.
+- Keep deterministic rules as the source of truth for M9 findings.
+- Use AI only to explain validated findings and suggest investigation steps.
+- Keep AI failure separate from deterministic review failure.
+- Do not move M10 control-plane logic into the M9 evaluator.
