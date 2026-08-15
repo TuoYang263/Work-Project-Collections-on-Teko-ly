@@ -1,3 +1,11 @@
+{{
+    config(
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key='review_key'
+    )
+}}
+
 with order_reviews as (
 
     select
@@ -19,7 +27,7 @@ orders as (
         customer_id,
         order_status,
         order_purchase_timestamp
-    from {{ ref('stg_orders') }}
+    from {{ ref('int_orders_windowed') }}
 
 ),
 
@@ -56,9 +64,9 @@ final as (
             else false
         end as has_review_comment_message
 
-    from order_reviews
-    left join orders
-        on order_reviews.order_id = orders.order_id
+    from orders
+    inner join order_reviews
+        on orders.order_id = order_reviews.order_id
 
 )
 

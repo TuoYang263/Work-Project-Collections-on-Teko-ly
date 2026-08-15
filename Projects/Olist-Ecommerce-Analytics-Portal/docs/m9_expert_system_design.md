@@ -16,6 +16,14 @@ The implemented M9 boundary is smaller than some early design ideas in this file
 
 M9 remains a lightweight, explainable, and evidence-driven extension of the M8 monitoring layer.
 
+### Current integration note
+
+M10 U1 now links each window-controlled attempt to its exact M8 monitoring run and calls M9 with that `monitoring_run_id`. This does not change the M9 rule logic.
+
+The existing scheduled Cloud Run entry point has not yet been changed to the M10 controller, so this exact-run path has been validated through the window-controlled M10 runtime rather than the current Scheduler entry point.
+
+This file keeps the original M9 design language as a milestone record. For the current project summary, use `README.md`, `docs/architecture.md`, and `docs/m10_window_control.md`.
+
 ---
 
 ## 2. M9 Positioning

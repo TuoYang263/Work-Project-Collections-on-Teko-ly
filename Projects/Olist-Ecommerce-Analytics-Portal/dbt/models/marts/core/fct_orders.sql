@@ -1,3 +1,11 @@
+{{
+    config(
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key='order_id'
+    )
+}}
+
 with orders as (
 
     select
@@ -9,7 +17,7 @@ with orders as (
         order_delivered_carrier_date,
         order_delivered_customer_date,
         order_estimated_delivery_date
-    from {{ ref('stg_orders') }}
+    from {{ ref('int_orders_windowed') }}
 
 ),
 

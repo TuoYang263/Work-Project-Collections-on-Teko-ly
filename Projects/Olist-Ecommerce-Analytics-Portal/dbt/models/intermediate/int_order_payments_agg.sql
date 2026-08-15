@@ -1,12 +1,23 @@
-with order_payments as (
+with orders as (
 
     select
-        order_id,
-        payment_sequential,
-        payment_type,
-        payment_installments,
-        payment_value
-    from {{ ref('stg_order_payments') }}
+        order_id
+    from {{ ref('int_orders_windowed') }}
+
+),
+
+order_payments as (
+
+    select
+        payments.order_id,
+        payments.payment_sequential,
+        payments.payment_type,
+        payments.payment_installments,
+        payments.payment_value
+
+    from orders
+    inner join {{ ref('stg_order_payments') }} as payments
+        on orders.order_id = payments.order_id
 
 ),
 

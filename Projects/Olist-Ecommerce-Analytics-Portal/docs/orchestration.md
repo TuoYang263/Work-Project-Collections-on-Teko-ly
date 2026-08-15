@@ -1,5 +1,15 @@
 # M7 Orchestration Design
 
+## Current note
+
+This document records the M7 design and validation as it was implemented.
+
+The current repository also contains M8 monitoring, M9 pipeline review, and M10 window control. The existing Cloud Scheduler / Cloud Run Job still starts `run_dbt_job.sh`; it has not yet been changed to start the M10 controller.
+
+When `run_dbt_job.sh` receives no control window, it runs in full-history compatibility mode. M10 governed runs call the same script through `run_window_controller.py` and supply the window and attempt ID.
+
+---
+
 ## Purpose
 
 M7 adds a lightweight cloud orchestration layer to the Olist E-Commerce Analytics & Pipeline Monitoring Portal project.
@@ -56,7 +66,7 @@ The following items are intentionally excluded from M7:
 - metadata refresh tables;
 - `olist_monitoring` dataset creation;
 - pipeline health dashboards;
-- AI-assisted pipeline intelligence;
+- pipeline quality review;
 - React portal implementation;
 - Power BI report expansion;
 - Airflow, Cloud Composer, Dagster, or Prefect orchestration.
@@ -294,21 +304,21 @@ The README should only be updated after the orchestration flow has been validate
 
 ---
 
-## Future Extensions
+## Later milestones
 
-M7 creates the foundation for future pipeline monitoring work.
+At M7 completion, monitoring and review were still future work. They were added later as separate milestones.
 
-M8 may extend the project by parsing dbt artifacts such as:
+M8 added parsing for:
 
-- `manifest.json`;
-- `run_results.json`;
-- `catalog.json`.
+- `manifest.json`
+- `run_results.json`
+- `catalog.json`
 
-Those artifacts may later be loaded into BigQuery monitoring tables under a dedicated monitoring dataset.
+and loaded the results into BigQuery monitoring tables.
 
-M9 may add an AI-assisted pipeline intelligence layer based on the metadata and monitoring tables.
+M9 later added the pipeline quality reviewer.
 
-These future extensions are intentionally not implemented in M7.
+These features remain outside the M7 milestone itself.
 
 
 

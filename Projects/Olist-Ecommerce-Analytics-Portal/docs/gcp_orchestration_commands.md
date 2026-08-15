@@ -1,5 +1,15 @@
 # M7-M8 GCP Orchestration and Monitoring Commands
 
+## Current note
+
+This is a historical deployment and validation runbook for M7 and M8. The commands and image tag `m8` are kept because they record the cloud setup that was actually validated at that milestone.
+
+The repository now also includes M9 and M10 U1. The existing Cloud Scheduler / Cloud Run Job still uses `run_dbt_job.sh` as the container entry point, so these commands should not be read as evidence that the scheduled job already starts `run_window_controller.py`.
+
+For the current window-control runtime, see `docs/m10_window_control.md`.
+
+---
+
 ## Purpose
 
 This document records the commands used to deploy, update, execute, and validate the cloud orchestration and dbt artifact monitoring layers for the Olist E-Commerce Analytics & Pipeline Monitoring Portal.

@@ -6,11 +6,21 @@
 Completed: 2026-07-15
 ```
 
+## Current note
+
+This document records the M8 monitoring milestone. Its original validation counts are kept as historical evidence.
+
+The current repository also includes M9 and M10 U1. M10 added `control_attempt_id` to `pipeline_runs`, and window-controlled runs now resolve the exact `monitoring_run_id` for the current attempt before running M9.
+
+The existing scheduled Cloud Run entry point is still `run_dbt_job.sh`. M10 window control has been validated separately and has not yet replaced that scheduled entry point.
+
+---
+
 M8 implements an ADE-inspired, artifact-based monitoring layer for the Olist E-Commerce Analytics & Pipeline Monitoring Portal.
 
 The implementation converts dbt artifact JSON into append-only BigQuery monitoring records. It preserves pipeline execution history, model and test results, model and column metadata snapshots, and lineage relationships for each dbt pipeline run.
 
-M8 is deterministic metadata ingestion and monitoring infrastructure. It does not include the M9 AI-assisted reviewer.
+M8 is deterministic metadata ingestion and monitoring infrastructure. The M9 reviewer was added later as a separate milestone.
 
 ---
 
@@ -80,20 +90,20 @@ M8 supports analysis such as:
 
 ## Out of scope
 
-M8 does not include:
+At M8 completion, the milestone did not include:
 
-- AI-assisted review or scoring
-- M9 implementation
+- the M9 pipeline reviewer
+- optional explanation for review findings
 - Power BI monitoring pages
 - React portal integration
 - Airflow, Composer, Dagster, or Prefect
 - Full Agile Data Engine integration
 - DataHub or OpenLineage integration
-- Alerting or notification delivery
-- Automated root-cause analysis
-- Governance UI
+- alerting or notification delivery
+- automated root-cause analysis
+- a governance UI
 
-These capabilities remain separate future work.
+Some later milestones implemented parts of this list. They are still kept outside the M8 milestone boundary.
 
 ---
 
@@ -442,7 +452,7 @@ This verifies:
 6. Make runtime paths and environment identity configurable.
 7. Reuse the existing Cloud Run Job and Cloud Scheduler rather than adding another orchestrator.
 8. Keep the implementation deterministic, queryable, and explainable.
-9. Keep M8 separate from the future M9 AI layer.
+9. Keep M8 separate from the later M9 reviewer.
 
 ---
 

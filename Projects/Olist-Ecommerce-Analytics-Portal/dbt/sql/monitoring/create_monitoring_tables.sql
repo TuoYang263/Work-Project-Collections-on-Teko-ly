@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS `olist_monitoring.pipeline_runs` (
     dbt_invocation_id STRING OPTIONS(description = "dbt invocation_id from dbt artifacts."),
     job_name STRING OPTIONS(description = "Cloud Run Job or execution job name."),
     environment STRING OPTIONS(description = "Execution environment, such as prod or dev."),
+    control_attempt_id STRING OPTIONS(description = "M10 control-plane attempt identifier used to correlate the monitoring run with its governed window execution."),
     dbt_version STRING OPTIONS(description = "dbt version used for the pipeline execution."),
 
     generated_at TIMESTAMP OPTIONS(description = "Timestamp when dbt artifacts were generated."),

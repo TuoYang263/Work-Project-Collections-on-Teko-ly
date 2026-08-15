@@ -1,3 +1,11 @@
+{{
+    config(
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key='order_payment_key'
+    )
+}}
+
 with order_payments as (
 
     select
@@ -17,7 +25,7 @@ orders as (
         customer_id,
         order_status,
         order_purchase_timestamp
-    from {{ ref('stg_orders') }}
+    from {{ ref('int_orders_windowed') }}
 
 ),
 
@@ -42,9 +50,9 @@ final as (
         order_payments.payment_installments,
         order_payments.payment_value
 
-    from order_payments
-    left join orders
-        on order_payments.order_id = orders.order_id
+    from orders
+    inner join order_payments
+        on orders.order_id = order_payments.order_id
 
 )
 

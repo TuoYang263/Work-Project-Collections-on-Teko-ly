@@ -18,7 +18,9 @@ RUN apt-get update \
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir \
         dbt-bigquery \
-        google-cloud-bigquery
+        google-cloud-bigquery \
+        google-genai \
+        PyYAML
 
 COPY dbt/ /app/dbt/
 

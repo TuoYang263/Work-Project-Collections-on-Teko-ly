@@ -105,3 +105,21 @@ models:
 
       - name: has_review
         description: "Boolean flag indicating that the order has at least one review record in this intermediate model."
+
+  - name: int_orders_windowed
+    description: >
+      Window-scoped order stream used by the M10 governed
+      transactional processing path. When control window
+      variables are omitted, the model remains full-history
+      compatible.
+    columns:
+      - name: order_id
+        description: "Unique order identifier."
+        tests:
+          - not_null
+          - unique
+
+      - name: order_purchase_timestamp
+        description: >
+          Order purchase timestamp used as the governed
+          processing-window boundary.

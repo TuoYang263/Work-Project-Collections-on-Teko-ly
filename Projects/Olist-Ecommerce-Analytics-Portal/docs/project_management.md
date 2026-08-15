@@ -2,293 +2,197 @@
 
 ## Purpose
 
-This document describes how the Olist E-Commerce Analytics & Pipeline Monitoring Portal is planned and managed.
+This document tracks the current milestone plan for the Olist E-Commerce Analytics & Pipeline Monitoring Portal.
 
-The goal is to keep the project structured, realistic, reviewable, and easy to continue across milestones.
+The project is built in small milestones. Each milestone should have a clear result, a validation step, and a clean commit before the next area grows.
 
-This document has been refreshed after **M9 - Evidence-Grounded Pipeline Quality Reviewer** to reflect the completed implementation and the next M10/M11 roadmap.
-
----
-
-## Project Approach
-
-This project is developed milestone by milestone.
-
-Each milestone should produce a clear and reviewable output, such as documentation, BigQuery datasets, dbt models, data quality tests, dimensional models, dbt docs, lineage screenshots, orchestration, monitoring tables, or future AI-assisted explanations.
-
-The project should avoid doing too many things at once. Each stage should be completed, validated, documented, and committed before moving to the next stage.
-
-The project is currently completed through M9. M10 is the next implementation milestone.
+M10 is currently in progress. Its first unit, window and watermark control, is complete. The portal and analytics work comes next.
 
 ---
 
-## Git Workflow
+## Git workflow
 
-The current development branch is:
+Development branch:
 
 ```text
 feature/olist-analytics-portal
 ```
 
-The branch is used for milestone-based development of the Olist analytics project.
+Work stays on the feature branch until the current milestone has been reviewed, tested, documented, committed, and pushed.
 
-The branch should not be merged into `main` until the milestone has a clean structure, reviewable commits, and no committed raw data or credentials.
+Raw data, local credentials, generated dbt targets, and local profiles should not be committed.
 
 ---
 
-## Commit Style
+## Commit style
 
-Commit messages should be short and clear.
+Use short commit messages that describe the change.
 
 Examples:
 
 ```text
-chore: initialize Olist analytics portal structure
-docs: add source data overview
-docs: document BigQuery raw layer validation
-feat: add dbt staging models
-feat: add dimensional mart models
-fix: correct fct_order_reviews grain
-docs: refresh Olist project showcase for M6
+feat: add window control state
+feat: add retry runtime
+fix: export dbt runtime variables
+docs: document M10 window control
 ```
 
-General commit prefixes:
+Common prefixes:
 
-- `chore:` for setup and maintenance
-- `docs:` for documentation
-- `data:` for source metadata or sample data notes
-- `feat:` for implemented project features
-- `fix:` for corrections
+- `feat:` new implementation
+- `fix:` correction
+- `docs:` documentation
+- `chore:` setup or maintenance
+- `data:` source metadata or sample-data notes
 
 ---
 
-## Milestone Plan
+## Milestone plan
 
-| Milestone | Focus | Status | Output |
+| Milestone | Focus | Status | Main output |
 |---|---|---:|---|
-| M1 | Project setup and source understanding | Completed | Folder structure, source inventory, naming plan, GitHub Project setup |
-| M2 | BigQuery raw layer | Completed | BigQuery `olist_raw` dataset and 9 source-aligned raw tables |
-| M3 | Staging layer planning | Completed | Staging design, source-to-staging mapping, cleanup rules |
-| M4 | dbt staging layer | Completed | dbt project setup, sources, 9 staging views, schema docs, 39 dbt tests |
-| M5 | Dimensional modeling / analytics marts | Completed | Intermediate models, dimensions, facts, mart tests, dbt docs validation |
-| M6 | README / dbt docs / project showcase cleanup | Completed | Portfolio-ready README, as-built architecture docs, dbt docs screenshots, roadmap cleanup |
-| M7 | Google Cloud Scheduler + Cloud Run Job orchestration | Completed | Scheduled containerized dbt execution |
-| M8 | dbt metadata refresh / monitoring tables | Completed | dbt artifact parsing and append-only `olist_monitoring` history |
-| M9 | Evidence-grounded pipeline quality reviewer | Completed | R001-R006, historical baselines, finding package, Vertex AI explanation |
-| M10 | Window control and operational / analytics portal | Planned | Watermark/state control, monitoring UI, findings, analytics, geospatial slice |
-| M11 | Replay, backfill, and recovery | Planned | Controlled replay, backfill, resume, idempotency, consistency validation |
+| M1 | Project setup and source understanding | Completed | Repository structure and source inventory |
+| M2 | BigQuery raw layer | Completed | `olist_raw` and 9 raw tables |
+| M3 | Staging layer planning | Completed | Staging rules and source mapping |
+| M4 | dbt staging layer | Completed | 9 staging views and 39 tests |
+| M5 | Dimensional modeling / marts | Completed | Facts, dimensions, intermediate models, dbt docs |
+| M6 | Documentation cleanup | Completed | README, architecture, and project showcase |
+| M7 | Cloud orchestration | Completed | Docker, Cloud Run Job, Cloud Scheduler |
+| M8 | Pipeline monitoring | Completed | Six append-only monitoring tables |
+| M9 | Pipeline quality reviewer | Completed | Rules R001-R006 and optional explanations |
+| M10 U1 | Window / watermark control | Completed | Window state, retries, audit history, CAS protection, exact M8/M9 correlation |
+| M10 portal / analytics | In progress | Operational UI, analytics UI, Brazil map slice |
+| M11 | Replay / backfill / recovery | Planned | Historical processing and recovery controls |
 
 ---
 
-## Current Project Scope
+## Current scope
 
-The implemented project boundary is M9.
+### Completed through M10 U1
 
-Completed capabilities now include:
+The project currently has:
 
-- BigQuery raw, staging, intermediate, marts, and monitoring datasets
-- dbt modeling, tests, documentation, and lineage
-- Cloud Run Job and Cloud Scheduler orchestration
-- append-only dbt artifact monitoring history
-- deterministic pipeline quality rules R001-R006
-- historical model inventory, row-count, and runtime comparison
-- finding package generation
-- optional Vertex AI explanation with strict finding-ID validation
-- AI skip and failure fallback behavior
+- BigQuery raw, staging, intermediate, marts, monitoring, and control datasets
+- dbt models, tests, docs, and lineage
+- Dockerized dbt execution
+- Cloud Run Job and Cloud Scheduler for the existing scheduled dbt path
+- append-only M8 monitoring history
+- deterministic M9 rules R001-R006
+- optional Vertex AI explanation for triggered M9 findings
+- explicit M10 control-state bootstrap
+- forward window derivation
+- windowed transactional dbt processing
+- incremental `MERGE` facts
+- success and failure state updates
+- same-window retry with attempt history
+- exact `control_attempt_id → monitoring_run_id` resolution
+- BigQuery transaction and stale-version protection
+- real validation for success, failure, retry, and stale concurrent writes
 
-M10 and M11 are intentionally separate. M9 should not continue growing with portal, watermark, replay, or backfill logic.
+### Not part of U1
 
----
+U1 does not include:
 
-## Development Principles
+- replay or backfill
+- moving the normal watermark backward
+- automatic retry limits
+- automatic quarantine or release policy
+- portal screens
+- alert delivery
 
-The project should follow these principles:
-
-- keep the scope controlled
-- document important design decisions
-- use clear folder structure
-- avoid committing raw data or credentials
-- keep raw, staging, intermediate, marts, monitoring, and future AI layers conceptually separated
-- prefer simple and explainable design over unnecessary complexity
-- make fact and dimension grain explicit
-- validate assumptions with dbt tests
-- use dbt docs and lineage for transparency
-- keep outputs useful for BI and analytics consumption
-
----
-
-## Current Status
-
-### Completed
-
-- M1 - Project Setup & Source Understanding
-- M2 - BigQuery Raw Layer
-- M3 - Staging Layer Planning
-- M4 - dbt Staging Layer
-- M5 - Dimensional Modeling / Analytics Marts
-- M6 - README / dbt docs / Project Showcase Cleanup
-- M7 - Google Cloud Scheduler + Cloud Run Job Orchestration
-- M8 - dbt Metadata Refresh & Pipeline Monitoring
-- M9 - Evidence-Grounded Pipeline Quality Reviewer
-
-### Next
-
-- M10 - Window Control and Operational / Analytics Portal
-- M11 - Replay, Backfill, and Recovery
+`QUARANTINED` exists in the state model, but U1 does not provide a full runtime workflow for it.
 
 ---
 
-## Completed Milestone Summaries
+## Development rules
 
-### M1 Summary
+The project should continue to follow these rules:
 
-M1 established the project foundation:
+- solve one clear problem at a time
+- keep completed and planned work separate
+- keep data grain explicit
+- keep control state explicit
+- keep historical monitoring records append-only
+- use deterministic checks for pass/fail decisions
+- use simple interfaces between milestones
+- validate with real data where practical
+- prefer small, testable changes over large framework additions
+- document boundaries so the repository does not claim work that is not running yet
 
-- project folder structure
-- README skeleton
-- initial architecture documentation
-- source CSV inspection
-- source data overview
-- source table inventory
-- BigQuery dataset naming plan
-- GitHub Projects board planning
+---
 
-### M2 Summary
+## Milestone summaries
 
-The BigQuery raw dataset `olist_raw` was created in the EU location.
-
-All 9 Olist source CSV files were loaded into source-aligned raw tables.
-
-Raw layer validation was completed and documented in:
-
-```text
-metadata/bigquery/raw_layer_validation.md
-```
-
-### M3 Summary
-
-Staging layer planning was completed.
-
-Completed M3 work:
-
-- staging layer purpose documented
-- staging dataset naming documented
-- source-to-staging mapping documented
-- column cleanup rules documented
-- timestamp, numeric, null, and duplicate handling rules included in staging cleanup rules
-
-M3 documents:
-
-```text
-docs/staging_layer_plan.md
-metadata/staging/source_to_staging_mapping.md
-metadata/staging/column_cleanup_rules.md
-```
-
-### M4 Summary
-
-The dbt staging layer was implemented.
-
-Completed M4 work:
-
-- dbt project initialized under `dbt/`
-- BigQuery connection validated through local `profiles.yml`
-- 9 raw BigQuery tables registered as dbt sources
-- 9 staging views created in `olist_staging`
-- staging SQL uses `source()` references, light cleaning, type casting, and standardization
-- staging model and column documentation added
-- 39 dbt data tests added and passed
-
-M4 validation:
-
-```text
-dbt run --select staging
-PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9
-
-dbt test --select staging
-PASS=39 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=39
-```
-
-M4 document:
-
-```text
-docs/m4_dbt_staging_validation.md
-```
-
-### M5 Summary
-
-The dimensional modeling and analytics marts layer was implemented.
-
-Completed M5 work:
-
-- dimensional modeling design documented
-- intermediate layer completed:
-  - `int_order_items_agg`
-  - `int_order_payments_agg`
-  - `int_order_reviews_agg`
-- dimension models completed:
-  - `dim_customers`
-  - `dim_sellers`
-  - `dim_products`
-  - `dim_geolocation_zip_prefix`
-  - `dim_dates`
-- fact models completed:
-  - `fct_orders`
-  - `fct_order_items`
-  - `fct_order_payments`
-  - `fct_order_reviews`
-- mart model and column documentation added in `dbt/models/marts/core/schema.yml`
-- review fact grain corrected from `review_id` to `review_id + order_id`
-- generated `review_key` used as the primary key for `fct_order_reviews`
-- `dim_geolocation_zip_prefix` uses median coordinates as representative coordinates and retains average coordinates
-- `dim_dates` covers order, shipping, and review-related dates
-- dbt docs generated and reviewed
-
-M5 validation:
-
-```text
-dbt build --select intermediate marts
-PASS=67 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=67
-```
-
-M5 documents:
-
-```text
-docs/m5_dimensional_modeling_design.md
-docs/m5_dbt_marts_validation.md
-```
-
-### M6 Summary
-
-M6 cleaned up the project showcase and documentation after the core dbt analytics layer was complete.
+### M1 - Project setup and source understanding
 
 Main outputs:
 
-- README refresh
-- as-built architecture documentation
-- dbt docs and lineage review
-- roadmap cleanup
+- repository structure
+- source data review
+- source table inventory
+- BigQuery naming plan
+- GitHub Projects plan
 
-### M7 Summary
+### M2 - BigQuery raw layer
 
-M7 moved the dbt pipeline into a scheduled Google Cloud execution path.
+Created `olist_raw` in the EU location and loaded all 9 source CSV files into source-aligned tables.
 
-Implemented flow:
+### M3 - Staging planning
+
+Documented:
+
+- staging model purpose
+- source-to-staging mapping
+- column cleanup rules
+- timestamp, numeric, null, and duplicate handling
+
+### M4 - dbt staging
+
+Implemented 9 staging views and 39 dbt tests.
+
+```text
+dbt run --select staging:   9 PASS
+dbt test --select staging: 39 PASS
+```
+
+### M5 - Dimensional modeling and marts
+
+Implemented:
+
+- `int_order_items_agg`
+- `int_order_payments_agg`
+- `int_order_reviews_agg`
+- 5 dimensions
+- 4 facts
+
+Important corrections included the review fact grain and representative geolocation logic.
+
+Historical M5 validation:
+
+```text
+PASS=67 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=67
+```
+
+### M6 - Documentation cleanup
+
+Refreshed the README, architecture, dbt docs evidence, and project roadmap after the core analytics layer was complete.
+
+### M7 - Cloud orchestration
+
+Implemented:
 
 ```text
 Cloud Scheduler
 → Cloud Run Job
-→ containerized dbt build
+→ Dockerized dbt build
 → BigQuery
 ```
 
-Manual and Scheduler-triggered executions were validated.
+Both manual and Scheduler-triggered runs were validated.
 
-### M8 Summary
+### M8 - Pipeline monitoring
 
-M8 added append-only pipeline monitoring history from dbt artifacts.
-
-Implemented monitoring tables:
+Added append-only monitoring tables:
 
 ```text
 pipeline_runs
@@ -299,11 +203,18 @@ model_column_snapshots
 model_lineage_edges
 ```
 
-The validated cloud run recorded 21 successful models, 94 passed tests, 259 column snapshots, and 146 lineage edges.
+Original M8 cloud validation recorded:
 
-### M9 Summary
+```text
+21 successful models
+94 passed tests
+259 model/source column snapshots
+146 lineage edges
+```
 
-M9 added the evidence-grounded pipeline quality reviewer.
+M10 later added `control_attempt_id` to `pipeline_runs` for exact run correlation.
+
+### M9 - Pipeline quality reviewer
 
 Implemented rules:
 
@@ -316,9 +227,9 @@ R005 row-count anomaly
 R006 runtime regression
 ```
 
-The reviewer keeps deterministic rules as the source of truth. Vertex AI only explains triggered findings.
+The rule result is deterministic. Vertex AI is optional and only explains triggered findings.
 
-Final validation on 2026-08-10:
+Final M9 validation on 2026-08-10:
 
 ```text
 179 evaluations
@@ -326,44 +237,101 @@ Final validation on 2026-08-10:
 1 TRIGGERED
 12 NOT_EVALUATED
 53 unit tests passed
-Vertex AI status: SUCCESS
 ```
 
-The real triggered finding was an R006 runtime regression for `fct_order_payments`.
+### M10 U1 - Window and watermark control
 
-Detailed M9 implementation notes:
+Implemented:
+
+- `olist_control.pipeline_control_state`
+- `olist_control.pipeline_window_events`
+- explicit state bootstrap
+- states `IDLE`, `RUNNING`, `FAILED`, `WAITING_RETRY`, `QUARANTINED`
+- forward `[start, end)` windows
+- `int_orders_windowed`
+- incremental fact `MERGE`
+- retry with new attempt IDs and `retry_of_attempt_id`
+- control version checks
+- state update + event insert in one BigQuery transaction
+- `control_attempt_id` in M8 monitoring
+- exact monitoring-run resolver
+- M9 exact-run review in window-controlled mode
+
+Current dbt validation:
 
 ```text
-docs/m9_expert_system_closing.md
+22 models
+96 tests
+118 / 118 PASS
 ```
+
+Current Python unit tests:
+
+```text
+52 M10 controller tests
+5 monitoring-run resolver tests
+53 M9 reviewer tests
+110 total
+```
+
+Real validation also covered:
+
+- two successful forward windows
+- workload failure without watermark advance
+- two failed attempts for the same window
+- successful third retry for that window
+- continuous audit versions
+- final clean `IDLE` state
+- stale BigQuery write rejection
+- rollback without a false audit event
 
 ---
 
-## Future Roadmap
+## Current M10 work
 
-### M10 - Window Control and Operational / Analytics Portal
+### Portal
 
-Main goal:
+The portal should start with a small set of operational views:
 
-- add explicit window and watermark state
-- advance the watermark only after successful processing
-- preserve retry and attempt history
-- expose pipeline status, run history, findings, and evidence in a usable portal
-- add an analytics area backed by governed BigQuery data
-- start geospatial analytics with a small Brazil state-level slice using CARTO and deck.gl
+```text
+/overview
+/reliability
+/findings/[findingId]
+/analytics
+```
 
-The first portal version should stay small and verifiable rather than trying to build every dashboard at once.
+The implementation foundation is Next.js + React + TypeScript.
 
-### M11 - Replay, Backfill, and Recovery
+The UI should keep a stable layout, clear status meaning, and a simple summary-to-detail flow.
 
-Main goal:
+### Analytics
 
-- replay one historical window
-- backfill multiple windows
-- resume after partial failure
-- keep business writes idempotent
-- keep monitoring history append-only
-- validate incremental and replay consistency
-- keep normal production watermark behavior separate from backfill control
+BigQuery remains the analytical source.
 
-M11 should focus on recovery depth rather than adding another large feature surface.
+The first geospatial slice should be small:
+
+- one state-level BigQuery aggregate
+- one Brazil state map
+- order count, GMV, average order value, delivery time, late-delivery rate, and review score
+- current window versus previous window
+- map selection linked to KPIs, trends, and detail data
+
+CARTO and deck.gl are planned for the map layer.
+
+---
+
+## M11 roadmap
+
+M11 will add historical processing and recovery.
+
+Planned work:
+
+- replay one window
+- backfill several windows
+- resume after failure
+- keep writes idempotent
+- compare replay and incremental results
+- preserve replay audit history
+- keep replay/backfill state separate from the normal forward watermark
+
+M11 should deepen recovery behavior instead of adding unrelated platform features.

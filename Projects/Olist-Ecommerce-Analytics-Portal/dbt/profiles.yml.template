@@ -1,7 +1,7 @@
 olist_ecommerce_analytics:
   target: ${DBT_TARGET}
   outputs:
-    prod:
+    ${DBT_TARGET}:
       type: bigquery
       method: oauth
       project: ${DBT_PROJECT_ID}

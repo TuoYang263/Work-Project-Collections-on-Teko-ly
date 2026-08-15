@@ -6,6 +6,13 @@
 Completed: 2026-08-10
 ```
 
+## Current integration note
+
+M10 U1 now runs M9 against the exact monitoring run created by the current governed attempt. The link is `control_attempt_id → monitoring_run_id`.
+
+This later integration does not change the M9 rule results or the M9 completion evidence recorded below. The current scheduled Cloud Run entry point still uses `run_dbt_job.sh` directly and has not yet been switched to the M10 controller.
+
+---
 
 ## 1. Scope
 

@@ -85,6 +85,7 @@ def build_pipeline_run_record(
 
     job_name = os.getenv("MONITORING_JOB_NAME", DEFAULT_JOB_NAME)
     environment = os.getenv("MONITORING_ENVIRONMENT", DEFAULT_ENVIRONMENT)
+    control_attempt_id = os.getenv("CONTROL_ATTEMPT_ID")
 
     run_metadata = run_results.get("metadata", {})
     manifest_metadata = manifest.get("metadata", {})
@@ -146,6 +147,7 @@ def build_pipeline_run_record(
         "dbt_invocation_id": dbt_invocation_id,
         "job_name": job_name,
         "environment": environment,
+        "control_attempt_id": control_attempt_id,
         "dbt_version": dbt_version,
         "generated_at": run_metadata.get("generated_at"),
         "ingested_at": ingested_at,

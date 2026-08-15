@@ -1,3 +1,11 @@
+{{
+    config(
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key='order_item_key'
+    )
+}}
+
 with order_items as (
 
     select
@@ -19,7 +27,7 @@ orders as (
         customer_id,
         order_status,
         order_purchase_timestamp
-    from {{ ref('stg_orders') }}
+    from {{ ref('int_orders_windowed') }}
 
 ),
 
@@ -52,9 +60,9 @@ final as (
             2
         ) as item_gross_value
     
-    from order_items
-    left join orders
-        on order_items.order_id = orders.order_id
+    from orders
+    inner join order_items
+        on orders.order_id = order_items.order_id
 
 )
 
