@@ -210,6 +210,21 @@ if [[ -n "${CONTROL_ATTEMPT_ID}" ]]; then
 
   echo "M9 review completed successfully."
   echo "M9 review output: ${M9_REVIEW_OUTPUT_PATH}"
+
+  if [ ! -f "monitoring/reviewer/persist_review_to_bigquery.py" ]; then
+    echo "ERROR: monitoring/reviewer/persist_review_to_bigquery.py was not found."
+    exit 1
+  fi
+
+  echo "Persisting deterministic M9 review..."
+
+  python monitoring/reviewer/persist_review_to_bigquery.py \
+    --review-json "${M9_REVIEW_OUTPUT_PATH}" \
+    --project-id "${GCP_PROJECT_ID}" \
+    --dataset-id "${MONITORING_DATASET_ID}" \
+    --location "${DBT_LOCATION}"
+
+  echo "M9 deterministic review persisted successfully."
 else
   echo "No CONTROL_ATTEMPT_ID supplied."
   echo "Skipping exact-run M9 review in compatibility mode."
