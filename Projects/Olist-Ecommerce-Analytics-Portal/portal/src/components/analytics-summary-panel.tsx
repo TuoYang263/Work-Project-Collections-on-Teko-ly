@@ -9,10 +9,12 @@ import type { AnalyticsSummary } from "@/server/analytics/analytics-summary"
 
 type AnalyticsSummaryPanelProps = {
   data: AnalyticsSummary
+  scopeLabel?: string
 }
 
 export function AnalyticsSummaryPanel({
   data,
+  scopeLabel = "All Brazil",
 }: AnalyticsSummaryPanelProps) {
   return (
     <div className="space-y-6">
@@ -20,19 +22,19 @@ export function AnalyticsSummaryPanel({
         <MetricCard
           label="Orders"
           value={formatInteger(data.orderCount)}
-          description="All orders"
+          description={scopeLabel}
         />
 
         <MetricCard
           label="GMV"
           value={formatCompactBRL(data.gmv)}
-          description="Gross merchandise value"
+          description={`Gross merchandise value · ${scopeLabel}`}
         />
 
         <MetricCard
           label="AOV"
           value={formatBRL(data.aov)}
-          description="Average order value"
+          description={`Average order value · ${scopeLabel}`}
         />
       </div>
 

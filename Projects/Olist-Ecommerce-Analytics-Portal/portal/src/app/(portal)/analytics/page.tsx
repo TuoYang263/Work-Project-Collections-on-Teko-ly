@@ -1,24 +1,30 @@
 import { connection } from "next/server"
 import type { ReactNode } from "react"
 
-import { AnalyticsSummaryPanel } from "@/components/analytics-summary-panel"
+import { AnalyticsDashboard } from "@/components/analytics-dashboard"
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import type { AnalyticsStateSummary } from "@/server/analytics/analytics-state-summary"
+import {
+  AnalyticsStateSummaryIntegrityError,
+  getAnalyticsStateSummaries,
+} from "@/server/analytics/analytics-state-summary-service"
 import type { AnalyticsSummary } from "@/server/analytics/analytics-summary"
 import {
-  getAnalyticsSummary,
   AnalyticsSummaryIntegrityError,
   AnalyticsSummaryNotFoundError,
+  getAnalyticsSummary,
 } from "@/server/analytics/analytics-summary-service"
 
 type AnalyticsPageResult =
   | {
       status: "available"
       data: AnalyticsSummary
+      states: AnalyticsStateSummary[]
     }
   | {
       status: "not-found"
@@ -33,12 +39,16 @@ type AnalyticsPageResult =
 export default async function AnalyticsPage() {
   await connection()
 
-  const result = await loadAnalyticsPageResult()
+  const result =
+    await loadAnalyticsPageResult()
 
   if (result.status === "available") {
     return (
       <AnalyticsPageShell>
-        <AnalyticsSummaryPanel data={result.data} />
+        <AnalyticsDashboard
+          data={result.data}
+          states={result.states}
+        />
       </AnalyticsPageShell>
     )
   }
@@ -49,15 +59,17 @@ export default async function AnalyticsPage() {
       message:
         "No analytical KPI summary is available.",
     },
+
     "integrity-error": {
       title: "Analytics data issue",
       message:
-        "The analytical KPI summary is inconsistent and cannot be shown safely.",
+        "The analytical data is inconsistent and cannot be shown safely.",
     },
+
     unavailable: {
       title: "Analytics unavailable",
       message:
-        "The analytical KPI summary could not be loaded.",
+        "The analytical data could not be loaded.",
     },
   }[result.status]
 
@@ -65,7 +77,9 @@ export default async function AnalyticsPage() {
     <AnalyticsPageShell>
       <Card>
         <CardHeader>
-          <CardTitle>{content.title}</CardTitle>
+          <CardTitle>
+            {content.title}
+          </CardTitle>
         </CardHeader>
 
         <CardContent>
@@ -80,22 +94,35 @@ export default async function AnalyticsPage() {
 
 async function loadAnalyticsPageResult(): Promise<AnalyticsPageResult> {
   try {
-    const data = await getAnalyticsSummary()
+    const [data, states] =
+      await Promise.all([
+        getAnalyticsSummary(),
+        getAnalyticsStateSummaries(),
+      ])
 
     return {
       status: "available",
       data,
+      states,
     }
   } catch (error) {
-    if (error instanceof AnalyticsSummaryNotFoundError) {
+    if (
+      error instanceof
+      AnalyticsSummaryNotFoundError
+    ) {
       return {
         status: "not-found",
       }
     }
 
-    if (error instanceof AnalyticsSummaryIntegrityError) {
+    if (
+      error instanceof
+        AnalyticsSummaryIntegrityError ||
+      error instanceof
+        AnalyticsStateSummaryIntegrityError
+    ) {
       console.error(
-        "Analytics summary integrity error:",
+        "Analytics integrity error:",
         error
       )
 
@@ -105,7 +132,7 @@ async function loadAnalyticsPageResult(): Promise<AnalyticsPageResult> {
     }
 
     console.error(
-      "Analytics summary unavailable:",
+      "Analytics unavailable:",
       error
     )
 
@@ -128,7 +155,8 @@ function AnalyticsPageShell({
         </h1>
 
         <p className="mt-2 text-muted-foreground">
-          Business performance and geospatial analytics.
+          Business performance and
+          geospatial analytics.
         </p>
       </div>
 
