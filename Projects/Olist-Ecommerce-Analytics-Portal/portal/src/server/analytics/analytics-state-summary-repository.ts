@@ -13,6 +13,10 @@ export type AnalyticsStateSummaryRow = {
   order_count: unknown
   gmv: unknown
   aov: unknown
+  delivery_observation_count: unknown
+  late_delivery_rate: unknown
+  reviewed_order_count: unknown
+  average_review_score: unknown
 }
 
 type AnalyticsStateRepositoryConfig = {
@@ -67,7 +71,11 @@ export async function fetchAnalyticsStateSummaryRows(): Promise<
       state_code,
       order_count,
       gmv,
-      aov
+      aov,
+      delivery_observation_count,
+      late_delivery_rate,
+      reviewed_order_count,
+      average_review_score
     FROM ${table}
     ORDER BY state_code
   `

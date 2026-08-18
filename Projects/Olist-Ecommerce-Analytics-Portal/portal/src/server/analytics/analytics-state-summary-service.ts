@@ -57,12 +57,51 @@ export function mapAnalyticsStateSummaries(
 
     seenStateCodes.add(stateCode)
 
+    const orderCount = nonNegativeInteger(
+      row.order_count,
+      "order_count"
+    )
+
+    const deliveryObservationCount =
+      nonNegativeInteger(
+        row.delivery_observation_count,
+        "delivery_observation_count"
+      )
+
+    const lateDeliveryRate =
+      nullableBoundedNumber(
+        row.late_delivery_rate,
+        "late_delivery_rate",
+        0,
+        1
+      )
+
+    const reviewedOrderCount =
+      nonNegativeInteger(
+        row.reviewed_order_count,
+        "reviewed_order_count"
+      )
+
+    const averageReviewScore =
+      nullableBoundedNumber(
+        row.average_review_score,
+        "average_review_score",
+        1,
+        5
+      )
+
+    validateObservationEvidence({
+      stateCode,
+      orderCount,
+      deliveryObservationCount,
+      lateDeliveryRate,
+      reviewedOrderCount,
+      averageReviewScore,
+    })
+
     return {
       stateCode,
-      orderCount: nonNegativeInteger(
-        row.order_count,
-        "order_count"
-      ),
+      orderCount,
       gmv: nonNegativeNumber(
         row.gmv,
         "gmv"
@@ -71,6 +110,10 @@ export function mapAnalyticsStateSummaries(
         row.aov,
         "aov"
       ),
+      deliveryObservationCount,
+      lateDeliveryRate,
+      reviewedOrderCount,
+      averageReviewScore,
     }
   })
 
@@ -83,6 +126,70 @@ export function mapAnalyticsStateSummaries(
   }
 
   return states
+}
+
+function validateObservationEvidence({
+  stateCode,
+  orderCount,
+  deliveryObservationCount,
+  lateDeliveryRate,
+  reviewedOrderCount,
+  averageReviewScore,
+}: {
+  stateCode: BrazilStateCode
+  orderCount: number
+  deliveryObservationCount: number
+  lateDeliveryRate: number | null
+  reviewedOrderCount: number
+  averageReviewScore: number | null
+}): void {
+  if (deliveryObservationCount > orderCount) {
+    throw new AnalyticsStateSummaryIntegrityError(
+      `delivery_observation_count cannot exceed order_count for ${stateCode}.`
+    )
+  }
+
+  if (reviewedOrderCount > orderCount) {
+    throw new AnalyticsStateSummaryIntegrityError(
+      `reviewed_order_count cannot exceed order_count for ${stateCode}.`
+    )
+  }
+
+  if (
+    deliveryObservationCount === 0 &&
+    lateDeliveryRate !== null
+  ) {
+    throw new AnalyticsStateSummaryIntegrityError(
+      `late_delivery_rate must be null when delivery_observation_count is zero for ${stateCode}.`
+    )
+  }
+
+  if (
+    deliveryObservationCount > 0 &&
+    lateDeliveryRate === null
+  ) {
+    throw new AnalyticsStateSummaryIntegrityError(
+      `late_delivery_rate is required when delivery_observation_count is positive for ${stateCode}.`
+    )
+  }
+
+  if (
+    reviewedOrderCount === 0 &&
+    averageReviewScore !== null
+  ) {
+    throw new AnalyticsStateSummaryIntegrityError(
+      `average_review_score must be null when reviewed_order_count is zero for ${stateCode}.`
+    )
+  }
+
+  if (
+    reviewedOrderCount > 0 &&
+    averageReviewScore === null
+  ) {
+    throw new AnalyticsStateSummaryIntegrityError(
+      `average_review_score is required when reviewed_order_count is positive for ${stateCode}.`
+    )
+  }
 }
 
 function parseStateCode(
@@ -130,6 +237,31 @@ function nonNegativeNumber(
   ) {
     throw new AnalyticsStateSummaryIntegrityError(
       `${fieldName} must be a non-negative number.`
+    )
+  }
+
+  return numberValue
+}
+
+function nullableBoundedNumber(
+  value: unknown,
+  fieldName: string,
+  min: number,
+  max: number
+): number | null {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  const numberValue = Number(value)
+
+  if (
+    !Number.isFinite(numberValue) ||
+    numberValue < min ||
+    numberValue > max
+  ) {
+    throw new AnalyticsStateSummaryIntegrityError(
+      `${fieldName} must be null or a number between ${min} and ${max}.`
     )
   }
 

@@ -46,7 +46,32 @@ SELECT
       COUNT(*)
     ),
     2
-  ) AS aov
+  ) AS aov,
+
+  COUNTIF(
+    orders.order_delivered_customer_date IS NOT NULL
+    AND orders.order_estimated_delivery_date IS NOT NULL
+  ) AS delivery_observation_count,
+
+  ROUND(
+    SAFE_DIVIDE(
+      COUNTIF(orders.is_late_delivery),
+      COUNTIF(
+        orders.order_delivered_customer_date IS NOT NULL
+        AND orders.order_estimated_delivery_date IS NOT NULL
+      )
+    ),
+    4
+  ) AS late_delivery_rate,
+
+  COUNTIF(
+    orders.avg_review_score IS NOT NULL
+  ) AS reviewed_order_count,
+
+  ROUND(
+    AVG(orders.avg_review_score),
+    2
+  ) AS average_review_score
 
 FROM `balmy-nuance-468118-g4.olist_marts.fct_orders` AS orders
 

@@ -36,4 +36,8 @@ export type AnalyticsStateSummary = {
   orderCount: number
   gmv: number
   aov: number
+  deliveryObservationCount: number
+  lateDeliveryRate: number | null
+  reviewedOrderCount: number
+  averageReviewScore: number | null
 }
