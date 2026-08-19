@@ -14,6 +14,8 @@ import {
   getAnalyticsStateSummaries,
 } from "@/server/analytics/analytics-state-summary-service"
 import type { AnalyticsSummary } from "@/server/analytics/analytics-summary"
+import type { BusinessDecisionModelResult } from "@/server/analytics/business-decision-v1"
+import { buildBusinessDecisionModelV1 } from "@/server/analytics/business-decision-v1-service"
 import {
   AnalyticsSummaryIntegrityError,
   AnalyticsSummaryNotFoundError,
@@ -25,6 +27,7 @@ type AnalyticsPageResult =
       status: "available"
       data: AnalyticsSummary
       states: AnalyticsStateSummary[]
+      decisions: BusinessDecisionModelResult
     }
   | {
       status: "not-found"
@@ -48,6 +51,7 @@ export default async function AnalyticsPage() {
         <AnalyticsDashboard
           data={result.data}
           states={result.states}
+          decisions={result.decisions}
         />
       </AnalyticsPageShell>
     )
@@ -100,10 +104,14 @@ async function loadAnalyticsPageResult(): Promise<AnalyticsPageResult> {
         getAnalyticsStateSummaries(),
       ])
 
+    const decisions =
+      buildBusinessDecisionModelV1(states)
+
     return {
       status: "available",
       data,
       states,
+      decisions,
     }
   } catch (error) {
     if (

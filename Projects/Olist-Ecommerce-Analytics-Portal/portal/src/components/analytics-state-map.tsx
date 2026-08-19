@@ -21,6 +21,18 @@ import type {
   AnalyticsStateSummary,
   BrazilStateCode,
 } from "@/server/analytics/analytics-state-summary"
+import type {
+  BusinessDecision,
+  BusinessPriority,
+  StateBusinessDecision,
+} from "@/server/analytics/business-decision-v1"
+
+type RgbaColor = [
+  number,
+  number,
+  number,
+  number,
+]
 
 type StateGeometryProperties = {
   state_code: string
@@ -32,6 +44,10 @@ type StateMapProperties =
     orderCount: number
     gmv: number
     aov: number
+    lateDeliveryRate: number | null
+    averageReviewScore: number | null
+    decision: BusinessDecision
+    priority: BusinessPriority
   }
 
 type StateFeature = Feature<
@@ -46,6 +62,7 @@ type StateSelection = {
 
 type AnalyticsStateMapProps = {
   states: AnalyticsStateSummary[]
+  decisions: StateBusinessDecision[]
   selectedStateCode: BrazilStateCode | null
   onStateSelect: (
     selection: StateSelection | null
@@ -63,8 +80,42 @@ const INITIAL_VIEW_STATE = {
 const BASEMAP_STYLE =
   "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
 
+const DECISION_COLORS: Record<
+  BusinessDecision,
+  RgbaColor
+> = {
+  RECOVER_SERVICE: [205, 72, 72, 215],
+  PROTECT_VALUE: [54, 132, 113, 205],
+  EXPAND: [66, 118, 196, 205],
+  INVESTIGATE: [218, 151, 53, 210],
+  MONITOR: [155, 171, 190, 175],
+}
+
+const LEGEND_ITEMS: Array<{
+  decision: BusinessDecision
+  label: string
+}> = [
+  {
+    decision: "RECOVER_SERVICE",
+    label: "Recover Service",
+  },
+  {
+    decision: "PROTECT_VALUE",
+    label: "Protect Value",
+  },
+  {
+    decision: "INVESTIGATE",
+    label: "Investigate",
+  },
+  {
+    decision: "MONITOR",
+    label: "Monitor",
+  },
+]
+
 export function AnalyticsStateMap({
   states,
+  decisions,
   selectedStateCode,
   onStateSelect,
 }: AnalyticsStateMapProps) {
@@ -145,6 +196,20 @@ export function AnalyticsStateMap({
     [states]
   )
 
+  const decisionLookup = useMemo(
+    () =>
+      new Map<
+        string,
+        StateBusinessDecision
+      >(
+        decisions.map((decision) => [
+          decision.stateCode,
+          decision,
+        ])
+      ),
+    [decisions]
+  )
+
   const mapData = useMemo(() => {
     if (!geometry) {
       return null
@@ -158,9 +223,18 @@ export function AnalyticsStateMap({
         const state =
           stateLookup.get(stateCode)
 
+        const decision =
+          decisionLookup.get(stateCode)
+
         if (!state) {
           throw new Error(
             `No analytics data for ${stateCode}.`
+          )
+        }
+
+        if (!decision) {
+          throw new Error(
+            `No business decision for ${stateCode}.`
           )
         }
 
@@ -168,9 +242,19 @@ export function AnalyticsStateMap({
           ...feature,
           properties: {
             ...feature.properties,
+
             orderCount: state.orderCount,
             gmv: state.gmv,
             aov: state.aov,
+
+            lateDeliveryRate:
+              state.lateDeliveryRate,
+
+            averageReviewScore:
+              state.averageReviewScore,
+
+            decision: decision.decision,
+            priority: decision.priority,
           },
         }
       }
@@ -183,17 +267,11 @@ export function AnalyticsStateMap({
       Geometry,
       StateMapProperties
     >
-  }, [geometry, stateLookup])
-
-  const maxOrders = useMemo(
-    () =>
-      Math.max(
-        ...states.map(
-          (state) => state.orderCount
-        )
-      ),
-    [states]
-  )
+  }, [
+    decisionLookup,
+    geometry,
+    stateLookup,
+  ])
 
   const layers = useMemo(() => {
     if (!mapData) {
@@ -202,11 +280,18 @@ export function AnalyticsStateMap({
 
     return [
       new GeoJsonLayer<StateMapProperties>({
-        id: "brazil-state-orders",
+        id: "brazil-state-business-actions",
         data: mapData,
 
         pickable: true,
         autoHighlight: true,
+        highlightColor: [
+          15,
+          23,
+          42,
+          35,
+        ],
+
         filled: true,
         stroked: true,
 
@@ -214,16 +299,15 @@ export function AnalyticsStateMap({
         lineWidthMinPixels: 1,
 
         getFillColor: (feature) =>
-          getOrderFillColor(
-            feature.properties.orderCount,
-            maxOrders
+          getDecisionFillColor(
+            feature.properties.decision
           ),
 
         getLineColor: (feature) =>
           feature.properties.state_code ===
           selectedStateCode
-            ? [20, 30, 45, 255]
-            : [255, 255, 255, 220],
+            ? [15, 23, 42, 255]
+            : [255, 255, 255, 230],
 
         getLineWidth: (feature) =>
           feature.properties.state_code ===
@@ -241,7 +325,6 @@ export function AnalyticsStateMap({
     ]
   }, [
     mapData,
-    maxOrders,
     selectedStateCode,
   ])
 
@@ -315,32 +398,68 @@ export function AnalyticsStateMap({
           mapStyle={BASEMAP_STYLE}
         />
       </DeckGL>
+
+      <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-md border bg-background/95 px-3 py-2 shadow-sm backdrop-blur">
+        <div className="mb-2 text-xs font-medium">
+          Business action
+        </div>
+
+        <div className="space-y-1.5">
+          {LEGEND_ITEMS.map(
+            ({ decision, label }) => {
+              const color =
+                DECISION_COLORS[decision]
+
+              return (
+                <div
+                  key={decision}
+                  className="flex items-center gap-2 text-xs"
+                >
+                  <span
+                    className="h-2.5 w-2.5 rounded-sm"
+                    style={{
+                      backgroundColor: `rgb(${color[0]} ${color[1]} ${color[2]})`,
+                    }}
+                  />
+
+                  <span>{label}</span>
+                </div>
+              )
+            }
+          )}
+        </div>
+      </div>
     </div>
   )
 }
 
-function getOrderFillColor(
-  orders: number,
-  maxOrders: number
-): [
-  number,
-  number,
-  number,
-  number,
-] {
-  const ratio =
-    maxOrders === 0
-      ? 0
-      : Math.sqrt(
-          orders / maxOrders
-        )
+function getDecisionFillColor(
+  decision: BusinessDecision
+): RgbaColor {
+  return DECISION_COLORS[decision]
+}
 
-  return [
-    Math.round(220 - 175 * ratio),
-    Math.round(235 - 125 * ratio),
-    Math.round(250 - 45 * ratio),
-    190,
-  ]
+function formatDecision(
+  decision: BusinessDecision
+): string {
+  return {
+    RECOVER_SERVICE: "Recover Service",
+    PROTECT_VALUE: "Protect Value",
+    EXPAND: "Expand",
+    INVESTIGATE: "Investigate",
+    MONITOR: "Monitor",
+  }[decision]
+}
+
+function formatCurrency(
+  value: number
+): string {
+  return `R$${value.toLocaleString(
+    undefined,
+    {
+      maximumFractionDigits: 0,
+    }
+  )}`
 }
 
 function getTooltip(
@@ -355,38 +474,27 @@ function getTooltip(
 
   const state = object.properties
 
+  const lateDelivery =
+    state.lateDeliveryRate === null
+      ? "No evidence"
+      : `${(
+          state.lateDeliveryRate * 100
+        ).toFixed(1)}%`
+
+  const reviewScore =
+    state.averageReviewScore === null
+      ? "No evidence"
+      : state.averageReviewScore.toFixed(
+          2
+        )
+
   return {
     text: [
       `${state.state_name} (${state.state_code})`,
-      `Orders: ${formatInteger(
-        state.orderCount
-      )}`,
-      `GMV: ${formatBRL(
-        state.gmv
-      )}`,
-      `AOV: ${formatBRL(
-        state.aov
-      )}`,
+      `${formatDecision(state.decision)} · ${state.priority}`,
+      `GMV: ${formatCurrency(state.gmv)}`,
+      `Late delivery: ${lateDelivery}`,
+      `Review score: ${reviewScore}`,
     ].join("\n"),
   }
-}
-
-function formatInteger(
-  value: number
-): string {
-  return new Intl.NumberFormat(
-    "en-US"
-  ).format(value)
-}
-
-function formatBRL(
-  value: number
-): string {
-  return new Intl.NumberFormat(
-    "en-US",
-    {
-      style: "currency",
-      currency: "BRL",
-    }
-  ).format(value)
 }

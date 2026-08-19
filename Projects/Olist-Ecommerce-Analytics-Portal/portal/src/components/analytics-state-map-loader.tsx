@@ -6,6 +6,7 @@ import type {
   AnalyticsStateSummary,
   BrazilStateCode,
 } from "@/server/analytics/analytics-state-summary"
+import type { StateBusinessDecision } from "@/server/analytics/business-decision-v1"
 
 type StateSelection = {
   stateCode: BrazilStateCode
@@ -33,10 +34,12 @@ const AnalyticsStateMap = dynamic(
 
 export function AnalyticsStateMapLoader({
   states,
+  decisions,
   selectedStateCode,
   onStateSelect,
 }: {
   states: AnalyticsStateSummary[]
+  decisions: StateBusinessDecision[]
   selectedStateCode: BrazilStateCode | null
   onStateSelect: (
     selection: StateSelection | null
@@ -45,6 +48,7 @@ export function AnalyticsStateMapLoader({
   return (
     <AnalyticsStateMap
       states={states}
+      decisions={decisions}
       selectedStateCode={
         selectedStateCode
       }
