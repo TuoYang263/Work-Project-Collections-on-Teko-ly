@@ -36,3 +36,6 @@ logs/
 
 # dbt local/runtime profiles
 dbt/profiles.yml
+
+# Generated statistical analysis outputs
+analysis/output/

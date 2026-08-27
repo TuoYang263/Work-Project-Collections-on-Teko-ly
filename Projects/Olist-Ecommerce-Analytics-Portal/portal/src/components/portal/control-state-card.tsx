@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -6,7 +8,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 
 import type {
   ControlStateOverview,
@@ -38,13 +39,15 @@ export function ControlStateCard({
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <CardTitle>Pipeline Control</CardTitle>
+              <CardTitle>Pipeline control</CardTitle>
               <CardDescription>
                 Window controller and watermark state
               </CardDescription>
             </div>
 
-            <Badge variant="outline">Not initialized</Badge>
+            <Badge variant="outline">
+              Not initialized
+            </Badge>
           </div>
         </CardHeader>
 
@@ -63,13 +66,15 @@ export function ControlStateCard({
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <CardTitle>Pipeline Control</CardTitle>
+              <CardTitle>Pipeline control</CardTitle>
               <CardDescription>
                 Window controller and watermark state
               </CardDescription>
             </div>
 
-            <Badge variant="destructive">Unavailable</Badge>
+            <Badge variant="destructive">
+              Unavailable
+            </Badge>
           </div>
         </CardHeader>
 
@@ -85,129 +90,231 @@ export function ControlStateCard({
   const { data } = result;
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <CardTitle>Pipeline Control</CardTitle>
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <OverviewMetric
+          label="Pipeline state"
+          value={formatPipelineState(data.state)}
+          badge={<PipelineStateBadge state={data.state} />}
+        />
+
+        <OverviewMetric
+          label="Environment"
+          value={data.environment}
+          description={data.pipelineName}
+        />
+
+        <OverviewMetric
+          label="Active attempt"
+          value={
+            data.activeAttempt
+              ? `#${data.activeAttempt.attemptNumber}`
+              : "None"
+          }
+          description={
+            data.activeAttempt
+              ? "Processing window in progress"
+              : "No active processing attempt"
+          }
+        />
+
+        <OverviewMetric
+          label="Control version"
+          value={String(data.controlVersion)}
+          description={`Updated ${formatUtc(data.updatedAt)}`}
+        />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card className="h-full">
+          <CardHeader>
+            <CardTitle>
+              Processing window
+            </CardTitle>
             <CardDescription>
-              {data.pipelineName}
+              Latest successful watermark and active work.
             </CardDescription>
-          </div>
+          </CardHeader>
 
-          <PipelineStateBadge state={data.state} />
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-5">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Detail
-            label="Environment"
-            value={data.environment}
-          />
-
-          <Detail
-            label="Control version"
-            value={String(data.controlVersion)}
-          />
-
-          <Detail
-            label="Updated at"
-            value={formatUtc(data.updatedAt)}
-          />
-
-          <Detail
-            label="Active attempt"
-            value={
-              data.activeAttempt
-                ? `#${data.activeAttempt.attemptNumber}`
-                : "None"
-            }
-          />
-        </div>
-
-        <Separator />
-
-        <div className="grid gap-5 lg:grid-cols-2">
-          <div>
-            <div className="text-sm font-medium">
-              Last successful window
-            </div>
-
-            {data.lastSuccessfulWindow ? (
-              <div className="mt-2 text-sm text-muted-foreground">
-                <div>
-                  {formatUtc(data.lastSuccessfulWindow.start)}
-                </div>
-                <div>→</div>
-                <div>
-                  {formatUtc(data.lastSuccessfulWindow.end)}
-                </div>
+          <CardContent className="space-y-5">
+            <section>
+              <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Last successful window
               </div>
+
+              {data.lastSuccessfulWindow ? (
+                <div className="mt-2 rounded-lg border bg-muted/20 px-3 py-3">
+                  <div className="text-sm font-medium">
+                    {formatUtc(
+                      data.lastSuccessfulWindow.start
+                    )}
+                  </div>
+
+                  <div className="my-1 text-xs text-muted-foreground">
+                    to
+                  </div>
+
+                  <div className="text-sm font-medium">
+                    {formatUtc(
+                      data.lastSuccessfulWindow.end
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                  No successful window yet.
+                </div>
+              )}
+            </section>
+
+            {data.activeAttempt ? (
+              <section className="border-t pt-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                    Current attempt
+                  </div>
+
+                  <Badge variant="outline">
+                    Attempt #{data.activeAttempt.attemptNumber}
+                  </Badge>
+                </div>
+
+                <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                  <Detail
+                    label="Attempt ID"
+                    value={data.activeAttempt.attemptId}
+                  />
+                  <Detail
+                    label="Retry of"
+                    value={
+                      data.activeAttempt.retryOfAttemptId ??
+                      "No"
+                    }
+                  />
+                  <Detail
+                    label="Window start"
+                    value={formatUtc(
+                      data.activeAttempt.windowStart
+                    )}
+                  />
+                  <Detail
+                    label="Window end"
+                    value={formatUtc(
+                      data.activeAttempt.windowEnd
+                    )}
+                  />
+                </div>
+              </section>
             ) : (
-              <p className="mt-2 text-sm text-muted-foreground">
-                No successful window yet.
-              </p>
+              <section className="border-t pt-4">
+                <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  Current attempt
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  No active attempt.
+                </p>
+              </section>
             )}
-          </div>
+          </CardContent>
+        </Card>
 
-          <div>
-            <div className="text-sm font-medium">
-              Last error
+        <Card className="h-full">
+          <CardHeader>
+            <CardTitle>
+              Operational health
+            </CardTitle>
+            <CardDescription>
+              Controller freshness and most recent error evidence.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Detail
+                label="Controller updated"
+                value={formatUtc(data.updatedAt)}
+              />
+
+              <Detail
+                label="Pipeline"
+                value={data.pipelineName}
+              />
             </div>
 
-            {data.lastError ? (
-              <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                <div>
-                  {data.lastError.code ?? "No error code"}
+            <section className="border-t pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  Last error
                 </div>
-                <div>
-                  {data.lastError.message ?? "No error message"}
-                </div>
+
+                <Badge
+                  variant={
+                    data.lastError
+                      ? "destructive"
+                      : "outline"
+                  }
+                >
+                  {data.lastError ? "Attention" : "Clear"}
+                </Badge>
               </div>
-            ) : (
-              <p className="mt-2 text-sm text-muted-foreground">
-                None
-              </p>
-            )}
+
+              {data.lastError ? (
+                <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3">
+                  <div className="text-sm font-medium">
+                    {data.lastError.code ??
+                      "No error code"}
+                  </div>
+
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {data.lastError.message ??
+                      "No error message"}
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-3 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+                  No current controller error.
+                </div>
+              )}
+            </section>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function OverviewMetric({
+  label,
+  value,
+  description,
+  badge,
+}: {
+  label: string;
+  value: string;
+  description?: string;
+  badge?: ReactNode;
+}) {
+  return (
+    <Card className="shadow-none">
+      <CardContent className="px-4 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              {label}
+            </div>
+
+            <div className="mt-2 truncate text-2xl font-semibold tracking-tight">
+              {value}
+            </div>
           </div>
+
+          {badge}
         </div>
 
-        {data.activeAttempt ? (
-          <>
-            <Separator />
-
-            <div>
-              <div className="text-sm font-medium">
-                Current attempt
-              </div>
-
-              <div className="mt-2 grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
-                <div>
-                  Attempt ID: {data.activeAttempt.attemptId}
-                </div>
-
-                <div>
-                  Attempt number: {data.activeAttempt.attemptNumber}
-                </div>
-
-                <div>
-                  Window start:{" "}
-                  {formatUtc(data.activeAttempt.windowStart)}
-                </div>
-
-                <div>
-                  Window end:{" "}
-                  {formatUtc(data.activeAttempt.windowEnd)}
-                </div>
-
-                <div>
-                  Retry of:{" "}
-                  {data.activeAttempt.retryOfAttemptId ?? "No"}
-                </div>
-              </div>
-            </div>
-          </>
+        {description ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            {description}
+          </p>
         ) : null}
       </CardContent>
     </Card>
@@ -222,17 +329,41 @@ function PipelineStateBadge({
   switch (state) {
     case "FAILED":
     case "QUARANTINED":
-      return <Badge variant="destructive">{state}</Badge>;
+      return (
+        <Badge variant="destructive">
+          {state}
+        </Badge>
+      );
 
     case "WAITING_RETRY":
-      return <Badge variant="outline">{state}</Badge>;
+      return (
+        <Badge variant="outline">
+          Waiting
+        </Badge>
+      );
 
     case "RUNNING":
-      return <Badge>{state}</Badge>;
+      return <Badge>Running</Badge>;
 
     case "IDLE":
-      return <Badge variant="secondary">{state}</Badge>;
+      return (
+        <Badge variant="secondary">
+          Idle
+        </Badge>
+      );
   }
+}
+
+function formatPipelineState(
+  state: PipelineState,
+): string {
+  return {
+    IDLE: "Idle",
+    RUNNING: "Running",
+    FAILED: "Failed",
+    WAITING_RETRY: "Waiting retry",
+    QUARANTINED: "Quarantined",
+  }[state];
 }
 
 function Detail({
@@ -243,12 +374,12 @@ function Detail({
   value: string;
 }) {
   return (
-    <div>
-      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+    <div className="min-w-0">
+      <div className="text-xs text-muted-foreground">
         {label}
       </div>
 
-      <div className="mt-1 text-sm font-medium">
+      <div className="mt-1 break-words text-sm font-medium">
         {value}
       </div>
     </div>

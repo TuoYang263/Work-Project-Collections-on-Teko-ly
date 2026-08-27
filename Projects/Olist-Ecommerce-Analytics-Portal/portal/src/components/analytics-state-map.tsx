@@ -8,7 +8,7 @@ import {
 } from "react"
 
 import type { PickingInfo } from "@deck.gl/core"
-import { GeoJsonLayer } from "@deck.gl/layers"
+import { GeoJsonLayer, TextLayer } from "@deck.gl/layers"
 import { DeckGL } from "@deck.gl/react"
 import type {
   Feature,
@@ -54,6 +54,11 @@ type StateFeature = Feature<
   Geometry,
   StateMapProperties
 >
+
+type StateLabelDatum = {
+  stateCode: string
+  position: [number, number]
+}
 
 type StateSelection = {
   stateCode: BrazilStateCode
@@ -273,6 +278,19 @@ export function AnalyticsStateMap({
     stateLookup,
   ])
 
+  const labelData = useMemo<StateLabelDatum[]>(() => {
+    if (!mapData) {
+      return []
+    }
+
+    return mapData.features.map((feature) => ({
+      stateCode: feature.properties.state_code,
+      position: getGeometryLabelPosition(
+        feature.geometry
+      ),
+    }))
+  }, [mapData])
+
   const layers = useMemo(() => {
     if (!mapData) {
       return []
@@ -322,8 +340,34 @@ export function AnalyticsStateMap({
             selectedStateCode,
         },
       }),
+
+      new TextLayer<StateLabelDatum>({
+        id: "brazil-state-labels",
+        data: labelData,
+        pickable: false,
+        billboard: true,
+
+        getPosition: (datum) =>
+          datum.position,
+
+        getText: (datum) =>
+          datum.stateCode,
+
+        getSize: 12,
+        sizeUnits: "pixels",
+
+        getColor: [15, 23, 42, 230],
+
+        fontWeight: 700,
+        getTextAnchor: "middle",
+        getAlignmentBaseline: "center",
+
+        outlineWidth: 2,
+        outlineColor: [255, 255, 255, 235],
+      }),
     ]
   }, [
+    labelData,
     mapData,
     selectedStateCode,
   ])
@@ -431,6 +475,76 @@ export function AnalyticsStateMap({
       </div>
     </div>
   )
+}
+
+function getGeometryLabelPosition(
+  geometry: Geometry
+): [number, number] {
+  const positions: Array<[number, number]> = []
+
+  if (geometry.type === "Polygon") {
+    for (const ring of geometry.coordinates) {
+      for (const coordinate of ring) {
+        positions.push([
+          coordinate[0],
+          coordinate[1],
+        ])
+      }
+    }
+  } else if (geometry.type === "MultiPolygon") {
+    for (const polygon of geometry.coordinates) {
+      for (const ring of polygon) {
+        for (const coordinate of ring) {
+          positions.push([
+            coordinate[0],
+            coordinate[1],
+          ])
+        }
+      }
+    }
+  } else {
+    throw new Error(
+      `Unsupported Brazil state geometry: ${geometry.type}`
+    )
+  }
+
+  if (positions.length === 0) {
+    throw new Error(
+      "Brazil state geometry has no coordinates."
+    )
+  }
+
+  let minLongitude = Infinity
+  let maxLongitude = -Infinity
+  let minLatitude = Infinity
+  let maxLatitude = -Infinity
+
+  for (const [
+    longitude,
+    latitude,
+  ] of positions) {
+    minLongitude = Math.min(
+      minLongitude,
+      longitude
+    )
+    maxLongitude = Math.max(
+      maxLongitude,
+      longitude
+    )
+    minLatitude = Math.min(
+      minLatitude,
+      latitude
+    )
+    maxLatitude = Math.max(
+      maxLatitude,
+      latitude
+    )
+  }
+
+  return [
+    (minLongitude + maxLongitude) / 2,
+    (minLatitude + maxLatitude) / 2,
+  ]
 }
 
 function getDecisionFillColor(

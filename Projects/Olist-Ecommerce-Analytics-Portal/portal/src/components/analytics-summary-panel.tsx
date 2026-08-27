@@ -17,7 +17,25 @@ export function AnalyticsSummaryPanel({
   scopeLabel = "All Brazil",
 }: AnalyticsSummaryPanelProps) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/25 px-4 py-3">
+        <div className="text-sm">
+          <span className="font-medium text-foreground">
+            Data period
+          </span>
+          <span className="text-muted-foreground">
+            {" · "}
+            Current analytical mart
+          </span>
+        </div>
+
+        <div className="text-sm font-medium text-foreground">
+          {formatDate(data.firstOrderDate)}
+          {" — "}
+          {formatDate(data.lastOrderDate)}
+        </div>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-3">
         <MetricCard
           label="Orders"
@@ -37,23 +55,6 @@ export function AnalyticsSummaryPanel({
           description={`Average order value · ${scopeLabel}`}
         />
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Data period</CardTitle>
-          <CardDescription>
-            Order purchase dates represented in the current analytical mart.
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent>
-          <p className="text-lg font-medium">
-            {formatDate(data.firstOrderDate)}
-            {" — "}
-            {formatDate(data.lastOrderDate)}
-          </p>
-        </CardContent>
-      </Card>
     </div>
   )
 }
@@ -68,16 +69,19 @@ function MetricCard({
   description: string
 }) {
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="text-3xl">
+    <Card className="gap-3 py-4 shadow-sm">
+      <CardHeader className="gap-1 px-4 pb-0">
+        <CardDescription className="text-xs font-medium uppercase tracking-wide">
+          {label}
+        </CardDescription>
+
+        <CardTitle className="text-2xl font-semibold tracking-tight lg:text-3xl">
           {value}
         </CardTitle>
       </CardHeader>
 
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
+      <CardContent className="px-4 pb-0">
+        <p className="text-xs text-muted-foreground">
           {description}
         </p>
       </CardContent>

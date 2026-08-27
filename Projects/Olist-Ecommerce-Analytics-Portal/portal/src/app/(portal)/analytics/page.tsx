@@ -8,6 +8,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import type { AnalyticsStateDiagnosticV2 } from "@/server/analytics/analytics-state-diagnostic-v2"
+import {
+  AnalyticsStateDiagnosticV2IntegrityError,
+  getAnalyticsStateDiagnosticsV2,
+} from "@/server/analytics/analytics-state-diagnostic-v2-service"
 import type { AnalyticsStateSummary } from "@/server/analytics/analytics-state-summary"
 import {
   AnalyticsStateSummaryIntegrityError,
@@ -27,6 +32,7 @@ type AnalyticsPageResult =
       status: "available"
       data: AnalyticsSummary
       states: AnalyticsStateSummary[]
+      diagnostics: AnalyticsStateDiagnosticV2[]
       decisions: BusinessDecisionModelResult
     }
   | {
@@ -51,6 +57,7 @@ export default async function AnalyticsPage() {
         <AnalyticsDashboard
           data={result.data}
           states={result.states}
+          diagnostics={result.diagnostics}
           decisions={result.decisions}
         />
       </AnalyticsPageShell>
@@ -98,10 +105,11 @@ export default async function AnalyticsPage() {
 
 async function loadAnalyticsPageResult(): Promise<AnalyticsPageResult> {
   try {
-    const [data, states] =
+    const [data, states, diagnostics] =
       await Promise.all([
         getAnalyticsSummary(),
         getAnalyticsStateSummaries(),
+        getAnalyticsStateDiagnosticsV2(),
       ])
 
     const decisions =
@@ -111,6 +119,7 @@ async function loadAnalyticsPageResult(): Promise<AnalyticsPageResult> {
       status: "available",
       data,
       states,
+      diagnostics,
       decisions,
     }
   } catch (error) {
@@ -127,7 +136,9 @@ async function loadAnalyticsPageResult(): Promise<AnalyticsPageResult> {
       error instanceof
         AnalyticsSummaryIntegrityError ||
       error instanceof
-        AnalyticsStateSummaryIntegrityError
+        AnalyticsStateSummaryIntegrityError ||
+      error instanceof
+        AnalyticsStateDiagnosticV2IntegrityError
     ) {
       console.error(
         "Analytics integrity error:",

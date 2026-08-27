@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { AnalyticsStateMapLoader } from "@/components/analytics-state-map-loader"
 import { AnalyticsSummaryPanel } from "@/components/analytics-summary-panel"
@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import type { AnalyticsStateDiagnosticV2 } from "@/server/analytics/analytics-state-diagnostic-v2"
 import type {
   AnalyticsStateSummary,
   BrazilStateCode,
@@ -25,6 +26,7 @@ import type {
 type AnalyticsDashboardProps = {
   data: AnalyticsSummary
   states: AnalyticsStateSummary[]
+  diagnostics: AnalyticsStateDiagnosticV2[]
   decisions: BusinessDecisionModelResult
 }
 
@@ -95,13 +97,73 @@ function describeDecision(
   return descriptions[decision]
 }
 
+function formatDiagnosticState(
+  state: AnalyticsStateDiagnosticV2["diagnosticState"]
+): string {
+  const labels: Record<
+    AnalyticsStateDiagnosticV2["diagnosticState"],
+    string
+  > = {
+    WORSE_THAN_EXPECTED: "Worse than expected",
+    BETTER_THAN_EXPECTED: "Better than expected",
+    AS_EXPECTED: "As expected",
+    INSUFFICIENT_EVIDENCE: "Insufficient evidence",
+  }
+
+  return labels[state]
+}
+
+function describeDiagnosticState(
+  state: AnalyticsStateDiagnosticV2["diagnosticState"]
+): string {
+  const descriptions: Record<
+    AnalyticsStateDiagnosticV2["diagnosticState"],
+    string
+  > = {
+    WORSE_THAN_EXPECTED:
+      "Negative-review risk is materially higher than expected for this order and delivery mix.",
+
+    BETTER_THAN_EXPECTED:
+      "Negative-review risk is materially lower than expected for this order and delivery mix.",
+
+    AS_EXPECTED:
+      "Observed negative-review risk is broadly consistent with what we would expect for this order and delivery mix.",
+
+    INSUFFICIENT_EVIDENCE:
+      "There are too few eligible orders to make a strong state-level diagnostic judgment.",
+  }
+
+  return descriptions[state]
+}
+
 export function AnalyticsDashboard({
   data,
   states,
+  diagnostics,
   decisions,
 }: AnalyticsDashboardProps) {
   const [selection, setSelection] =
     useState<StateSelection | null>(null)
+
+  const detailsRef =
+    useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!selection) {
+      return
+    }
+
+    const frame = requestAnimationFrame(() => {
+      detailsRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    })
+
+    return () => {
+      cancelAnimationFrame(frame)
+    }
+  }, [selection])
 
   const selectedState = useMemo(() => {
     if (!selection) {
@@ -130,6 +192,20 @@ export function AnalyticsDashboard({
       ) ?? null
     )
   }, [decisions.states, selection])
+
+  const selectedDiagnostic = useMemo(() => {
+    if (!selection) {
+      return null
+    }
+
+    return (
+      diagnostics.find(
+        (diagnostic) =>
+          diagnostic.stateCode ===
+          selection.stateCode
+      ) ?? null
+    )
+  }, [diagnostics, selection])
 
   const decisionCounts = useMemo(
     () => ({
@@ -219,10 +295,18 @@ export function AnalyticsDashboard({
         scopeLabel={scopeLabel}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Business actions
+      <div
+        ref={detailsRef}
+        className={
+          selectedDiagnostic
+            ? "grid scroll-mt-24 gap-6 xl:grid-cols-2 xl:items-stretch"
+            : "space-y-6 scroll-mt-24"
+        }
+      >
+        <Card className="h-full">
+          <CardHeader>
+            <CardTitle>
+              Business actions
           </CardTitle>
 
           <p className="mt-1 text-sm text-muted-foreground">
@@ -329,135 +413,252 @@ export function AnalyticsDashboard({
               </div>
             </div>
           ) : (
-            <div className="space-y-5">
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <div className="text-2xl font-semibold">
-                    {
-                      decisionCounts.recoverService
-                    }
+                  <div className="text-sm font-medium">
+                    27 customer-state markets
                   </div>
 
-                  <div className="text-sm font-medium">
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Current action mix across Brazil.
+                  </p>
+                </div>
+
+                {topIntervention && (
+                  <div className="min-w-[220px] rounded-lg border bg-muted/20 px-3 py-2.5">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                      Top intervention
+                    </div>
+
+                    <div className="mt-1 text-sm font-semibold">
+                      {topIntervention.stateCode}
+                      {" · "}
+                      {formatDecision(
+                        topIntervention.decision
+                      )}
+                      {" · "}
+                      {topIntervention.priority}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-lg border bg-background px-3 py-3">
+                  <div className="text-2xl font-semibold tracking-tight">
+                    {decisionCounts.recoverService}
+                  </div>
+
+                  <div className="mt-1 text-sm font-medium">
                     Recover Service
                   </div>
 
-                  <div className="text-xs text-muted-foreground">
-                    High-value markets with
-                    service risk
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    High-value + service risk
                   </div>
                 </div>
 
-                <div>
-                  <div className="text-2xl font-semibold">
+                <div className="rounded-lg border bg-background px-3 py-3">
+                  <div className="text-2xl font-semibold tracking-tight">
                     {decisionCounts.protectValue}
                   </div>
 
-                  <div className="text-sm font-medium">
+                  <div className="mt-1 text-sm font-medium">
                     Protect Value
                   </div>
 
-                  <div className="text-xs text-muted-foreground">
-                    High-value markets currently
-                    healthy
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    High-value + healthy
                   </div>
                 </div>
 
-                <div>
-                  <div className="text-2xl font-semibold">
+                <div className="rounded-lg border bg-background px-3 py-3">
+                  <div className="text-2xl font-semibold tracking-tight">
                     {decisionCounts.investigate}
                   </div>
 
-                  <div className="text-sm font-medium">
+                  <div className="mt-1 text-sm font-medium">
                     Investigate
                   </div>
 
-                  <div className="text-xs text-muted-foreground">
-                    Service-risk signals
-                    requiring review
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    Service-risk signal
                   </div>
                 </div>
 
-                <div>
-                  <div className="text-2xl font-semibold">
+                <div className="rounded-lg border bg-background px-3 py-3">
+                  <div className="text-2xl font-semibold tracking-tight">
                     {decisionCounts.monitor}
                   </div>
 
-                  <div className="text-sm font-medium">
+                  <div className="mt-1 text-sm font-medium">
                     Monitor
                   </div>
 
-                  <div className="text-xs text-muted-foreground">
+                  <div className="mt-0.5 text-xs text-muted-foreground">
                     No strong intervention
-                    signal
                   </div>
                 </div>
               </div>
 
-              {topIntervention && (
-                <div className="border-t pt-4">
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Top intervention
-                  </div>
+              <details className="border-t pt-3 text-xs text-muted-foreground">
+                <summary className="cursor-pointer font-medium text-foreground">
+                  Decision model details
+                </summary>
 
-                  <div className="mt-1 font-semibold">
+                <div className="mt-2">
+                  Peer thresholds: high value ≥
+                  R${" "}
+                  {decisions.thresholds.highValueGmv.toLocaleString(
+                    undefined,
                     {
-                      topIntervention.stateCode
+                      maximumFractionDigits: 0,
                     }
-                    {" · "}
-                    {formatDecision(
-                      topIntervention.decision
-                    )}
-                    {" · "}
-                    {topIntervention.priority}
-                  </div>
-
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    High-value market with
-                    current peer-relative
-                    service-risk signals.
-                  </p>
+                  )}
+                  {" · "}
+                  late delivery ≥{" "}
+                  {decisions.thresholds
+                    .highLateDeliveryRate !==
+                  null
+                    ? `${(
+                        decisions.thresholds
+                          .highLateDeliveryRate *
+                        100
+                      ).toFixed(1)}%`
+                    : "n/a"}
+                  {" · "}
+                  review score ≤{" "}
+                  {decisions.thresholds
+                    .lowReviewScore !== null
+                    ? decisions.thresholds.lowReviewScore.toFixed(
+                        2
+                      )
+                    : "n/a"}
+                  {" · "}
+                  Priority mix: P1{" "}
+                  {priorityCounts.P1}, P2{" "}
+                  {priorityCounts.P2}, P3{" "}
+                  {priorityCounts.P3}
                 </div>
-              )}
-
-              <div className="border-t pt-4 text-xs text-muted-foreground">
-                Peer thresholds: high value ≥
-                R${" "}
-                {decisions.thresholds.highValueGmv.toLocaleString(
-                  undefined,
-                  {
-                    maximumFractionDigits: 0,
-                  }
-                )}
-                {" · "}
-                late delivery ≥{" "}
-                {decisions.thresholds
-                  .highLateDeliveryRate !==
-                null
-                  ? `${(
-                      decisions.thresholds
-                        .highLateDeliveryRate *
-                      100
-                    ).toFixed(1)}%`
-                  : "n/a"}
-                {" · "}
-                review score ≤{" "}
-                {decisions.thresholds
-                  .lowReviewScore !== null
-                  ? decisions.thresholds.lowReviewScore.toFixed(
-                      2
-                    )
-                  : "n/a"}
-                {" · "}
-                Priority mix: P1{" "}
-                {priorityCounts.P1}, P2{" "}
-                {priorityCounts.P2}, P3{" "}
-                {priorityCounts.P3}
-              </div>
+              </details>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {selectedDiagnostic && (
+        <Card className="h-full">
+          <CardHeader>
+            <CardTitle>
+              Review risk vs expected
+            </CardTitle>
+
+            <p className="mt-1 text-sm text-muted-foreground">
+              Business action shows what to do.
+              This diagnostic shows whether
+              negative-review risk for{" "}
+              {scopeLabel} is unusually high or
+              low after accounting for the order
+              and delivery mix.
+            </p>
+          </CardHeader>
+
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <div className="text-lg font-semibold">
+                  {formatDiagnosticState(
+                    selectedDiagnostic.diagnosticState
+                  )}
+                </div>
+
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {describeDiagnosticState(
+                    selectedDiagnostic.diagnosticState
+                  )}
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <div className="text-xs text-muted-foreground">
+                    Observed negative reviews
+                  </div>
+
+                  <div className="font-medium">
+                    {(
+                      selectedDiagnostic
+                        .actualNegativeReviewRate * 100
+                    ).toFixed(2)}
+                    %
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-muted-foreground">
+                    Expected negative reviews
+                  </div>
+
+                  <div className="font-medium">
+                    {(
+                      selectedDiagnostic
+                        .expectedNegativeReviewRate * 100
+                    ).toFixed(2)}
+                    %
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-muted-foreground">
+                    Difference
+                  </div>
+
+                  <div className="font-medium">
+                    {selectedDiagnostic.residualPp >= 0
+                      ? "+"
+                      : ""}
+                    {selectedDiagnostic.residualPp.toFixed(
+                      2
+                    )}{" "}
+                    pp
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-muted-foreground">
+                    Orders evaluated
+                  </div>
+
+                  <div className="font-medium">
+                    {selectedDiagnostic.evidenceCount.toLocaleString()}{" "}
+                    orders
+                  </div>
+                </div>
+              </div>
+
+              <details className="border-t pt-4 text-xs text-muted-foreground">
+                <summary className="cursor-pointer font-medium text-foreground">
+                  Method details
+                </summary>
+
+                <div className="mt-2">
+                  95% diagnostic interval:{" "}
+                  {selectedDiagnostic.ciLowerPp.toFixed(2)}
+                  {" to "}
+                  {selectedDiagnostic.ciUpperPp.toFixed(2)}
+                  {" pp"}
+                  {" · "}
+                  Model version:{" "}
+                  {selectedDiagnostic.modelVersion}
+                </div>
+              </details>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      </div>
 
       <Card>
         <CardHeader>

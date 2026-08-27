@@ -1,3 +1,9 @@
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CircleDashed,
+  ListChecks,
+} from "lucide-react"
 import Link from "next/link"
 
 import { Badge } from "@/components/ui/badge"
@@ -8,7 +14,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
 import type { ReliabilityOverview } from "@/server/reliability/reliability-overview"
 
 type ReliabilityOverviewPanelProps = {
@@ -20,82 +25,97 @@ export function ReliabilityOverviewPanel({
 }: ReliabilityOverviewPanelProps) {
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-muted/20 px-4 py-3">
+        <div>
+          <div className="text-sm font-medium">
+            Latest deterministic review
+          </div>
+
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            {data.jobName} · {data.environment}
+          </div>
+        </div>
+
+        <div className="text-right">
+          <div className="text-sm font-medium">
+            {formatTimestamp(data.reviewedAt)}
+          </div>
+
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            Review {shortId(data.reviewId)}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Total evaluations"
+          value={data.summary.total}
+          icon={ListChecks}
+          tone="neutral"
+        />
+
+        <MetricCard
+          label="Pass"
+          value={data.summary.pass}
+          icon={CheckCircle2}
+          tone="success"
+        />
+
+        <MetricCard
+          label="Triggered"
+          value={data.summary.triggered}
+          icon={AlertTriangle}
+          tone="attention"
+        />
+
+        <MetricCard
+          label="Not evaluated"
+          value={data.summary.notEvaluated}
+          icon={CircleDashed}
+          tone="neutral"
+        />
+      </div>
+
       <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        <CardHeader className="gap-1">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>Latest deterministic review</CardTitle>
+              <CardTitle>
+                Triggered findings
+              </CardTitle>
+
               <CardDescription>
-                {data.jobName} · {data.environment}
+                Deterministic findings from the latest persisted review.
               </CardDescription>
             </div>
 
-            <Badge variant="outline">
-              {formatTimestamp(data.reviewedAt)}
+            <Badge
+              variant={
+                data.findings.length > 0
+                  ? "outline"
+                  : "secondary"
+              }
+            >
+              {data.findings.length} finding
+              {data.findings.length === 1 ? "" : "s"}
             </Badge>
           </div>
         </CardHeader>
 
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Metric
-              label="Total evaluations"
-              value={data.summary.total}
-            />
-            <Metric
-              label="PASS"
-              value={data.summary.pass}
-            />
-            <Metric
-              label="TRIGGERED"
-              value={data.summary.triggered}
-            />
-            <Metric
-              label="NOT EVALUATED"
-              value={data.summary.notEvaluated}
-            />
-          </div>
-
-          <Separator className="my-6" />
-
-          <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
-            <div>
-              <span className="font-medium text-foreground">
-                Monitoring run:
-              </span>{" "}
-              {data.monitoringRunId}
-            </div>
-
-            <div>
-              <span className="font-medium text-foreground">
-                Review:
-              </span>{" "}
-              {data.reviewId}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Triggered findings</CardTitle>
-          <CardDescription>
-            Deterministic findings from the latest persisted review.
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent>
           {data.findings.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed px-4 py-6 text-sm text-muted-foreground">
               No triggered findings in this review.
-            </p>
+            </div>
           ) : (
-            <div className="space-y-4">
-              {data.findings.map((finding, index) => (
-                <div key={finding.evaluationId}>
-                  {index > 0 && <Separator className="mb-4" />}
-
-                  <div className="space-y-3">
+            <div className="divide-y">
+              {data.findings.map((finding) => (
+                <article
+                  key={finding.evaluationId}
+                  className="grid gap-4 py-4 first:pt-0 last:pb-0 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                >
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       {finding.severity && (
                         <Badge variant="outline">
@@ -106,60 +126,122 @@ export function ReliabilityOverviewPanel({
                       <Badge variant="secondary">
                         {finding.ruleId}
                       </Badge>
+
+                      <span className="text-xs text-muted-foreground">
+                        {finding.evidenceSource}
+                      </span>
                     </div>
 
-                    <div>
-                      <p className="text-sm font-medium">
-                        {finding.entityId ?? finding.entityType}
+                    <div className="mt-3">
+                      <p className="truncate text-sm font-semibold">
+                        {finding.entityId ??
+                          finding.entityType}
                       </p>
 
-                      <p className="mt-1 text-sm text-muted-foreground">
+                      <p className="mt-1 max-w-4xl text-sm leading-6 text-muted-foreground">
                         {finding.reason}
                       </p>
                     </div>
-
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-xs text-muted-foreground">
-                        Evidence source: {finding.evidenceSource}
-                      </p>
-
-                      <Link
-                        href={`/findings/${encodeURIComponent(
-                          finding.findingId
-                        )}`}
-                        className="text-sm font-medium underline-offset-4 hover:underline"
-                      >
-                        View details
-                      </Link>
-                    </div>
                   </div>
-                </div>
+
+                  <Link
+                    href={`/findings/${encodeURIComponent(
+                      finding.findingId
+                    )}`}
+                    className="inline-flex h-9 items-center justify-center rounded-md border bg-background px-3 text-sm font-medium shadow-sm transition-colors hover:bg-muted"
+                  >
+                    View details
+                  </Link>
+                </article>
               ))}
             </div>
           )}
+
+          <details className="mt-5 border-t pt-4 text-xs text-muted-foreground">
+            <summary className="cursor-pointer font-medium text-foreground">
+              Review metadata
+            </summary>
+
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+              <div className="break-all">
+                <span className="font-medium text-foreground">
+                  Monitoring run:
+                </span>{" "}
+                {data.monitoringRunId}
+              </div>
+
+              <div className="break-all">
+                <span className="font-medium text-foreground">
+                  Review:
+                </span>{" "}
+                {data.reviewId}
+              </div>
+            </div>
+          </details>
         </CardContent>
       </Card>
     </div>
   )
 }
 
-type MetricProps = {
+type MetricTone =
+  | "neutral"
+  | "success"
+  | "attention"
+
+type MetricCardProps = {
   label: string
   value: number
+  icon: typeof ListChecks
+  tone: MetricTone
 }
 
-function Metric({ label, value }: MetricProps) {
-  return (
-    <div className="rounded-lg border p-4">
-      <p className="text-xs font-medium tracking-wide text-muted-foreground">
-        {label}
-      </p>
+function MetricCard({
+  label,
+  value,
+  icon: Icon,
+  tone,
+}: MetricCardProps) {
+  const toneClass = {
+    neutral:
+      "bg-muted/50 text-muted-foreground",
+    success:
+      "bg-emerald-500/10 text-emerald-700",
+    attention:
+      "bg-amber-500/10 text-amber-700",
+  }[tone]
 
-      <p className="mt-2 text-2xl font-semibold">
-        {value}
-      </p>
-    </div>
+  return (
+    <Card className="shadow-none">
+      <CardContent className="px-4 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              {label}
+            </div>
+
+            <div className="mt-2 text-3xl font-semibold tracking-tight">
+              {value}
+            </div>
+          </div>
+
+          <div
+            className={`flex size-9 items-center justify-center rounded-lg ${toneClass}`}
+          >
+            <Icon className="size-4" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
+}
+
+function shortId(value: string): string {
+  if (value.length <= 12) {
+    return value
+  }
+
+  return `${value.slice(0, 8)}…${value.slice(-4)}`
 }
 
 function formatTimestamp(value: string): string {
