@@ -2,11 +2,11 @@
 
 ## Purpose
 
-This document tracks the current milestone plan for the Olist E-Commerce Analytics & Pipeline Monitoring Portal.
+This document tracks the milestone plan for the Olist E-Commerce Analytics & Pipeline Monitoring Portal.
 
 The project is built in small milestones. Each milestone should have a clear result, a validation step, and a clean commit before the next area grows.
 
-M10 is currently in progress. Its first unit, window and watermark control, is complete. The portal and analytics work comes next.
+M10 is complete. M11 is planned as a smaller recovery milestone focused on monthly playback, backfill, resume, and consistency checks.
 
 ---
 
@@ -60,47 +60,49 @@ Common prefixes:
 | M7 | Cloud orchestration | Completed | Docker, Cloud Run Job, Cloud Scheduler |
 | M8 | Pipeline monitoring | Completed | Six append-only monitoring tables |
 | M9 | Pipeline quality reviewer | Completed | Rules R001-R006 and optional explanations |
-| M10 U1 | Window / watermark control | Completed | Window state, retries, audit history, CAS protection, exact M8/M9 correlation |
-| M10 portal / analytics | In progress | Operational UI, analytics UI, Brazil map slice |
-| M11 | Replay / backfill / recovery | Planned | Historical processing and recovery controls |
+| M10 | Window control, portal, and analytics | Completed | Window state, reliability UI, state analytics, diagnostics, and security hardening |
+| M11 | Replay / backfill / recovery | Planned | Monthly playback, resume, and consistency checks |
 
 ---
 
 ## Current scope
 
-### Completed through M10 U1
+### Completed through M10
 
 The project currently has:
 
-- BigQuery raw, staging, intermediate, marts, monitoring, and control datasets
+- BigQuery raw, staging, intermediate, marts, monitoring, control, and analytics datasets
 - dbt models, tests, docs, and lineage
 - Dockerized dbt execution
 - Cloud Run Job and Cloud Scheduler for the existing scheduled dbt path
 - append-only M8 monitoring history
 - deterministic M9 rules R001-R006
 - optional Vertex AI explanation for triggered M9 findings
-- explicit M10 control-state bootstrap
-- forward window derivation
-- windowed transactional dbt processing
-- incremental `MERGE` facts
-- success and failure state updates
-- same-window retry with attempt history
-- exact `control_attempt_id → monitoring_run_id` resolution
+- explicit window and watermark control
+- retry history and exact `control_attempt_id → monitoring_run_id` resolution
 - BigQuery transaction and stale-version protection
-- real validation for success, failure, retry, and stale concurrent writes
+- Next.js operational and analytics portal
+- reliability overview and finding detail pages
+- Brazil state-level map and linked KPI selection
+- deterministic Business Decision Model v1
+- statistical Review Diagnostic v2
+- service-layer verification for persisted diagnostic data
+- response security headers and unused API cleanup
+- 21 passing portal tests and 0 npm audit vulnerabilities at M10 close-out
 
-### Not part of U1
+### Still outside the current implementation
 
-U1 does not include:
+The project does not yet include:
 
-- replay or backfill
+- monthly replay or multi-window backfill
+- replay resume and recovery state
 - moving the normal watermark backward
 - automatic retry limits
 - automatic quarantine or release policy
-- portal screens
+- application-level authentication for a public portal deployment
 - alert delivery
 
-`QUARANTINED` exists in the state model, but U1 does not provide a full runtime workflow for it.
+`QUARANTINED` exists in the state model, but there is no full automatic quarantine workflow.
 
 ---
 
@@ -287,11 +289,17 @@ Real validation also covered:
 
 ---
 
-## Current M10 work
+## M10 close-out
+
+M10 was intentionally split into two areas: processing control and the portal.
+
+### Window and watermark control
+
+M10 added explicit state, forward windows, retry history, exact M8/M9 run correlation, and BigQuery compare-and-set protection. A failed attempt does not advance the watermark.
 
 ### Portal
 
-The portal should start with a small set of operational views:
+The portal now contains:
 
 ```text
 /overview
@@ -300,38 +308,57 @@ The portal should start with a small set of operational views:
 /analytics
 ```
 
-The implementation foundation is Next.js + React + TypeScript.
-
-The UI should keep a stable layout, clear status meaning, and a simple summary-to-detail flow.
+Server-rendered pages call service and repository layers directly. The unused overview and reliability API routes were removed.
 
 ### Analytics
 
-BigQuery remains the analytical source.
+The analytics page combines:
 
-The first geospatial slice should be small:
+- state-level orders, GMV, AOV, delivery, and review evidence
+- Brazil state map selection
+- deterministic business actions
+- statistical negative-review diagnostics
 
-- one state-level BigQuery aggregate
-- one Brazil state map
-- order count, GMV, average order value, delivery time, late-delivery rate, and review score
-- current window versus previous window
-- map selection linked to KPIs, trends, and detail data
+The current full-history snapshot does not provide a governed growth comparison. Growth-based action logic remains reserved for M11 monthly playback.
 
-CARTO and deck.gl are planned for the map layer.
+### Integrity and security
+
+M10 close-out added:
+
+- finding-ID validation before repository access
+- residual consistency checks
+- diagnostic-state recomputation
+- single model-version and generation-time checks for the 27-state snapshot
+- CSP and other browser security headers
+- Vitest coverage for the main portal integrity boundaries
+
+Final portal validation recorded:
+
+```text
+21 / 21 Vitest tests passed
+npm lint passed
+Next.js production build passed
+npm audit: 0 vulnerabilities
+```
 
 ---
 
 ## M11 roadmap
 
-M11 will add historical processing and recovery.
+M11 will add historical playback and recovery without changing the normal forward-watermark rule.
+
+The default playback window will be one month.
 
 Planned work:
 
-- replay one window
-- backfill several windows
+- generate monthly replay windows
+- replay one window or a range of windows
 - resume after failure
-- keep writes idempotent
+- keep replay writes idempotent
 - compare replay and incremental results
 - preserve replay audit history
 - keep replay/backfill state separate from the normal forward watermark
 
-M11 should deepen recovery behavior instead of adding unrelated platform features.
+The project will first produce and validate the monthly history. Trend analysis will only be considered after that data exists. Seasonality and forecasting are not part of the current M11 scope.
+
+M11 should deepen recovery behaviour instead of adding unrelated platform features.

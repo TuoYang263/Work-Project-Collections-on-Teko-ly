@@ -4,9 +4,9 @@
 
 This document describes the current architecture of the Olist E-Commerce Analytics & Pipeline Monitoring Portal.
 
-The project now includes:
+The project includes:
 
-- BigQuery raw, staging, intermediate, marts, monitoring, and control datasets
+- BigQuery raw, staging, intermediate, marts, monitoring, control, and analytics datasets
 - dbt transformations, tests, documentation, and lineage
 - Dockerized dbt execution
 - Google Cloud Run Job and Cloud Scheduler orchestration
@@ -15,8 +15,12 @@ The project now includes:
 - window and watermark control with retry history
 - exact correlation from a control attempt to its monitoring run
 - BigQuery transaction and version checks for state updates
+- a Next.js operational and analytics portal
+- state-level business actions and statistical review diagnostics
+- service-layer integrity checks for persisted analytics results
+- basic portal security headers
 
-M10 U1 window control is complete. The M10 portal and analytics work is next.
+M10 is complete. M11 will focus on replay, backfill, resume, and recovery.
 
 ---
 
@@ -32,8 +36,7 @@ M6  Project Documentation Cleanup               completed
 M7  Cloud Run + Cloud Scheduler                 completed
 M8  dbt Monitoring                              completed
 M9  Pipeline Quality Reviewer                   completed
-M10 U1 Window / Watermark Control               completed
-M10 Portal / Analytics                          in progress
+M10 Window Control, Portal & Analytics           completed
 M11 Replay / Backfill / Recovery                planned
 ```
 
@@ -43,13 +46,14 @@ Key validation dates:
 M8 cloud monitoring:        2026-07-15
 M9 reviewer:                2026-08-10
 M10 U1 window control:      2026-08-15
+M10 portal hardening:       2026-08-30
 ```
 
 ---
 
 ## High-level architecture
 
-The project has three main paths.
+The project has four connected paths.
 
 ```text
                          Olist source CSVs
@@ -66,9 +70,13 @@ The project has three main paths.
                   ↓                           ↓
              olist_marts               M8 artifact loader
                   ↓                           ↓
-           BI / analytics                olist_monitoring
-                                              ↓
-                                      M9 rule-based review
+          analytics serving             olist_monitoring
+                  │                           ↓
+                  │                   M9 rule-based review
+                  │                           │
+                  └──────────────┬────────────┘
+                                 ↓
+                           Next.js portal
 ```
 
 M10 adds a control path around the transactional workload:
@@ -90,6 +98,20 @@ success / failure
      ↓
 update control state
 ```
+
+Portal pages use a direct server-side path:
+
+```text
+Next.js Server Component
+        ↓
+     service
+        ↓
+   repository
+        ↓
+     BigQuery
+```
+
+The portal does not use an internal HTTP API layer unless one is needed. The two early API routes for overview and reliability were removed because no client code used them.
 
 ---
 
@@ -230,7 +252,7 @@ stg_orders → int_orders_windowed
                     ↓
                   marts
                     ↓
-             API / portal later
+            analytics serving
 ```
 
 The window is based on `order_purchase_timestamp` from orders. Related item, payment, and review records enter the window through their `order_id` relationship to those orders.
@@ -290,13 +312,20 @@ Current M10 validation build:
 118 / 118 PASS
 ```
 
-The current Python unit-test inventory is:
+The current backend unit-test inventory is:
 
 ```text
 M10 controller tests:         52
 M8 run resolver tests:         5
 M9 reviewer tests:            53
 Total:                       110
+```
+
+Portal validation includes:
+
+```text
+Vitest:                       21 / 21 PASS
+npm audit:                    0 vulnerabilities
 ```
 
 ---
@@ -709,6 +738,127 @@ The CAS probe then tried to write with stale version 11. BigQuery rejected the t
 
 ---
 
+## M10 portal and analytics
+
+### Routes
+
+The portal has four main routes:
+
+```text
+/overview
+/analytics
+/reliability
+/findings/[findingId]
+```
+
+`/overview` shows operational control state. `/reliability` shows the latest deterministic review and triggered findings. `/findings/[findingId]` shows persisted evidence for one finding. `/analytics` shows business actions and state-level review diagnostics.
+
+### Analytics serving layer
+
+The analytics page reads governed BigQuery data through server-side repositories and services.
+
+```text
+BigQuery
+  ↓
+repository
+  ↓
+service
+  ↓
+Server Component
+  ↓
+client-side interaction
+```
+
+The current state summary covers all 27 Brazilian states. The map links state selection to KPI and diagnostic cards.
+
+### Business Decision Model v1
+
+The first decision model is deterministic. It uses peer-relative thresholds for market value and service health.
+
+Actions are:
+
+```text
+RECOVER_SERVICE
+PROTECT_VALUE
+EXPAND
+INVESTIGATE
+MONITOR
+```
+
+The current full-history snapshot does not provide a governed previous-window growth measure. `EXPAND` therefore remains reserved until M11 adds monthly playback and previous-window comparison.
+
+### Review Diagnostic v2
+
+The statistical diagnostic estimates negative-review risk after accounting for order and delivery mix. The stored result contains observed risk, expected risk, residual in percentage points, confidence interval, evidence count, model version, and diagnostic state.
+
+The diagnostic contract is:
+
+```text
+evidence_count < 100
+→ INSUFFICIENT_EVIDENCE
+
+residual_pp >= 1 and ci_lower_pp > 0
+→ WORSE_THAN_EXPECTED
+
+residual_pp <= -1 and ci_upper_pp < 0
+→ BETTER_THAN_EXPECTED
+
+otherwise
+→ AS_EXPECTED
+```
+
+### Service-layer verification
+
+Persisted data is checked before it reaches the UI.
+
+```text
+BigQuery row
+   ↓
+field validation
+   ↓
+row-level consistency checks
+   ↓
+snapshot-level checks
+   ↓
+UI
+```
+
+The service checks:
+
+- all 27 state rows are present and unique
+- probabilities and counts are in valid ranges
+- confidence interval bounds are ordered
+- `residual_pp` matches `(actual - expected) × 100` within a small tolerance
+- `diagnostic_state` matches the fixed classification rule
+- all rows use the same `model_version`
+- all rows use the same `generated_at`
+
+This keeps the repository responsible for reading data and the service responsible for deciding whether the data is safe to use.
+
+### Finding identifier boundary
+
+Finding detail uses a URL identifier. The page decodes the path segment once. The service then checks the decoded identifier before the repository can query BigQuery.
+
+Allowed finding IDs are limited to 512 characters and a small character set used by the persisted IDs. BigQuery queries remain parameterized.
+
+### Portal security baseline
+
+The portal sets these response headers:
+
+- `Content-Security-Policy`
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy`
+- `X-Frame-Options: DENY`
+
+The CSP allows the CARTO basemap resources used by the map. Development allows `unsafe-eval` for the local Next.js toolchain; the production policy does not.
+
+The portal currently has no application-level login. A public or shared deployment should sit behind organization authentication or an equivalent platform control, and the runtime service account should only have the BigQuery permissions it needs.
+
+See [`m10_portal_analytics.md`](m10_portal_analytics.md) for the M10 portal close-out record.
+
+---
+
 ## Security and runtime configuration
 
 Credentials are not stored in the repository.
@@ -776,60 +926,51 @@ Implemented:
 - deterministic M9 review rules
 - optional Vertex AI explanation
 - M10 control state and audit tables
-- explicit bootstrap
-- forward window derivation
-- success and failure handling
-- same-window retries
-- retry lineage
-- incremental fact writes
+- explicit bootstrap and forward windows
+- failure handling and same-window retries
+- retry lineage and incremental fact writes
 - exact M8/M9 run correlation
 - BigQuery transaction and CAS protection
-- real success, failure, retry, and stale-write validation
+- operational portal and reliability views
+- finding detail view
+- state-level analytics map
+- deterministic Business Decision Model v1
+- statistical Review Diagnostic v2
+- service-layer integrity checks
+- portal security headers
+- portal regression tests
 
 Not implemented yet:
 
 - scheduled Cloud Run entry through `run_window_controller.py`
-- portal UI
-- geospatial analytics UI
 - automatic retry limit
 - automatic quarantine policy and release workflow
 - replay and backfill
 - historical resume workflow
+- application-level login for a public portal deployment
 - alert delivery
 
 ---
 
 ## Next architecture work
 
-### M10 portal and analytics
-
-The portal will keep business analytics and operational monitoring as separate views over BigQuery data.
-
-Planned routes include:
-
-```text
-/overview
-/analytics
-/reliability
-/findings/[findingId]
-```
-
-The first map slice will use a small BigQuery state-level aggregate for Brazil with CARTO and deck.gl.
-
-The portal should read through a backend/API layer instead of connecting React directly to BigQuery.
-
 ### M11 replay and recovery
 
-M11 will add controlled historical processing:
+M11 will add controlled historical processing. The default playback window will be one month.
 
+Planned work:
+
+- monthly window planning
 - one-window replay
 - multi-window backfill
 - resume after failure
 - idempotency checks
 - incremental-versus-replay comparison
-- separate audit history
+- separate replay audit state
 
-Replay must not silently move the normal forward watermark backward.
+Replay state must stay separate from the normal forward watermark.
+
+The project will first produce and validate the monthly history. Trend analysis, seasonality, and forecasting are not part of the current M11 scope.
 
 ---
 

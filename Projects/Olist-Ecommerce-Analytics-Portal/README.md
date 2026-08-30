@@ -2,13 +2,13 @@
 
 ## Overview
 
-This project builds an e-commerce analytics pipeline on the Olist Brazilian E-Commerce dataset.
+This project builds an e-commerce analytics and data reliability workflow on the Olist Brazilian E-Commerce dataset.
 
-It covers the main path from raw data to analytics tables, scheduled dbt execution, pipeline monitoring, rule-based quality review, and window-based processing control.
+It covers the path from raw data to analytics tables, scheduled dbt execution, monitoring, deterministic review, window control, and a small operational and analytics portal.
 
 Current implementation includes:
 
-- BigQuery raw, staging, intermediate, marts, monitoring, and control datasets
+- BigQuery raw, staging, intermediate, marts, monitoring, control, and analytics datasets
 - dbt models, tests, documentation, and lineage
 - dimensional models for orders, customers, sellers, products, payments, items, and reviews
 - Dockerized dbt execution on Google Cloud Run Jobs
@@ -17,8 +17,13 @@ Current implementation includes:
 - deterministic pipeline checks R001-R006
 - window and watermark control with retry and audit history
 - exact correlation from a control attempt to its monitoring run
+- Next.js operational and analytics portal
+- Brazil state-level geospatial analytics
+- deterministic business actions and statistical review diagnostics
+- service-layer integrity checks before persisted diagnostic data reaches the UI
+- basic portal security headers and removal of unused API routes
 
-The operational and analytics portal is the next M10 area. Replay and backfill remain planned for M11.
+M10 is complete. M11 is reserved for replay, backfill, resume, and recovery. The default replay window will be one month. Trend analysis is not part of the current M11 scope; it will be considered only after the monthly history has been produced and reviewed.
 
 ---
 
@@ -35,11 +40,10 @@ The operational and analytics portal is the next M10 area. Replay and backfill r
 | M7 - Cloud Orchestration | Completed | Docker, Cloud Run Job, and Cloud Scheduler |
 | M8 - Pipeline Monitoring | Completed | Six append-only monitoring tables from dbt artifacts |
 | M9 - Pipeline Quality Reviewer | Completed | Deterministic rules R001-R006 and optional Vertex AI explanations |
-| M10 U1 - Window / Watermark Control | Completed | Window state, retries, audit history, exact M8/M9 run correlation, and BigQuery CAS protection |
-| M10 Portal / Analytics | In progress | Operational UI and geospatial analytics |
-| M11 - Replay / Backfill / Recovery | Planned | Historical replay, backfill, resume, and consistency checks |
+| M10 - Window Control, Portal & Analytics | Completed | Window control, operational portal, analytics, statistical diagnostics, and security hardening |
+| M11 - Replay / Backfill / Recovery | Planned | Monthly playback, backfill, resume, and consistency checks |
 
-M10 U1 real validation was completed on **2026-08-15**.
+M10 U1 real validation was completed on **2026-08-15**. The portal, analytics, integrity, and security work was completed in August 2026.
 
 ---
 
@@ -56,8 +60,9 @@ M10 U1 real validation was completed on **2026-08-15**.
 | Cloud execution | Google Cloud Run Jobs, Cloud Scheduler |
 | Containerization | Docker, Artifact Registry |
 | Optional explanation | Vertex AI |
-| Planned portal | Next.js, React, TypeScript |
-| Planned maps | CARTO, deck.gl |
+| Portal | Next.js, React, TypeScript |
+| Maps | MapLibre / react-map-gl, deck.gl, CARTO basemap |
+| Testing | Python `unittest`, Vitest, dbt tests |
 | Workflow | Git, GitHub Projects |
 
 ---
@@ -127,10 +132,34 @@ failure: keep watermark and retry same window
 
 The current Cloud Scheduler configuration still starts the Cloud Run Job through `run_dbt_job.sh`. That path can run in full-history compatibility mode. The M10 controller has been validated as a window-controlled runtime, but the scheduled Cloud Run entry point has not yet been switched to the controller.
 
+### 4. M10 portal serving path
+
+```text
+Next.js Server Component
+        ↓
+     service
+        ↓
+   repository
+        ↓
+     BigQuery
+```
+
+The portal does not add an HTTP API layer where one is not needed. Server-rendered pages call the service and repository layers directly.
+
+The main routes are:
+
+```text
+/overview
+/analytics
+/reliability
+/findings/[findingId]
+```
+
 Detailed documents:
 
 - [`docs/architecture.md`](docs/architecture.md)
 - [`docs/m10_window_control.md`](docs/m10_window_control.md)
+- [`docs/m10_portal_analytics.md`](docs/m10_portal_analytics.md)
 - [`docs/metadata_refresh.md`](docs/metadata_refresh.md)
 - [`docs/orchestration.md`](docs/orchestration.md)
 - [`docs/m9_expert_system_closing.md`](docs/m9_expert_system_closing.md)
@@ -311,7 +340,7 @@ Current M10 validation build:
 118 / 118 PASS
 ```
 
-Current Python unit-test inventory:
+Current backend unit-test inventory:
 
 ```text
 M10 window controller:        52 tests
@@ -321,7 +350,13 @@ M9 pipeline reviewer:         53 tests
 Total:                       110 tests
 ```
 
-The older M8 counts remain useful as historical evidence. They are not the current model/test count after the M10 window model was added.
+Current portal test inventory:
+
+```text
+Vitest:                       21 / 21 PASS
+```
+
+The older M8 counts remain useful as historical evidence. They are not the current model/test count after the M10 window model and portal work were added.
 
 ---
 
@@ -618,45 +653,46 @@ Implemented now:
 - retry attempts and audit history
 - exact control-attempt to monitoring-run correlation
 - BigQuery compare-and-set protection
+- Next.js operational portal
+- reliability overview and finding detail pages
+- Brazil state-level analytics map and linked KPI selection
+- deterministic Business Decision Model v1
+- statistical Review Diagnostic v2
+- service-layer verification of diagnostic fields, residuals, classification, model version, and generation timestamp
+- portal security headers
+- removal of unused API routes
+- portal regression tests with Vitest
 
 Not implemented yet:
 
 - switching the existing Cloud Scheduler / Cloud Run entry point to `run_window_controller.py`
-- M10 operational portal
-- M10 analytics and geospatial UI
 - automatic retry limits and automatic quarantine policy
 - M11 replay and multi-window backfill
 - M11 resume and historical recovery workflows
+- application-level authentication for a public deployment
 - alert delivery
+
+The current portal is suitable for local and portfolio use. A public or shared production deployment should add organization authentication and use a least-privilege service account.
 
 ---
 
 ## Next work
 
-### M10 portal and analytics
-
-The next M10 work will add a small operational and analytics portal.
-
-Planned stack:
-
-```text
-Next.js + React + TypeScript
-BigQuery
-CARTO + deck.gl
-```
-
-The first analytics slice will use a state-level Brazil aggregate and link map selection to KPIs, trends, and detail views.
-
 ### M11 replay and recovery
 
-M11 will focus on controlled historical processing:
+M11 will focus on controlled historical processing. The default playback window will be one month.
 
-- replay one window
-- backfill several windows
+Planned work:
+
+- generate monthly replay windows
+- replay one or several historical windows
 - resume after failure
-- keep writes idempotent
+- keep replay writes idempotent
+- keep replay state separate from the normal forward watermark
 - compare replay and incremental results
-- keep replay control separate from the normal forward watermark
+- keep replay audit history
+
+Trend analysis is deliberately left out for now. The project will first produce the monthly history and then check whether the data shows a useful pattern. Seasonality and forecasting are not part of the current M11 plan.
 
 ---
 
