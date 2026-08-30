@@ -20,16 +20,31 @@ export class ReliabilityFindingIntegrityError extends Error {
   }
 }
 
+const MAX_FINDING_ID_LENGTH = 512
+
+const FINDING_ID_PATTERN =
+  /^[A-Za-z0-9][A-Za-z0-9._:-]*$/
+
 export async function getReliabilityFinding(
   findingId: string
 ): Promise<ReliabilityFindingDetail> {
-  if (!findingId.trim()) {
+  if (!isValidFindingId(findingId)) {
     throw new ReliabilityFindingNotFoundError()
   }
 
   const rows = await fetchReliabilityFindingRows(findingId)
 
   return mapReliabilityFinding(findingId, rows)
+}
+
+function isValidFindingId(
+  findingId: string
+): boolean {
+  return (
+    findingId.length > 0 &&
+    findingId.length <= MAX_FINDING_ID_LENGTH &&
+    FINDING_ID_PATTERN.test(findingId)
+  )
 }
 
 export function mapReliabilityFinding(

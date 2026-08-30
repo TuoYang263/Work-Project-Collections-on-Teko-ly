@@ -24,6 +24,8 @@ const VALID_DIAGNOSTIC_STATES =
     ANALYTICS_STATE_DIAGNOSTIC_STATES
   )
 
+const RESIDUAL_TOLERANCE_PP = 0.001
+
 export class AnalyticsStateDiagnosticV2IntegrityError
   extends Error {
   constructor(message: string) {
@@ -68,6 +70,30 @@ export function mapAnalyticsStateDiagnosticsV2(
 
     seenStateCodes.add(stateCode)
 
+    const evidenceCount =
+      nonNegativeInteger(
+        row.evidence_count,
+        "evidence_count"
+      )
+
+    const actualNegativeReviewRate =
+      probability(
+        row.actual_negative_review_rate,
+        "actual_negative_review_rate"
+      )
+
+    const expectedNegativeReviewRate =
+      probability(
+        row.expected_negative_review_rate,
+        "expected_negative_review_rate"
+      )
+
+    const residualPp =
+      finiteNumber(
+        row.residual_pp,
+        "residual_pp"
+      )
+
     const ciLowerPp =
       finiteNumber(
         row.ci_lower_pp,
@@ -86,33 +112,50 @@ export function mapAnalyticsStateDiagnosticsV2(
       )
     }
 
+    const expectedResidualPp =
+      (
+        actualNegativeReviewRate -
+        expectedNegativeReviewRate
+      ) * 100
+
+    if (
+      Math.abs(
+        residualPp - expectedResidualPp
+      ) > RESIDUAL_TOLERANCE_PP
+    ) {
+      throw new AnalyticsStateDiagnosticV2IntegrityError(
+        `Residual mismatch for ${stateCode}.`
+      )
+    }
+
+    const diagnosticState =
+      parseDiagnosticState(
+        row.diagnostic_state
+      )
+
+    const expectedDiagnosticState =
+      classifyDiagnosticState(
+        evidenceCount,
+        residualPp,
+        ciLowerPp,
+        ciUpperPp
+      )
+
+    if (
+      diagnosticState !==
+      expectedDiagnosticState
+    ) {
+      throw new AnalyticsStateDiagnosticV2IntegrityError(
+        `Diagnostic state mismatch for ${stateCode}: expected ${expectedDiagnosticState}, received ${diagnosticState}.`
+      )
+    }
+
     return {
       stateCode,
-
-      evidenceCount:
-        nonNegativeInteger(
-          row.evidence_count,
-          "evidence_count"
-        ),
-
-      actualNegativeReviewRate:
-        probability(
-          row.actual_negative_review_rate,
-          "actual_negative_review_rate"
-        ),
-
-      expectedNegativeReviewRate:
-        probability(
-          row.expected_negative_review_rate,
-          "expected_negative_review_rate"
-        ),
-
-      residualPp:
-        finiteNumber(
-          row.residual_pp,
-          "residual_pp"
-        ),
-
+      evidenceCount,
+      actualNegativeReviewRate,
+      expectedNegativeReviewRate,
+      residualPp,
       ciLowerPp,
       ciUpperPp,
 
@@ -122,10 +165,7 @@ export function mapAnalyticsStateDiagnosticsV2(
           "z_score"
         ),
 
-      diagnosticState:
-        parseDiagnosticState(
-          row.diagnostic_state
-        ),
+      diagnosticState,
 
       modelVersion:
         nonEmptyString(
@@ -149,6 +189,32 @@ export function mapAnalyticsStateDiagnosticsV2(
     }
   }
 
+  const expectedModelVersion =
+    diagnostics[0].modelVersion
+
+  const expectedGeneratedAt =
+    diagnostics[0].generatedAt
+
+  for (const diagnostic of diagnostics) {
+    if (
+      diagnostic.modelVersion !==
+      expectedModelVersion
+    ) {
+      throw new AnalyticsStateDiagnosticV2IntegrityError(
+        `Mixed model_version values detected: expected ${expectedModelVersion}, received ${diagnostic.modelVersion} for ${diagnostic.stateCode}.`
+      )
+    }
+
+    if (
+      diagnostic.generatedAt !==
+      expectedGeneratedAt
+    ) {
+      throw new AnalyticsStateDiagnosticV2IntegrityError(
+        `Mixed generated_at values detected: expected ${expectedGeneratedAt}, received ${diagnostic.generatedAt} for ${diagnostic.stateCode}.`
+      )
+    }
+  }
+
   return diagnostics
 }
 
@@ -165,6 +231,33 @@ function parseStateCode(
   }
 
   return value as BrazilStateCode
+}
+
+function classifyDiagnosticState(
+  evidenceCount: number,
+  residualPp: number,
+  ciLowerPp: number,
+  ciUpperPp: number
+): AnalyticsStateDiagnosticState {
+  if (evidenceCount < 100) {
+    return "INSUFFICIENT_EVIDENCE"
+  }
+
+  if (
+    residualPp >= 1 &&
+    ciLowerPp > 0
+  ) {
+    return "WORSE_THAN_EXPECTED"
+  }
+
+  if (
+    residualPp <= -1 &&
+    ciUpperPp < 0
+  ) {
+    return "BETTER_THAN_EXPECTED"
+  }
+
+  return "AS_EXPECTED"
 }
 
 function parseDiagnosticState(
