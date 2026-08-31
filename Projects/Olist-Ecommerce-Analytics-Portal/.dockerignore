@@ -21,3 +21,13 @@ kaggle.json
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Portal local and build files
+portal/node_modules/
+portal/.next/
+portal/coverage/
+
+# Generated analysis and logs
+analysis/output/
+logs/
+portal/.env*
