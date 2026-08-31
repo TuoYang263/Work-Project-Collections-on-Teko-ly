@@ -1,0 +1,87 @@
+name: Olist CI
+
+on:
+  push:
+    paths:
+      - "Projects/Olist-Ecommerce-Analytics-Portal/**"
+      - ".github/workflows/olist-ci.yml"
+  pull_request:
+    paths:
+      - "Projects/Olist-Ecommerce-Analytics-Portal/**"
+      - ".github/workflows/olist-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Olist project
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+          cache: npm
+          cache-dependency-path: Projects/Olist-Ecommerce-Analytics-Portal/portal/package-lock.json
+
+      - name: Install Portal dependencies
+        working-directory: Projects/Olist-Ecommerce-Analytics-Portal/portal
+        run: npm ci
+
+      - name: Run Portal tests
+        working-directory: Projects/Olist-Ecommerce-Analytics-Portal/portal
+        run: npm test
+
+      - name: Lint Portal
+        working-directory: Projects/Olist-Ecommerce-Analytics-Portal/portal
+        run: npm run lint
+
+      - name: Build Portal
+        working-directory: Projects/Olist-Ecommerce-Analytics-Portal/portal
+        run: npm run build
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            google-cloud-bigquery \
+            google-genai \
+            PyYAML
+
+      - name: Test window controller
+        working-directory: Projects/Olist-Ecommerce-Analytics-Portal
+        run: |
+          python -m unittest discover \
+            -s dbt/control/window_controller/tests \
+            -t dbt/control \
+            -v
+
+      - name: Test monitoring resolver
+        working-directory: Projects/Olist-Ecommerce-Analytics-Portal
+        run: |
+          python -m unittest discover \
+            -s dbt/monitoring/tests \
+            -t dbt \
+            -v
+
+      - name: Test pipeline reviewer
+        working-directory: Projects/Olist-Ecommerce-Analytics-Portal
+        run: |
+          python -m unittest discover \
+            -s dbt/monitoring/reviewer/tests \
+            -p "test_*.py" \
+            -v
