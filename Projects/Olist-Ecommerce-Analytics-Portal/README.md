@@ -544,7 +544,6 @@ Screenshots:
 ```text
 .
 ├── assets/
-├── bi/
 ├── data/
 ├── dbt/
 │   ├── control/
@@ -570,7 +569,6 @@ Screenshots:
 ├── docs/
 ├── metadata/
 ├── portal/
-└── sql/
 ```
 
 ---
