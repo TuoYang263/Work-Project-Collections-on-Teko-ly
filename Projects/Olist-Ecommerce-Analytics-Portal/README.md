@@ -1,431 +1,62 @@
 # Olist E-Commerce Analytics & Pipeline Monitoring Portal
 
-## Overview
+A production-oriented e-commerce analytics and data reliability product built on the Olist Brazilian E-Commerce dataset.
 
-This project builds an e-commerce analytics and data reliability workflow on the Olist Brazilian E-Commerce dataset.
+**Live portal:** https://olist-analytics-portal.onrender.com
+**Health check:** https://olist-analytics-portal.onrender.com/health
 
-It covers the path from raw data to analytics tables, scheduled dbt execution, monitoring, deterministic review, window control, and a small operational and analytics portal.
+> The public demo runs on Render's free tier, so the first request after inactivity can take longer while the service wakes up.
 
-Current implementation includes:
+## Project highlights
 
-- BigQuery raw, staging, intermediate, marts, monitoring, control, and analytics datasets
-- dbt models, tests, documentation, and lineage
-- dimensional models for orders, customers, sellers, products, payments, items, and reviews
-- Dockerized dbt execution on Google Cloud Run Jobs
-- Cloud Scheduler for the existing scheduled dbt job
-- append-only monitoring history built from dbt artifacts
-- deterministic pipeline checks R001-R006
-- window and watermark control with retry and audit history
-- exact correlation from a control attempt to its monitoring run
-- Next.js operational and analytics portal
-- Brazil state-level geospatial analytics
-- deterministic business actions and statistical review diagnostics
-- service-layer integrity checks before persisted diagnostic data reaches the UI
-- basic portal security headers and removal of unused API routes
+- **Analytics + reliability in one product:** business KPIs, geospatial decisions, pipeline state, quality findings, and evidence drill-down share one governed BigQuery foundation.
+- **Deterministic reliability engine:** R001-R006 evaluate persisted evidence. Optional AI explanation is downstream and cannot change rule results or severity.
+- **Explicit window semantics:** forward-only `[window_start, window_end)` processing, failure without watermark advance, same-window retry, audit history, and BigQuery transaction + CAS protection.
+- **Decision-oriented analytics:** Brazil state-level actions, priorities, and persisted statistical diagnostics validated before UI display.
+- **Separated delivery boundaries:** Portal and pipeline CI/CD are independent. GitHub-to-GCP deployment uses OIDC + Workload Identity Federation and a least-privilege deployer identity.
+- **Real validation:** 118/118 dbt checks, 116 backend Python unit tests, and 21/21 Portal Vitest tests.
 
-M10 is complete. M11 is reserved for replay, backfill, resume, and recovery. The default replay window will be one month. Trend analysis is not part of the current M11 scope; it will be considered only after the monthly history has been produced and reviewed.
+## Product preview
 
----
+![Olist analytics workspace](assets/screenshots/portal/portal-analytics-hero.png)
 
-## Current status
+The analytics workspace links commercial value and service-health evidence to state-level actions such as **Recover Service**, **Protect Value**, **Investigate**, and **Monitor**.
 
-| Milestone | Status | Main result |
-|---|---:|---|
-| M1 - Project Setup & Source Understanding | Completed | Repository structure and source review |
-| M2 - BigQuery Raw Layer | Completed | 9 source files loaded to `olist_raw` |
-| M3 - Staging Layer Planning | Completed | Staging rules and source mapping |
-| M4 - dbt Staging Layer | Completed | 9 staging views and 39 tests |
-| M5 - Dimensional Modeling / Analytics Marts | Completed | Dimensions, facts, intermediate models, and dbt docs |
-| M6 - Project Documentation Cleanup | Completed | README, architecture, and project showcase cleanup |
-| M7 - Cloud Orchestration | Completed | Docker, Cloud Run Job, and Cloud Scheduler |
-| M8 - Pipeline Monitoring | Completed | Six append-only monitoring tables from dbt artifacts |
-| M9 - Pipeline Quality Reviewer | Completed | Deterministic rules R001-R006 and optional Vertex AI explanations |
-| M10 - Window Control, Portal & Analytics | Completed | Window control, operational portal, analytics, statistical diagnostics, and security hardening |
-| M11 - Replay / Backfill / Recovery | Planned | Monthly playback, backfill, resume, and consistency checks |
+## System architecture
 
-M10 U1 real validation was completed on **2026-08-15**. The portal, analytics, integrity, and security work was completed in August 2026.
+![Olist system architecture](assets/architecture/olist-system-architecture.png)
 
----
+Editable source: [`assets/architecture/olist-system-architecture.drawio`](assets/architecture/olist-system-architecture.drawio)
 
-## Tech stack
+The current scheduled production path still invokes `run_dbt_job.sh` in full-history compatibility mode. The M10 Window Controller is implemented and validated, but it is not yet the Cloud Scheduler entry point.
 
-| Area | Tools |
-|---|---|
-| Data warehouse | Google BigQuery |
-| Transformation | dbt Core, dbt-bigquery |
-| Modeling | Dimensional modeling, star schema |
-| Data quality | dbt tests and deterministic review rules |
-| Monitoring | dbt artifacts, Python, BigQuery |
-| Window control | Python, BigQuery transactions, compare-and-set version checks |
-| Cloud execution | Google Cloud Run Jobs, Cloud Scheduler |
-| Containerization | Docker, Artifact Registry |
-| Optional explanation | Vertex AI |
-| Portal | Next.js, React, TypeScript |
-| Maps | MapLibre / react-map-gl, deck.gl, CARTO basemap |
-| Testing | Python `unittest`, Vitest, dbt tests |
-| Workflow | Git, GitHub Projects |
+## Product capabilities
 
----
+### Analytics
 
-## Architecture
+The `/analytics` workspace provides:
 
-The project has three main paths.
+- Brazil state-level order, GMV, AOV, delivery, and review evidence
+- geospatial state selection and linked KPI context
+- deterministic Business Decision Model v1
+- P1 / P2 / P3 priorities
+- Statistical Review Diagnostic v2
+- persisted diagnostic validation before rendering
 
-### 1. Business analytics path
+The current decision model classifies the 27 Brazilian states into:
 
 ```text
-Olist CSV files
-        ↓
-olist_raw
-        ↓
-olist_staging
-        ↓
-olist_intermediate
-        ↓
-olist_marts
-        ↓
-BI / analytics consumers
+Recover Service
+Protect Value
+Investigate
+Monitor
 ```
 
-### 2. Monitoring and review path
+### Reliability
 
-```text
-dbt build
-        ↓
-manifest.json + run_results.json
-        ↓
-dbt docs generate
-        ↓
-catalog.json
-        ↓
-M8 artifact parser and loader
-        ↓
-olist_monitoring
-        ↓
-M9 deterministic reviewer
-        ↓
-rule results and findings
-        ↓
-optional Vertex AI explanation
-```
+![Olist reliability workspace](assets/screenshots/portal/portal-reliability-overview.png)
 
-### 3. M10 window-controlled path
-
-```text
-olist_control
-        ↓
-claim next [start, end) window
-        ↓
-run dbt with window variables
-        ↓
-windowed transactional facts
-        ↓
-M8 monitoring run
-        ↓
-control_attempt_id → exact monitoring_run_id
-        ↓
-M9 exact-run review
-        ↓
-success: advance watermark
-failure: keep watermark and retry same window
-```
-
-The current Cloud Scheduler configuration still starts the Cloud Run Job through `run_dbt_job.sh`. That path can run in full-history compatibility mode. The M10 controller has been validated as a window-controlled runtime, but the scheduled Cloud Run entry point has not yet been switched to the controller.
-
-### 4. M10 portal serving path
-
-```text
-Next.js Server Component
-        ↓
-     service
-        ↓
-   repository
-        ↓
-     BigQuery
-```
-
-The portal does not add an HTTP API layer where one is not needed. Server-rendered pages call the service and repository layers directly.
-
-The main routes are:
-
-```text
-/overview
-/analytics
-/reliability
-/findings/[findingId]
-```
-
-Detailed documents:
-
-- [`docs/architecture.md`](docs/architecture.md)
-- [`docs/m10_window_control.md`](docs/m10_window_control.md)
-- [`docs/m10_portal_analytics.md`](docs/m10_portal_analytics.md)
-- [`docs/metadata_refresh.md`](docs/metadata_refresh.md)
-- [`docs/orchestration.md`](docs/orchestration.md)
-- [`docs/m9_expert_system_closing.md`](docs/m9_expert_system_closing.md)
-
----
-
-## Warehouse layers
-
-| Layer | Purpose | Example objects |
-|---|---|---|
-| Raw | Keep source-aligned data | `raw_orders`, `raw_order_items`, `raw_products` |
-| Staging | Clean, rename, cast, and standardize | `stg_orders`, `stg_order_items`, `stg_products` |
-| Intermediate | Reusable order-level logic and current-window order set | `int_orders_windowed`, `int_order_items_agg` |
-| Marts | Analytics-ready dimensions and facts | `fct_orders`, `dim_customers`, `dim_products` |
-| Monitoring | Append-only pipeline history | `pipeline_runs`, `test_run_results`, `model_lineage_edges` |
-| Control | Current processing state and append-only state events | `pipeline_control_state`, `pipeline_window_events` |
-
----
-
-## Source data
-
-The project uses 9 Olist source files:
-
-- customers
-- geolocation
-- orders
-- order items
-- order payments
-- order reviews
-- products
-- sellers
-- product category translation
-
-The local source files are ignored by Git.
-
-BigQuery raw tables:
-
-- `raw_customers`
-- `raw_geolocation`
-- `raw_orders`
-- `raw_order_items`
-- `raw_order_payments`
-- `raw_order_reviews`
-- `raw_products`
-- `raw_sellers`
-- `raw_product_category_translation`
-
----
-
-## dbt models
-
-### Staging
-
-The staging layer contains 9 source-aligned views.
-
-Its job is intentionally small:
-
-- basic cleaning
-- type casting
-- naming cleanup
-- stable source interfaces
-- source-level tests
-
-### Intermediate
-
-The intermediate layer contains:
-
-- `int_orders_windowed`
-- `int_order_items_agg`
-- `int_order_payments_agg`
-- `int_order_reviews_agg`
-
-`int_orders_windowed` is the M10 transaction-window anchor.
-
-When a control window is supplied, it filters `stg_orders` with a half-open range:
-
-```text
-window_start <= order_purchase_timestamp < window_end
-```
-
-The matching order IDs are then used to limit items, payments, and reviews to the same order set.
-
-### Marts
-
-Dimensions:
-
-- `dim_customers`
-- `dim_sellers`
-- `dim_products`
-- `dim_geolocation_zip_prefix`
-- `dim_dates`
-
-Facts:
-
-- `fct_orders`
-- `fct_order_items`
-- `fct_order_payments`
-- `fct_order_reviews`
-
-The dimensions remain full-history tables. The four fact models are incremental `MERGE` models with stable unique keys.
-
-```text
-full-history context
-        ↓
-dimensions
-
-stg_orders
-        ↓
-int_orders_windowed
-        ↓
-current order IDs
-   ↙      ↓       ↘
-items  payments  reviews
-   ↘      ↓       ↙
-windowed fact rows
-        ↓
-incremental MERGE
-```
-
-This keeps reference data simple while allowing the transactional path to move one window at a time.
-
----
-
-## Dimensional model
-
-### Dimensions
-
-| Model | Grain | Key |
-|---|---|---|
-| `dim_customers` | One row per customer | `customer_id` |
-| `dim_sellers` | One row per seller | `seller_id` |
-| `dim_products` | One row per product | `product_id` |
-| `dim_geolocation_zip_prefix` | One row per zip prefix | `geolocation_zip_code_prefix` |
-| `dim_dates` | One row per date | `date_day` |
-
-### Facts
-
-| Model | Grain | Key |
-|---|---|---|
-| `fct_orders` | One row per order | `order_id` |
-| `fct_order_items` | One row per order item | `order_item_key` |
-| `fct_order_payments` | One row per payment sequence | `order_payment_key` |
-| `fct_order_reviews` | One row per review and order | `review_key` |
-
-Two source details required explicit handling:
-
-- `review_id` is not unique by itself, so `fct_order_reviews` uses `review_id + order_id`.
-- geolocation has several coordinate rows per zip prefix, so the dimension keeps representative coordinates at zip-prefix grain.
-
----
-
-## Data quality
-
-The project uses repeatable checks rather than manual inspection alone.
-
-Examples:
-
-- `not_null`
-- `unique`
-- `relationships`
-- `accepted_values`
-- explicit model grain checks
-- M9 status and history rules
-
-Historical milestone validation:
-
-```text
-M4 staging tests:              39 PASS
-M5 intermediate + marts:      67 PASS
-M8 cloud build:              115 PASS
-```
-
-Current M10 validation build:
-
-```text
-22 models
-96 dbt tests
-118 / 118 PASS
-```
-
-Current backend unit-test inventory:
-
-```text
-M10 window controller:        52 tests
-M8 monitoring-run resolver:    5 tests
-M9 pipeline reviewer:         53 tests
-                              --------
-Total:                       110 tests
-```
-
-Current portal test inventory:
-
-```text
-Vitest:                       21 / 21 PASS
-```
-
-The older M8 counts remain useful as historical evidence. They are not the current model/test count after the M10 window model and portal work were added.
-
----
-
-## M7 cloud orchestration
-
-M7 deployed the dbt job to Google Cloud.
-
-```text
-Cloud Scheduler
-        ↓
-Cloud Run Job
-        ↓
-Docker container
-        ↓
-run_dbt_job.sh
-        ↓
-BigQuery
-```
-
-The existing Scheduler and Cloud Run path was validated with manual and scheduled executions.
-
-See:
-
-- [`docs/orchestration.md`](docs/orchestration.md)
-- [`docs/gcp_orchestration_commands.md`](docs/gcp_orchestration_commands.md)
-
----
-
-## M8 pipeline monitoring
-
-M8 converts dbt artifacts into append-only BigQuery records.
-
-Artifact sources:
-
-| Artifact | Main use |
-|---|---|
-| `manifest.json` | Models, tests, sources, columns, dependencies |
-| `run_results.json` | Execution status, failures, and runtime |
-| `catalog.json` | Warehouse relation and column metadata |
-
-Monitoring tables:
-
-| Table | Grain |
-|---|---|
-| `pipeline_runs` | One row per monitoring run |
-| `model_run_results` | One row per model execution per run |
-| `test_run_results` | One row per test execution per run |
-| `model_metadata_snapshots` | One row per model per run |
-| `model_column_snapshots` | One row per model/source column per run |
-| `model_lineage_edges` | One row per dependency edge per run |
-
-M10 added `control_attempt_id` to `pipeline_runs`. This allows one window-control attempt to resolve its exact monitoring run instead of reading a generic "latest run".
-
----
-
-## M9 pipeline quality reviewer
-
-M9 reads monitoring history and evaluates six deterministic rules:
-
-```text
-R001 - Pipeline Run Unsuccessful
-R002 - Model Execution Non-Success
-R003 - Test Result Non-Passing
-R004 - Model Missing from Current Run
-R005 - Row-Count Anomaly
-R006 - Runtime Regression
-```
-
-Each rule returns:
+The `/reliability` workspace reads persisted M9 review results and preserves three outcomes:
 
 ```text
 PASS
@@ -433,28 +64,123 @@ TRIGGERED
 NOT_EVALUATED
 ```
 
-`NOT_EVALUATED` keeps missing or unusable evidence visible. It is not converted to a pass.
+`NOT_EVALUATED` remains visible when evidence is missing or unusable.
 
-Historical rules use comparable successful runs with the same `job_name` and `environment`. Where needed, the baseline uses the median of up to five prior runs.
+The deterministic rule set is:
 
-Vertex AI is optional. It can explain triggered findings, but it cannot create findings or change the deterministic rule result.
+| Rule | Check |
+|---|---|
+| R001 | Pipeline Run Unsuccessful |
+| R002 | Model Execution Non-Success |
+| R003 | Test Result Non-Passing |
+| R004 | Model Missing from Current Run |
+| R005 | Row-Count Anomaly |
+| R006 | Runtime Regression |
 
-M10 window-controlled mode resolves the exact M8 `monitoring_run_id` for the current control attempt and runs M9 against that run.
+Historical comparisons use comparable successful runs with the same `job_name` and `environment`, with a median baseline over up to five prior runs where required.
 
----
+### Finding evidence
 
-## M10 U1 window and watermark control
+![Olist reliability finding detail](assets/screenshots/portal/portal-finding-detail.png)
 
-M10 U1 adds explicit processing state in BigQuery.
+Finding detail pages expose persisted evidence instead of only showing a status badge. The server validates finding identity and evidence consistency before rendering.
 
-Control tables:
+### Operational state
+
+The `/overview` workspace exposes:
+
+- pipeline state
+- environment
+- active attempt
+- control version
+- processing window / watermark
+- controller freshness
+- latest error evidence
+
+## Data platform
+
+The analytical path is:
 
 ```text
-olist_control.pipeline_control_state
-olist_control.pipeline_window_events
+Olist source data
+        ↓
+BigQuery raw
+        ↓
+dbt staging
+        ↓
+dbt intermediate
+        ↓
+dbt marts
+        ↓
+analytics serving
+        ↓
+Next.js Portal
 ```
 
-Main states:
+| Layer | Purpose |
+|---|---|
+| Raw | Source-aligned BigQuery tables |
+| Staging | Cleaning, casting, naming, stable source interfaces |
+| Intermediate | Reusable order-level logic and transaction-window anchoring |
+| Marts | Analytics-ready facts and dimensions |
+| Monitoring | Append-only pipeline, model, test, metadata, and lineage evidence |
+| Control | Current pipeline state plus append-only window events |
+| Analytics serving | State summaries and persisted diagnostic outputs |
+
+The four transactional fact models use incremental `MERGE` semantics with stable unique keys, allowing a failed window to be processed again without duplicating rows for the same keys.
+
+## Monitoring and deterministic review
+
+After dbt execution, the monitoring layer persists evidence from:
+
+```text
+manifest.json
+run_results.json
+catalog.json
+```
+
+into:
+
+```text
+pipeline_runs
+model_run_results
+test_run_results
+model_metadata_snapshots
+model_column_snapshots
+model_lineage_edges
+```
+
+M10 adds `control_attempt_id` to `pipeline_runs`, allowing a governed attempt to resolve its exact monitoring run.
+
+```text
+dbt artifacts
+    ↓
+olist_monitoring
+    ↓
+deterministic reviewer
+    ↓
+persisted evaluations / findings
+    ↓
+Portal reliability views
+```
+
+Optional Vertex AI explanation is downstream of deterministic evaluation and cannot create or modify findings.
+
+## Window and watermark control
+
+Core M10 invariants:
+
+```text
+1. The normal watermark only moves forward.
+2. A failed workload does not advance the watermark.
+3. Retry reuses the same failed window.
+4. Every retry receives a new attempt_id.
+5. State + audit-event writes commit in one BigQuery transaction.
+6. Stale concurrent writers are rejected by control_version CAS.
+7. One control attempt resolves one exact monitoring run.
+```
+
+The control state model includes:
 
 ```text
 IDLE
@@ -464,118 +190,179 @@ WAITING_RETRY
 QUARANTINED
 ```
 
-Current runtime supports normal execution and retry.
+Real validation included two failed attempts followed by a successful third attempt for the same window. The watermark remained unchanged until the successful attempt.
 
-`QUARANTINED` exists in the state model, but automatic quarantine and release are not part of U1.
+Detailed control documentation: [`docs/m10_window_control.md`](docs/m10_window_control.md)
 
-### Success path
+## Portal architecture
+
+The Portal uses a server-side boundary rather than exposing BigQuery directly to browser code:
 
 ```text
-IDLE
-  ↓ claim window
-RUNNING
-  ↓ workload succeeds
-IDLE
+Next.js Server Component
+        ↓
+Service
+        ↓
+Repository
+        ↓
+BigQuery
+```
+
+Main routes:
+
+```text
+/overview
+/analytics
+/reliability
+/findings/[findingId]
+/health
+```
+
+The service layer verifies persisted analytics diagnostics and reliability evidence before rendering.
+
+Detailed Portal documentation: [`docs/m10_portal_analytics.md`](docs/m10_portal_analytics.md)
+
+## Cloud runtime and CI/CD
+
+Current scheduled runtime:
+
+```text
+Cloud Scheduler
+      ↓
+Cloud Run Job
+      ↓
+Docker image
+      ↓
+run_dbt_job.sh
+      ↓
+dbt build + monitoring persistence
+      ↓
+BigQuery
+```
+
+Current boundaries:
+
+- Cloud Run Job: `europe-north1`
+- Cloud Scheduler: `europe-west1`
+- BigQuery: EU location
+- scheduled entry point: `run_dbt_job.sh`
+- no control window → full-history compatibility mode
+
+The monorepo separates delivery paths:
+
+```text
+portal/**
+   ↓
+Portal CI
+   ↓
+Vitest + lint + Next.js build
+   ↓
+Render
+
+dbt/**
   ↓
-watermark advances to the completed window end
+Pipeline CI/CD
+  ↓
+Python tests + shell validation + Docker smoke
+  ↓
+main branch only
+  ↓
+GitHub OIDC
+  ↓
+Google Workload Identity Federation
+  ↓
+least-privilege deployer
+  ↓
+Artifact Registry
+  ↓
+Cloud Run Job update
 ```
 
-### Failure and retry path
+Feature branches can validate the pipeline, but the GCP deploy job is skipped. The GCP Workload Identity Provider also restricts trust to the expected repository and `main` branch.
 
-```text
-RUNNING
-  ↓ workload fails
-FAILED
-  ↓ retry requested
-WAITING_RETRY
-  ↓ new attempt, same window
-RUNNING
-```
+GitHub does not store a long-lived GCP service-account JSON key for pipeline deployment.
 
-A failed attempt does not advance the watermark.
+See [`docs/deployment.md`](docs/deployment.md).
 
-Each retry:
+## Validation
 
-- keeps the same window
-- gets a new `attempt_id`
-- increments `attempt_number`
-- stores `retry_of_attempt_id`
+| Area | Result |
+|---|---:|
+| dbt project | 22 models |
+| dbt tests | 96 tests |
+| dbt validation build | 118 / 118 PASS |
+| Window Controller | 52 unit tests |
+| Monitoring run resolver | 5 unit tests |
+| Pipeline reviewer | 59 unit tests |
+| Backend Python unit tests | 116 total |
+| Portal Vitest | 21 / 21 PASS |
+| Portal lint | PASS |
+| Portal production build | PASS |
+| npm audit | 0 vulnerabilities |
 
-The controller writes state and the matching audit event in one BigQuery transaction. A `control_version` compare-and-set check rejects stale writers.
+The pipeline Docker image is also smoke-tested for required runtime files, governed-window support, and Python dependencies.
 
-Real validation showed two failed attempts followed by a successful third attempt for the same window. The watermark moved only after the successful attempt.
+## Tech stack
 
-See [`docs/m10_window_control.md`](docs/m10_window_control.md).
-
----
-
-## dbt docs and lineage
-
-Useful local commands:
-
-```bash
-cd dbt
-dbt docs generate
-dbt docs serve --port 8081
-```
-
-Screenshots:
-
-### Project overview
-
-![dbt docs project overview](assets/screenshots/dbt_docs/dbt_docs_project_overview.jpg)
-
-### `fct_orders` lineage
-
-![fct_orders lineage](assets/screenshots/dbt_docs/fct_orders_lineage.jpg)
-
-### `fct_order_reviews` lineage
-
-![fct_order_reviews lineage](assets/screenshots/dbt_docs/fct_order_reviews_lineage.jpg)
-
-### Marts tests
-
-![marts tests overview](assets/screenshots/dbt_docs/marts_tests_overview.png)
-
----
+| Area | Technology |
+|---|---|
+| Warehouse | Google BigQuery |
+| Transformation | dbt Core, dbt-bigquery |
+| Modeling | Dimensional modeling, incremental MERGE |
+| Monitoring | dbt artifacts, Python, BigQuery |
+| Reliability | Deterministic Python rules R001-R006 |
+| Window control | Python, BigQuery transactions, CAS |
+| Cloud runtime | Cloud Run Jobs, Cloud Scheduler |
+| Containers | Docker, Artifact Registry |
+| Portal | Next.js, React, TypeScript |
+| Geospatial | MapLibre, deck.gl, CARTO basemap |
+| Statistics | Persisted logistic-regression diagnostics |
+| CI/CD | GitHub Actions, OIDC, Workload Identity Federation |
+| Portal hosting | Render |
 
 ## Repository structure
 
+A compact project-level view is enough for navigation:
+
 ```text
 .
+├── analysis/               # statistical / business-decision diagnostics
 ├── assets/
-├── data/
+│   ├── architecture/
+│   └── screenshots/
+├── data/                   # local raw data is ignored
 ├── dbt/
-│   ├── control/
-│   │   ├── bootstrap_window_control.py
-│   │   ├── run_window_controller.py
-│   │   └── window_controller/
+│   ├── control/            # M10 state controller
 │   ├── models/
-│   │   ├── staging/
-│   │   ├── intermediate/
-│   │   └── marts/
-│   ├── monitoring/
-│   │   ├── artifact_parser.py
-│   │   ├── load_artifacts_to_bigquery.py
-│   │   ├── monitoring_run_resolver.py
-│   │   ├── resolve_monitoring_run.py
-│   │   └── reviewer/
+│   ├── monitoring/         # M8 evidence + M9 reviewer
 │   ├── sql/
-│   │   ├── control/
-│   │   └── monitoring/
 │   ├── Dockerfile
-│   ├── profiles.yml.template
 │   └── run_dbt_job.sh
 ├── docs/
 ├── metadata/
-├── portal/
+├── portal/                 # Next.js product
+└── scripts/
 ```
 
----
+Detailed implementation and milestone evidence remain in `docs/`, `metadata/`, and the code instead of being duplicated here.
 
-## Local usage
+## Documentation
 
-### Standard dbt development
+Start with [`docs/README.md`](docs/README.md).
+
+Current-system documents:
+
+- [`docs/architecture.md`](docs/architecture.md) - current architecture and boundaries
+- [`docs/deployment.md`](docs/deployment.md) - Render, GCP runtime, CI/CD, OIDC/WIF
+- [`docs/m10_window_control.md`](docs/m10_window_control.md) - control state, retry, transaction, CAS
+- [`docs/m10_portal_analytics.md`](docs/m10_portal_analytics.md) - Portal, analytics, reliability, diagnostics
+- [`docs/m9_expert_system_closing.md`](docs/m9_expert_system_closing.md) - final deterministic reviewer state
+
+Earlier milestone/design documents are retained as historical engineering evidence.
+
+## Local development
+
+dbt:
 
 ```bash
 cd dbt
@@ -583,127 +370,34 @@ dbt debug
 dbt build
 ```
 
-### Window-control unit tests
-
-From the project root:
+Portal:
 
 ```bash
-python -m unittest discover \
-  -s dbt/control/window_controller/tests \
-  -t dbt/control \
-  -v
+cd portal
+npm ci
+npm run dev
 ```
 
-### Initialize control state
+Backend unit tests are documented in [`docs/m10_window_control.md`](docs/m10_window_control.md) and [`docs/deployment.md`](docs/deployment.md).
 
-Initialization is explicit and should be done once per pipeline/environment pair.
+Non-production controller runs must use an isolated dbt dataset rather than the production `olist` dataset.
 
-```bash
-python dbt/control/bootstrap_window_control.py \
-  --project-id "$DBT_PROJECT_ID" \
-  --pipeline-name olist-dbt-build-job \
-  --environment validation \
-  --location EU
-```
+## Current boundary and M11
 
-### Run one validation window
+M10 is complete.
 
-```bash
-python dbt/control/run_window_controller.py \
-  --project-id "$DBT_PROJECT_ID" \
-  --pipeline-name olist-dbt-build-job \
-  --environment validation \
-  --dbt-dataset olist_validation \
-  --location EU \
-  --initial-start 2016-09-04T00:00:00+00:00 \
-  --window-size-hours 24
-```
+The current scheduled Cloud Run path remains deliberately compatible with full-history execution. The M10 Window Controller is validated separately and has not replaced the Scheduler entry point.
 
-### Retry the current failed window
+M11 is reserved for controlled historical playback and recovery:
 
-```bash
-python dbt/control/run_window_controller.py \
-  --project-id "$DBT_PROJECT_ID" \
-  --pipeline-name olist-dbt-build-job \
-  --environment validation \
-  --dbt-dataset olist_validation \
-  --location EU \
-  --retry
-```
-
-Non-production controller runs must use an isolated dbt dataset instead of the default `olist` dataset.
-
----
-
-## Current boundary
-
-Implemented now:
-
-- layered BigQuery warehouse
-- dbt transformations and tests
-- dimensional marts
-- dbt docs and lineage
-- scheduled Cloud Run dbt job
-- append-only monitoring history
-- deterministic M9 review rules
-- optional explanation for triggered findings
-- M10 window and watermark control
-- retry attempts and audit history
-- exact control-attempt to monitoring-run correlation
-- BigQuery compare-and-set protection
-- Next.js operational portal
-- reliability overview and finding detail pages
-- Brazil state-level analytics map and linked KPI selection
-- deterministic Business Decision Model v1
-- statistical Review Diagnostic v2
-- service-layer verification of diagnostic fields, residuals, classification, model version, and generation timestamp
-- portal security headers
-- removal of unused API routes
-- portal regression tests with Vitest
-
-Not implemented yet:
-
-- switching the existing Cloud Scheduler / Cloud Run entry point to `run_window_controller.py`
-- automatic retry limits and automatic quarantine policy
-- M11 replay and multi-window backfill
-- M11 resume and historical recovery workflows
-- application-level authentication for a public deployment
-- alert delivery
-
-The current portal is suitable for local and portfolio use. A public or shared production deployment should add organization authentication and use a least-privilege service account.
-
----
-
-## Next work
-
-### M11 replay and recovery
-
-M11 will focus on controlled historical processing. The default playback window will be one month.
-
-Planned work:
-
-- generate monthly replay windows
-- replay one or several historical windows
+- monthly replay windows
+- one-window and multi-window backfill
 - resume after failure
-- keep replay writes idempotent
-- keep replay state separate from the normal forward watermark
-- compare replay and incremental results
-- keep replay audit history
+- replay idempotency
+- replay vs incremental consistency checks
+- separate replay state from the normal forward watermark
+- replay audit history
 
-Trend analysis is deliberately left out for now. The project will first produce the monthly history and then check whether the data shows a useful pattern. Seasonality and forecasting are not part of the current M11 plan.
+Replay must never silently move the normal incremental watermark backward.
 
----
-
-## Project approach
-
-The project is built milestone by milestone.
-
-The main rules are simple:
-
-- keep each milestone small enough to verify
-- make data grain and state changes explicit
-- validate before moving on
-- keep historical monitoring records instead of overwriting them
-- use deterministic checks for pass/fail decisions
-- use optional model explanations only after the facts are known
-- keep future work separate from completed work
+Application-level authentication and alert delivery are outside the current M10 boundary.
