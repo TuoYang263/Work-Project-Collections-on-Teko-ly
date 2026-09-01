@@ -1,0 +1,41 @@
+# Local raw and sample data
+data/raw/*
+!data/raw/.gitkeep
+
+data/sample/*
+!data/sample/.gitkeep
+
+# Kaggle credentials
+kaggle.json
+.kaggle/
+
+# Environment files
+.env
+.env.*
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+
+# dbt artifacts
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/.user.yml
+
+# local dbt profiles should stay outside the repo
+profiles.yml
+
+# logs
+logs/
+
+# dbt local/runtime profiles
+dbt/profiles.yml
+
+# Generated statistical analysis outputs
+analysis/output/

@@ -1,0 +1,299 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: >
+      Cleaned customer records from the Olist raw customers table.
+      Each row represents one customer record used in an order.
+    columns:
+      - name: customer_id
+        description: Unique customer identifier at order-level customer grain.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: customer_unique_id
+        description: Identifier for the same real-world customer across multiple orders.
+        data_tests:
+          - not_null
+
+      - name: customer_zip_code_prefix
+        description: Customer ZIP code prefix, standardized as string.
+
+      - name: customer_city
+        description: Customer city, trimmed and lowercased.
+
+      - name: customer_state
+        description: Customer state abbreviation, trimmed and uppercased.
+
+  - name: stg_geolocation
+    description: >
+      Cleaned Brazilian geolocation reference data by ZIP code prefix.
+      Multiple rows can exist for the same ZIP code prefix.
+    columns:
+      - name: geolocation_zip_code_prefix
+        description: ZIP code prefix for geolocation reference data.
+        data_tests:
+          - not_null
+
+      - name: geolocation_lat
+        description: Latitude of the ZIP code prefix location.
+
+      - name: geolocation_lng
+        description: Longitude of the ZIP code prefix location.
+
+      - name: geolocation_city
+        description: Geolocation city, trimmed and lowercased.
+
+      - name: geolocation_state
+        description: Geolocation state abbreviation, trimmed and uppercased.
+
+  - name: stg_orders
+    description: >
+      Cleaned order lifecycle records. Each row represents one order.
+    columns:
+      - name: order_id
+        description: Unique order identifier.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: customer_id
+        description: Customer identifier linked to stg_customers.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+
+      - name: order_status
+        description: Current lifecycle status of the order.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - approved
+                  - canceled
+                  - created
+                  - delivered
+                  - invoiced
+                  - processing
+                  - shipped
+                  - unavailable
+
+      - name: order_purchase_timestamp
+        description: Timestamp when the order was purchased.
+        data_tests:
+          - not_null
+
+      - name: order_approved_at
+        description: Timestamp when the order payment was approved.
+
+      - name: order_delivered_carrier_date
+        description: Timestamp when the order was delivered to the carrier.
+
+      - name: order_delivered_customer_date
+        description: Timestamp when the order was delivered to the customer.
+
+      - name: order_estimated_delivery_date
+        description: Estimated delivery timestamp for the order.
+
+  - name: stg_order_items
+    description: >
+      Cleaned order item records. Each row represents one item within an order.
+    columns:
+      - name: order_id
+        description: Order identifier linked to stg_orders.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+
+      - name: order_item_id
+        description: Sequence number of the item within an order.
+        data_tests:
+          - not_null
+
+      - name: product_id
+        description: Product identifier linked to stg_products.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_products')
+                field: product_id
+
+      - name: seller_id
+        description: Seller identifier linked to stg_sellers.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_sellers')
+                field: seller_id
+
+      - name: shipping_limit_date
+        description: Deadline timestamp for seller shipping.
+
+      - name: price
+        description: Item price.
+        data_tests:
+          - not_null
+
+      - name: freight_value
+        description: Freight value for the item.
+        data_tests:
+          - not_null
+
+  - name: stg_order_payments
+    description: >
+      Cleaned payment records. An order can have multiple payment records.
+    columns:
+      - name: order_id
+        description: Order identifier linked to stg_orders.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+
+      - name: payment_sequential
+        description: Sequential number of the payment record within an order.
+        data_tests:
+          - not_null
+
+      - name: payment_type
+        description: Type of payment used for the order.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - boleto
+                  - credit_card
+                  - debit_card
+                  - not_defined
+                  - voucher
+
+      - name: payment_installments
+        description: Number of payment installments.
+        data_tests:
+          - not_null
+
+      - name: payment_value
+        description: Payment value.
+        data_tests:
+          - not_null
+
+  - name: stg_order_reviews
+    description: >
+      Cleaned customer review records linked to orders.
+      An order can have review information including score, title, message, and timestamps.
+    columns:
+      - name: review_id
+        description: Review identifier.
+        data_tests:
+          - not_null
+
+      - name: order_id
+        description: Order identifier linked to stg_orders.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+
+      - name: review_score
+        description: Customer review score from 1 to 5.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+
+      - name: review_comment_title
+        description: Optional review title.
+
+      - name: review_comment_message
+        description: Optional review message.
+
+      - name: review_creation_date
+        description: Timestamp when the review was created.
+
+      - name: review_answer_timestamp
+        description: Timestamp when the review was answered.
+
+  - name: stg_products
+    description: >
+      Cleaned product records. Each row represents one product.
+    columns:
+      - name: product_id
+        description: Unique product identifier.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: product_category_name
+        description: Product category name in Portuguese, trimmed and lowercased.
+
+      - name: product_name_length
+        description: Length of the product name. Source field spelling corrected from product_name_lenght.
+
+      - name: product_description_length
+        description: Length of the product description. Source field spelling corrected from product_description_lenght.
+
+      - name: product_photos_qty
+        description: Number of product photos.
+
+      - name: product_weight_g
+        description: Product weight in grams.
+
+      - name: product_length_cm
+        description: Product length in centimeters.
+
+      - name: product_height_cm
+        description: Product height in centimeters.
+
+      - name: product_width_cm
+        description: Product width in centimeters.
+
+  - name: stg_sellers
+    description: >
+      Cleaned seller records. Each row represents one seller.
+    columns:
+      - name: seller_id
+        description: Unique seller identifier.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: seller_zip_code_prefix
+        description: Seller ZIP code prefix, standardized as string.
+
+      - name: seller_city
+        description: Seller city, trimmed and lowercased.
+
+      - name: seller_state
+        description: Seller state abbreviation, trimmed and uppercased.
+
+  - name: stg_product_category_translation
+    description: >
+      Product category translation mapping from Portuguese category names to English category names.
+    columns:
+      - name: product_category_name
+        description: Product category name in Portuguese.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: product_category_name_english
+        description: Product category name translated into English.
+        data_tests:
+          - not_null

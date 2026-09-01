@@ -1,0 +1,125 @@
+version: 2
+
+models:
+  - name: int_order_items_agg
+    description: "Order-level aggregation of item, product, seller, price, and freight metrics from staged order items."
+    columns:
+      - name: order_id
+        description: "Unique order identifier. Grain of this intermediate model."
+        tests:
+          - not_null
+          - unique
+
+      - name: order_total_items
+        description: "Total number of order item rows in the order."
+
+      - name: distinct_products_count
+        description: "Number of distinct products in the order."
+
+      - name: distinct_sellers_count
+        description: "Number of distinct sellers involved in the order."
+
+      - name: item_total_value
+        description: "Total item price value for the order."
+
+      - name: freight_total_value
+        description: "Total freight value for the order."
+
+      - name: order_gross_value
+        description: "Total gross order value, calculated as item total value plus freight total value."
+
+      - name: first_shipping_limit_date
+        description: "Earliest shipping limit timestamp among order items."
+
+      - name: last_shipping_limit_date
+        description: "Latest shipping limit timestamp among order items."
+  
+  - name: int_order_payments_agg
+    description: "Order-level aggregation of payment metrics from staged order payments."
+    columns:
+      - name: order_id
+        description: "Unique order identifier. Grain of this intermediate model."
+        tests:
+          - not_null
+          - unique
+
+      - name: payment_count
+        description: "Number of payment records associated with the order."
+
+      - name: payment_method_count
+        description: "Number of distinct payment types used for the order."
+
+      - name: max_payment_installments
+        description: "Maximum number of installments used in the order payments."
+
+      - name: payment_total_value
+        description: "Total payment value for the order."
+
+      - name: avg_payment_value
+        description: "Average payment value across payment records for the order."
+
+      - name: min_payment_value
+        description: "Minimum payment value across payment records for the order."
+
+      - name: max_payment_value
+        description: "Maximum payment value across payment records for the order."
+  
+  - name: int_order_reviews_agg
+    description: "Order-level aggregation of review metrics from staged order reviews."
+    columns:
+      - name: order_id
+        description: "Unique order identifier. Grain of this intermediate model."
+        tests:
+          - not_null
+          - unique
+
+      - name: review_count
+        description: "Number of reviews associated with the order."
+
+      - name: avg_review_score
+        description: "Average review score for the order."
+
+      - name: min_review_score
+        description: "Minimum review score for the order."
+
+      - name: max_review_score
+        description: "Maximum review score for the order."
+
+      - name: review_with_title_count
+        description: "Number of reviews with a non-null review title."
+
+      - name: review_with_message_count
+        description: "Number of reviews with a non-null review message."
+
+      - name: first_review_creation_date
+        description: "Earliest review creation date for the order."
+
+      - name: last_review_creation_date
+        description: "Latest review creation date for the order."
+
+      - name: first_review_answer_timestamp
+        description: "Earliest review answer timestamp for the order."
+
+      - name: last_review_answer_timestamp
+        description: "Latest review answer timestamp for the order."
+
+      - name: has_review
+        description: "Boolean flag indicating that the order has at least one review record in this intermediate model."
+
+  - name: int_orders_windowed
+    description: >
+      Window-scoped order stream used by the M10 governed
+      transactional processing path. When control window
+      variables are omitted, the model remains full-history
+      compatible.
+    columns:
+      - name: order_id
+        description: "Unique order identifier."
+        tests:
+          - not_null
+          - unique
+
+      - name: order_purchase_timestamp
+        description: >
+          Order purchase timestamp used as the governed
+          processing-window boundary.

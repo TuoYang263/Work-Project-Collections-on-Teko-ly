@@ -1,0 +1,60 @@
+# Project name used by dbt.
+# This name must match the top-level key under "models" below.
+name: 'olist_ecommerce_analytics'
+
+# Internal project version. This is mainly for project metadata.
+version: '1.0.0'
+
+# dbt project configuration format version.
+# For modern dbt projects, this should normally stay as 2.
+config-version: 2
+
+# The dbt profile name.
+# dbt will look for this profile in your local ~/.dbt/profiles.yml file.
+# This file should NOT be committed to GitHub because it contains local/cloud connection settings.
+profile: 'olist_ecommerce_analytics'
+
+# Folder locations used by dbt.
+# These paths are relative to this dbt_project.yml file.
+model-paths: ['models']          # SQL models, such as staging and marts
+analysis-paths: ['analyses']     # Optional ad-hoc analysis SQL files
+test-paths: ['tests']            # Custom data tests
+seed-paths: ['seeds']            # Static CSV files loaded by dbt, if needed later
+macro-paths: ['macros']          # Reusable SQL/Jinja macros
+snapshot-paths: ['snapshots']    # Snapshot models for slowly changing records, if needed later
+
+# Folder where dbt writes compiled SQL and run artifacts.
+# This should be ignored by Git.
+target-path: 'target'
+
+# Folders removed when running "dbt clean".
+clean-targets:
+  - 'target'
+  - 'dbt_packages'
+
+# Model-level configuration.
+# The key "olist_ecommerce_analytics" must match the project name above.
+models:
+  olist_ecommerce_analytics:
+
+    # Staging models clean and standardize raw source tables.
+    # In BigQuery, if profiles.yml uses dataset: olist,
+    # this will create models under the dataset: olist_staging.
+    staging:
+      +materialized: view
+      +schema: staging
+
+    # Intermediate models contain reusable transformations and aggregations
+    # between staging and marts.
+    # In BigQuery, if profiles.yml uses dataset: olist,
+    # this will create models under the dataset: olist_intermediate.
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+
+    # Mart models will contain BI-ready fact and dimension tables later.
+    # In BigQuery, if profiles.yml uses dataset: olist,
+    # this will create models under the dataset: olist_marts.
+    marts:
+      +materialized: table
+      +schema: marts

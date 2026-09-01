@@ -1,0 +1,13 @@
+olist_ecommerce_analytics:
+  target: ${DBT_TARGET}
+  outputs:
+    ${DBT_TARGET}:
+      type: bigquery
+      method: oauth
+      project: ${DBT_PROJECT_ID}
+      dataset: ${DBT_DATASET}
+      location: ${DBT_LOCATION}
+      threads: ${DBT_THREADS}
+      timeout_seconds: 300
+      priority: interactive
+      retries: 1
