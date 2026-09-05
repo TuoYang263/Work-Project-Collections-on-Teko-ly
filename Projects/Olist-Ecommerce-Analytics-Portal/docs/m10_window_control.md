@@ -1,4 +1,4 @@
-# M10 \- Window and Watermark Control
+# M10 - Window and Watermark Control
 
 ## Status
 
@@ -11,7 +11,7 @@ M10 adds explicit governed processing state around the Olist dbt workload and de
 
 The central invariant is:
 
-\> A processing window advances the successful watermark only after the complete controlled workload succeeds.
+> A processing window advances the successful watermark only after the complete controlled workload succeeds.
 
 If the workload fails:
 
@@ -21,7 +21,7 @@ failed window stays identifiable
 retry reuses the same window
 ```
 
-\---
+---
 
 ## Why this exists
 
@@ -29,7 +29,7 @@ Before M10, the project could run dbt, persist monitoring evidence, review monit
 
 M10 adds that control plane.
 
-\---
+---
 
 ## Main components
 
@@ -50,7 +50,7 @@ dbt/monitoring/monitoring_run_resolver.py
 dbt/monitoring/resolve_monitoring_run.py
 ```
 
-\---
+---
 
 ## BigQuery control tables
 
@@ -82,7 +82,7 @@ This table is append-only and stores every accepted transition with cycle, windo
 
 The state table answers "where are we now?". The event table answers "how did we get here?".
 
-\---
+---
 
 ## Cycle migration
 
@@ -91,18 +91,18 @@ M10 originally validated forward processing using 24-hour historical windows bef
 Existing control history was preserved and classified as:
 
 ```text
-cycle_id \= 0
+cycle_id = 0
 ```
 
 The first deployed calendar-month production simulation begins with:
 
 ```text
-cycle_id \= 1
+cycle_id = 1
 ```
 
 The migration preserved current state, `control_version`, successful watermark, event count, and audit history.
 
-\---
+---
 
 ## State model
 
@@ -120,7 +120,7 @@ RUNNING
 
 `QUARANTINED` is also defined.
 
-\---
+---
 
 ## Explicit initialization
 
@@ -135,26 +135,26 @@ bootstrap_window_control.py
 Initial state:
 
 ```text
-state \= IDLE
-control_version \= 0
-last_successful_window \= NULL
-active_attempt \= NULL
+state = IDLE
+control_version = 0
+last_successful_window = NULL
+active_attempt = NULL
 ```
 
 A second bootstrap attempt is rejected.
 
-\---
+---
 
 ## Production source bounds
 
 ```text
-SOURCE_START \= 2016-09-01T00:00:00+00:00
-SOURCE_END   \= 2018-11-01T00:00:00+00:00
+SOURCE_START = 2016-09-01T00:00:00+00:00
+SOURCE_END   = 2018-11-01T00:00:00+00:00
 ```
 
 These bounds define the historical production simulation.
 
-\---
+---
 
 ## Calendar-month window rule
 
@@ -169,12 +169,12 @@ Production processing uses half-open calendar-month windows:
 Within one cycle:
 
 ```text
-next_window.start \= last_successful_window.end
+next_window.start = last_successful_window.end
 ```
 
 The next end is the following calendar-month boundary.
 
-\---
+---
 
 ## Cycle rollover
 
@@ -183,19 +183,19 @@ If the current successful window ends before `SOURCE_END`, the controller stays 
 If:
 
 ```text
-last_successful_window_end \== SOURCE_END
+last_successful_window_end == SOURCE_END
 ```
 
 the controller starts:
 
 ```text
-cycle_id \= previous cycle_id \+ 1
-window_start \= SOURCE_START
+cycle_id = previous cycle_id + 1
+window_start = SOURCE_START
 ```
 
 The previous cycle is not rewound.
 
-\---
+---
 
 ## Production-cycle interpretation
 
@@ -211,7 +211,7 @@ one successful historical cycle takes roughly 26 scheduled hours, assuming one s
 
 This creates an observable production simulation for the public portfolio system; it is not intended to mimic the original wall-clock chronology of Olist events.
 
-\---
+---
 
 ## M11 boundary
 
@@ -221,7 +221,7 @@ M10 does not implement arbitrary old-month replay, multi-window backfill, backwa
 
 Those belong to M11.
 
-\---
+---
 
 ## dbt window propagation
 
@@ -237,7 +237,7 @@ CONTROL_WINDOW_END
 
 Dimensions remain full-history reference tables. Transactional facts use incremental `MERGE` with stable unique keys, allowing the same failed window to run again without blindly appending duplicate fact keys.
 
-\---
+---
 
 ## Full-history compatibility mode
 
@@ -259,7 +259,7 @@ python
 /app/dbt/control/run_window_controller.py
 ```
 
-\---
+---
 
 ## Scheduler and Cloud Run boundary
 
@@ -287,21 +287,21 @@ timezone: Europe/Helsinki
 
 The historical resource name is retained even though the job is now hourly.
 
-\---
+---
 
 ## Platform retry boundary
 
 The Cloud Run Job is configured with:
 
 ```text
-maxRetries \= 0
+maxRetries = 0
 ```
 
 Retry ownership stays inside the controller.
 
 Controller retry preserves the same failed window and `cycle_id`, while creating a new attempt ID, incremented attempt number, retry lineage, state transition, and audit event.
 
-\---
+---
 
 ## Success behavior
 
@@ -315,7 +315,7 @@ It moves `last_successful_window` to the completed monthly window, clears active
 
 The successful watermark is `last_successful_window_end`.
 
-\---
+---
 
 ## Failure behavior
 
@@ -327,7 +327,7 @@ RUNNING → FAILED
 
 It preserves the active processing window and failed attempt identity, records error evidence, increments `control_version`, appends `WINDOW_FAILED`, and does not advance the successful watermark.
 
-\---
+---
 
 ## Retry behavior
 
@@ -343,7 +343,7 @@ RUNNING
 
 Retry preserves `window_start`, `window_end`, and `cycle_id`, but creates a new `attempt_id`, increments `attempt_number`, and sets `retry_of_attempt_id`.
 
-\---
+---
 
 ## Compare-and-set protection
 
@@ -354,12 +354,12 @@ The update condition includes:
 ```text
 pipeline_name
 environment
-control_version \= expected_control_version
+control_version = expected_control_version
 ```
 
 A stale writer updates zero rows and is rejected as `ConcurrentStateUpdateError`.
 
-\---
+---
 
 ## Atomic state and audit persistence
 
@@ -375,7 +375,7 @@ COMMIT
 
 If any step fails, the transaction rolls back.
 
-\---
+---
 
 ## M8 monitoring correlation
 
@@ -393,7 +393,7 @@ monitoring_run_id
 
 The resolver requires exactly one matching row.
 
-\---
+---
 
 ## M9 exact-run review
 
@@ -402,25 +402,25 @@ After M8 persistence:
 ```text
 resolve exact monitoring_run_id
         ↓
-run M9 with \--monitoring-run-id
+run M9 with --monitoring-run-id
 ```
 
 M9 remains deterministic for rule results. Optional Vertex AI only explains triggered findings.
 
-\---
+---
 
 ## Validation environment
 
 M10 controller behavior was validated independently using:
 
 ```text
-environment \= validation
-dbt base dataset \= olist_validation
+environment = validation
+dbt base dataset = olist_validation
 ```
 
 This isolates non-production staging, intermediate, and marts outputs while still using the shared raw source.
 
-\---
+---
 
 ## Historical cutover baseline
 
@@ -428,7 +428,7 @@ Before validating windowed processing, existing full-history marts were compared
 
 Expected and existing keys/counts matched for the validated range.
 
-\---
+---
 
 ## Original failure and retry validation
 
@@ -449,7 +449,7 @@ WINDOW_SUCCEEDED
 
 Three attempts used the same processing window. The successful watermark did not advance after either failed attempt and moved only after the third attempt succeeded.
 
-\---
+---
 
 ## Real deployed production validation
 
@@ -472,7 +472,7 @@ Cloud Scheduler
 Validated production window:
 
 ```text
-cycle_id \= 1
+cycle_id = 1
 2016-09-01T00:00:00+00:00
 →
 2016-10-01T00:00:00+00:00
@@ -495,15 +495,15 @@ The control-version transition was:
 Final state:
 
 ```text
-state \= IDLE
-cycle_id \= 1
-control_version \= 2
-last_successful_window_start \= 2016-09-01T00:00:00+00:00
-last_successful_window_end   \= 2016-10-01T00:00:00+00:00
-active attempt \= NULL
+state = IDLE
+cycle_id = 1
+control_version = 2
+last_successful_window_start = 2016-09-01T00:00:00+00:00
+last_successful_window_end   = 2016-10-01T00:00:00+00:00
+active attempt = NULL
 ```
 
-\---
+---
 
 ## Exact production monitoring evidence
 
@@ -516,7 +516,7 @@ The matching monitoring run completed with:
 96 / 96 tests passed
 ```
 
-\---
+---
 
 ## Analytics watermark integration
 
@@ -524,7 +524,7 @@ The production analytical serving layer uses `last_successful_window_end` as its
 
 Therefore active or failed processing windows are not exposed as completed business data. Analytics advances only after `WINDOW_SUCCEEDED`.
 
-\---
+---
 
 ## Analytics state-universe integration
 
@@ -542,7 +542,7 @@ LEFT JOIN
 
 This preserves all states while keeping evidence-dependent metrics nullable when no observation exists.
 
-\---
+---
 
 ## Unit tests
 
@@ -552,92 +552,92 @@ Current Python regression inventory:
 Window Controller:       52
 Monitoring resolver:      5
 M9 reviewer:             59
-                         \---
+                         ---
 Total:                  116
 ```
 
 Controller tests cover models, state transitions, calendar-window derivation, cycle behavior, repository persistence, execution orchestration, retry semantics, and stale-writer handling.
 
-\---
+---
 
 ## Useful commands
 
 ### Controller help
 
 ```bash
-python dbt/control/run_window_controller.py \--help
+python dbt/control/run_window_controller.py --help
 ```
 
 ### Run controller tests
 
 ```bash
-python \-m unittest discover \\
-  \-s dbt/control/window_controller/tests \\
-  \-t dbt/control \\
-  \-v
+python -m unittest discover \\
+  -s dbt/control/window_controller/tests \\
+  -t dbt/control \\
+  -v
 ```
 
 ### Run a new validation window
 
 ```bash
 python dbt/control/run_window_controller.py \\
-  \--project-id "$DBT_PROJECT_ID" \\
-  \--dataset-id olist_control \\
-  \--pipeline-name olist-dbt-build-job \\
-  \--environment validation \\
-  \--dbt-dataset olist_validation \\
-  \--location EU \\
-  \--source-start 2016-09-01T00:00:00+00:00 \\
-  \--source-end 2018-11-01T00:00:00+00:00
+  --project-id "$DBT_PROJECT_ID" \\
+  --dataset-id olist_control \\
+  --pipeline-name olist-dbt-build-job \\
+  --environment validation \\
+  --dbt-dataset olist_validation \\
+  --location EU \\
+  --source-start 2016-09-01T00:00:00+00:00 \\
+  --source-end 2018-11-01T00:00:00+00:00
 ```
 
 ### Retry the current failed window
 
 ```bash
 python dbt/control/run_window_controller.py \\
-  \--project-id "$DBT_PROJECT_ID" \\
-  \--dataset-id olist_control \\
-  \--pipeline-name olist-dbt-build-job \\
-  \--environment validation \\
-  \--dbt-dataset olist_validation \\
-  \--location EU \\
-  \--source-start 2016-09-01T00:00:00+00:00 \\
-  \--source-end 2018-11-01T00:00:00+00:00 \\
-  \--retry
+  --project-id "$DBT_PROJECT_ID" \\
+  --dataset-id olist_control \\
+  --pipeline-name olist-dbt-build-job \\
+  --environment validation \\
+  --dbt-dataset olist_validation \\
+  --location EU \\
+  --source-start 2016-09-01T00:00:00+00:00 \\
+  --source-end 2018-11-01T00:00:00+00:00 \\
+  --retry
 ```
 
-\---
+---
 
 ## Final M10 boundary
 
 M10 is complete for:
 
-\- normal forward calendar-month windows
-\- explicit production `cycle_id`
-\- bounded source cycling
-\- successful watermark advancement
-\- failure without watermark advancement
-\- exact-window retry
-\- repeated retry
-\- append-only audit history
-\- stale-writer rejection
-\- transactional state \+ event persistence
-\- windowed dbt fact processing
-\- exact M8 monitoring correlation
-\- exact M9 review scope
-\- scheduled Cloud Run controller deployment
-\- hourly Cloud Scheduler invocation
-\- successful-watermark analytical serving
-\- full 27-state analytical integrity
+- normal forward calendar-month windows
+- explicit production `cycle_id`
+- bounded source cycling
+- successful watermark advancement
+- failure without watermark advancement
+- exact-window retry
+- repeated retry
+- append-only audit history
+- stale-writer rejection
+- transactional state + event persistence
+- windowed dbt fact processing
+- exact M8 monitoring correlation
+- exact M9 review scope
+- scheduled Cloud Run controller deployment
+- hourly Cloud Scheduler invocation
+- successful-watermark analytical serving
+- full 27-state analytical integrity
 
 Not included in M10:
 
-\- arbitrary historical replay
-\- multi-window backfill
-\- backward movement of the normal production watermark
-\- independent replay-state management
-\- replay versus incremental consistency verification
-\- automatic quarantine-release workflow
-\- alert delivery
+- arbitrary historical replay
+- multi-window backfill
+- backward movement of the normal production watermark
+- independent replay-state management
+- replay versus incremental consistency verification
+- automatic quarantine-release workflow
+- alert delivery
 
 Replay, backfill, and recovery orchestration belong to M11.

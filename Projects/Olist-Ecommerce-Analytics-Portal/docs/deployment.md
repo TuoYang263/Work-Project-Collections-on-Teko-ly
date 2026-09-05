@@ -8,7 +8,7 @@ Historical M7/M8 setup commands remain in `gcp_orchestration_commands.md`.
 
 Those historical runbooks are retained as engineering evidence but should not be treated as the current production topology.
 
-\---
+---
 
 ## Current deployed topology
 
@@ -24,13 +24,13 @@ Scheduled data pipeline
     → Cloud Scheduler
     → Cloud Run Job
     → M10 Window Controller
-    → dbt \+ monitoring \+ reliability review
+    → dbt + monitoring + reliability review
     → BigQuery
 ```
 
 Portal and pipeline delivery are intentionally separated.
 
-\---
+---
 
 ## Public Portal
 
@@ -82,7 +82,7 @@ The Portal uses server-side credentials. BigQuery credentials are not exposed to
 
 The public deployment is read-only from the Portal perspective. Application-level organization authentication is outside the M10 boundary.
 
-\---
+---
 
 ## Scheduled GCP runtime
 
@@ -129,7 +129,7 @@ The production Scheduler invokes the Cloud Run Job once per hour.
 
 One successful invocation processes approximately one historical calendar month.
 
-\---
+---
 
 ## Production controller command
 
@@ -150,26 +150,26 @@ Controller path:
 Production arguments configure:
 
 ```text
-project      \= balmy-nuance-468118-g4
-control data \= olist_control
-pipeline     \= olist-dbt-build-job
-environment  \= prod
-dbt dataset  \= olist
-location     \= EU
-source start \= 2016-09-01T00:00:00+00:00
-source end   \= 2018-11-01T00:00:00+00:00
+project      = balmy-nuance-468118-g4
+control data = olist_control
+pipeline     = olist-dbt-build-job
+environment  = prod
+dbt dataset  = olist
+location     = EU
+source start = 2016-09-01T00:00:00+00:00
+source end   = 2018-11-01T00:00:00+00:00
 ```
 
 The source range contains 26 calendar-month windows. At the current hourly cadence, one complete successful production cycle takes approximately 26 scheduled executions.
 
-\---
+---
 
 ## Why Cloud Run platform retries are disabled
 
 The Cloud Run Job is deployed with:
 
 ```text
-maxRetries \= 0
+maxRetries = 0
 ```
 
 This is intentional.
@@ -179,14 +179,14 @@ M10 owns retry state inside BigQuery so that retries preserve:
 ```text
 same failed window
 new attempt_id
-attempt_number \+ 1
+attempt_number + 1
 retry_of_attempt_id
 explicit audit events
 ```
 
 The controller therefore remains the source of truth for retry behavior.
 
-\---
+---
 
 ## `run_dbt_job.sh` compatibility boundary
 
@@ -203,7 +203,7 @@ That behavior is retained for compatibility and manual use.
 
 It is **not** the normal scheduled production entry point after the M10 cutover.
 
-\---
+---
 
 ## Runtime identities
 
@@ -237,7 +237,7 @@ olist-github-deployer
 
 The deployment identity is deliberately separate from the runtime data-processing identity.
 
-\---
+---
 
 ## GitHub Actions boundaries
 
@@ -281,26 +281,26 @@ Current Python inventory:
 Window Controller:       52 tests
 Monitoring resolver:      5 tests
 Pipeline reviewer:       59 tests
-                         \--------
+                         --------
 Total:                  116 tests
 ```
 
-\---
+---
 
 ## GCP deployment guard
 
 The deploy job runs only when:
 
 ```text
-event \= push
-ref   \= refs/heads/main
+event = push
+ref   = refs/heads/main
 ```
 
 Feature branches can run validation.
 
 The Workload Identity Provider also restricts accepted GitHub claims to the expected repository and `refs/heads/main`.
 
-\---
+---
 
 ## OIDC and Workload Identity Federation
 
@@ -322,7 +322,7 @@ short-lived Google credentials
 impersonate olist-github-deployer
 ```
 
-\---
+---
 
 ## Least-privilege deployment permissions
 
@@ -339,7 +339,7 @@ Cloud Run runtime service account
 
 This allows the deployer to push a new image, update the existing Cloud Run Job, and retain the runtime service account without becoming the data-processing identity.
 
-\---
+---
 
 ## Pipeline deployment sequence
 
@@ -362,12 +362,12 @@ set production controller command / arguments
         ↓
 read deployed image
         ↓
-verify deployed image \== expected image
+verify deployed image == expected image
 ```
 
 CI must succeed before deployment.
 
-\---
+---
 
 ## Current Scheduler configuration
 
@@ -405,7 +405,7 @@ Cloud Run Jobs API
 → olist-dbt-build-job:run
 ```
 
-\---
+---
 
 ## Production validation
 
@@ -442,7 +442,7 @@ A real production execution completed:
 Validated first production monthly window:
 
 ```text
-cycle_id \= 1
+cycle_id = 1
 2016-09-01T00:00:00+00:00
 →
 2016-10-01T00:00:00+00:00
@@ -451,17 +451,17 @@ cycle_id \= 1
 Final control state:
 
 ```text
-state \= IDLE
-cycle_id \= 1
-control_version \= 2
-last_successful_window_start \= 2016-09-01T00:00:00+00:00
-last_successful_window_end   \= 2016-10-01T00:00:00+00:00
-active attempt \= NULL
+state = IDLE
+cycle_id = 1
+control_version = 2
+last_successful_window_start = 2016-09-01T00:00:00+00:00
+last_successful_window_end   = 2016-10-01T00:00:00+00:00
+active attempt = NULL
 ```
 
 The corresponding audit history contained `WINDOW_STARTED` and `WINDOW_SUCCEEDED` for the same attempt ID.
 
-\---
+---
 
 ## Exact monitoring correlation validation
 
@@ -490,7 +490,7 @@ exact monitoring_run_id
 M9 deterministic review
 ```
 
-\---
+---
 
 ## Analytics deployment consequence
 
@@ -515,7 +515,7 @@ WINDOW_SUCCEEDED
 
 The views read control state dynamically, so future successful watermark movement does not require rebuilding them for every monthly execution.
 
-\---
+---
 
 ## Portal and pipeline deployment are intentionally separate
 
@@ -537,26 +537,26 @@ Cloud Run Job
 
 A Portal-only change should not require rebuilding the dbt runtime image. A pipeline-only change should not require Portal deployment.
 
-\---
+---
 
 ## Security notes
 
-\- credentials and local profiles are ignored by Git
-\- Portal queries execute server-side
-\- the public Portal uses a dedicated read-only BigQuery identity
-\- GitHub-to-GCP deployment uses short-lived federated credentials
-\- deployment and runtime identities are separate
-\- deployment permissions are scoped to specific resources
-\- branch eligibility is enforced in both GitHub Actions and Workload Identity Federation
-\- Cloud Run platform retries are disabled so retry ownership remains explicit in the controller
+- credentials and local profiles are ignored by Git
+- Portal queries execute server-side
+- the public Portal uses a dedicated read-only BigQuery identity
+- GitHub-to-GCP deployment uses short-lived federated credentials
+- deployment and runtime identities are separate
+- deployment permissions are scoped to specific resources
+- branch eligibility is enforced in both GitHub Actions and Workload Identity Federation
+- Cloud Run platform retries are disabled so retry ownership remains explicit in the controller
 
-\---
+---
 
 ## Historical runbooks
 
 For original M7/M8 orchestration setup and command history, see:
 
-\- [`orchestration.md`](orchestration.md)
-\- [`gcp_orchestration_commands.md`](gcp_orchestration_commands.md)
+- [`orchestration.md`](orchestration.md)
+- [`gcp_orchestration_commands.md`](gcp_orchestration_commands.md)
 
 Those files preserve the milestone state that was actually validated at the time. They should not be interpreted as the current production deployment reference when they describe historical image tags, schedules, or pre-controller entry points.
