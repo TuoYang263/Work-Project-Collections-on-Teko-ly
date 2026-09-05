@@ -9,7 +9,7 @@ Final production close-out:        2026-09-05
 
 This document records the final M10 Portal and analytics scope.
 
-\---
+---
 
 ## What M10 delivers
 
@@ -22,14 +22,14 @@ successful watermark
         ↓
 BigQuery analytical serving
         ↓
-business decisions \+ reliability evidence
+business decisions + reliability evidence
         ↓
 Next.js Portal
 ```
 
 The key user-facing rule is:
 
-\> The Portal may expose business data only from successfully completed production scope.
+> The Portal may expose business data only from successfully completed production scope.
 
 Operational `/overview` therefore shows current controller state.
 
@@ -37,12 +37,12 @@ Business-facing `/analytics` exposes data only through the last successful water
 
 M10 contains two major concerns:
 
-\- Window and watermark control
-\- Operational and business-facing Portal functionality
+- Window and watermark control
+- Operational and business-facing Portal functionality
 
 Detailed control design is documented in [`m10_window_control.md`](m10_window_control.md).
 
-\---
+---
 
 ## Portal scope
 
@@ -60,7 +60,7 @@ Main routes:
 
 The layout uses one shared navigation shell. Pages are server-rendered where possible and client-side interaction is used where it materially improves the product, such as Brazil state selection on the analytics map.
 
-\---
+---
 
 ## Server-side data path
 
@@ -76,7 +76,7 @@ BigQuery
 
 Repositories perform data access. Services validate, enforce integrity assumptions, and map data into application types. Pages render validated results.
 
-\---
+---
 
 ## Overview
 
@@ -84,17 +84,17 @@ Repositories perform data access. Services validate, enforce integrity assumptio
 
 It answers:
 
-\- what state the pipeline is in
-\- which production cycle is active
-\- whether a processing attempt is active
-\- which window is currently being processed
-\- which window completed successfully most recently
-\- what the current control version is
-\- whether there is current failure/retry evidence
+- what state the pipeline is in
+- which production cycle is active
+- whether a processing attempt is active
+- which window is currently being processed
+- which window completed successfully most recently
+- what the current control version is
+- whether there is current failure/retry evidence
 
 The page reads governed control state from BigQuery.
 
-\---
+---
 
 ## Reliability
 
@@ -112,7 +112,7 @@ NOT_EVALUATED
 
 Triggered findings link to `/findings/[findingId]`.
 
-\---
+---
 
 ## Finding identifier boundary
 
@@ -120,7 +120,7 @@ Finding IDs are carried in the URL path. The page decodes the path segment once 
 
 BigQuery access remains parameterized.
 
-\---
+---
 
 ## Analytics
 
@@ -128,16 +128,16 @@ BigQuery access remains parameterized.
 
 It combines:
 
-\- order count
-\- GMV
-\- average order value
-\- delivery observation count
-\- late-delivery rate
-\- reviewed-order count
-\- average review score
-\- deterministic business action
-\- business priority
-\- historical statistical review-risk diagnostic
+- order count
+- GMV
+- average order value
+- delivery observation count
+- late-delivery rate
+- reviewed-order count
+- average review score
+- deterministic business action
+- business priority
+- historical statistical review-risk diagnostic
 
 The map covers all 27 Brazilian states.
 
@@ -145,7 +145,7 @@ Selecting a state updates linked KPI, business-action, and diagnostic cards.
 
 The geospatial implementation uses MapLibre, react-map-gl, deck.gl, and a CARTO basemap.
 
-\---
+---
 
 ## Successful-watermark analytical scope
 
@@ -173,7 +173,7 @@ WINDOW_SUCCEEDED
 
 This prevents partially processed or failed business data from appearing as completed analytics.
 
-\---
+---
 
 ## Cumulative-within-cycle semantics
 
@@ -194,15 +194,15 @@ after Sep success
 → Sep scope
 
 after Oct success
-→ Sep \+ Oct scope
+→ Sep + Oct scope
 
 after Nov success
-→ Sep \+ Oct \+ Nov scope
+→ Sep + Oct + Nov scope
 ```
 
 When a new production cycle begins, Analytics remains on the previous successful scope while the first new window is running. Once that first monthly window succeeds, the successful watermark returns to the first calendar-month boundary and Analytics begins growing through the new cycle again.
 
-\---
+---
 
 ## Actual data coverage versus processing window
 
@@ -224,7 +224,7 @@ Eligible Olist orders in that scope were observed only on:
 
 The Portal therefore distinguishes processing window from actual observed data coverage.
 
-\---
+---
 
 ## Complete 27-state analytical universe
 
@@ -235,9 +235,9 @@ Watermark-filtered orders are left-joined onto that state universe.
 Validated first-window result:
 
 ```text
-state_count       \= 27
-total_orders      \= 4
-zero_order_states \= 24
+state_count       = 27
+total_orders      = 4
+zero_order_states = 24
 ```
 
 The three states with eligible orders were:
@@ -248,30 +248,30 @@ RS
 SP
 ```
 
-\---
+---
 
 ## Zero evidence is not fabricated evidence
 
 For a state with no eligible orders:
 
 ```text
-order_count \= 0
-gmv         \= 0
-aov         \= 0
+order_count = 0
+gmv         = 0
+aov         = 0
 ```
 
 Metrics requiring actual observations preserve evidence absence:
 
 ```text
-delivery_observation_count \= 0
-late_delivery_rate         \= NULL
-reviewed_order_count       \= 0
-average_review_score       \= NULL
+delivery_observation_count = 0
+late_delivery_rate         = NULL
+reviewed_order_count       = 0
+average_review_score       = NULL
 ```
 
 A missing observation is therefore not converted into a fake zero rate or fake zero review score.
 
-\---
+---
 
 ## Business Decision Model v1
 
@@ -314,11 +314,11 @@ P2
 P3
 ```
 
-The current successful-watermark serving layer does not yet contain a governed previous-period growth metric, so `gmvGrowthRate \= null`.
+The current successful-watermark serving layer does not yet contain a governed previous-period growth metric, so `gmvGrowthRate = null`.
 
 The `EXPAND` path remains reserved until a governed comparison series is available.
 
-\---
+---
 
 ## Sparse early-cycle behavior
 
@@ -328,7 +328,7 @@ That means peer-relative thresholds may be extreme or unstable during early-cycl
 
 The decision model is not trained. Thresholds are recalculated deterministically from the currently visible successful-watermark state summaries.
 
-\---
+---
 
 ## Historical Review Diagnostic v2
 
@@ -360,12 +360,12 @@ Historical orders evaluated
 
 This prevents users from interpreting a historical statistical estimate as if it came from the current sparse watermark scope.
 
-\---
+---
 
 ## Review Diagnostic v2 target
 
 ```text
-negative_review \= average review score \<= 2
+negative_review = average review score \<= 2
 ```
 
 Baseline predictors:
@@ -398,7 +398,7 @@ Current model version:
 business_decision_v2_logit_001
 ```
 
-\---
+---
 
 ## Fixed diagnostic rule
 
@@ -406,11 +406,11 @@ business_decision_v2_logit_001
 evidence_count \< 100
 → INSUFFICIENT_EVIDENCE
 
-residual_pp \>= 1
-and ci_lower_pp \> 0
+residual_pp >= 1
+and ci_lower_pp > 0
 → WORSE_THAN_EXPECTED
 
-residual_pp \<= \-1
+residual_pp \<= -1
 and ci_upper_pp \< 0
 → BETTER_THAN_EXPECTED
 
@@ -418,7 +418,7 @@ otherwise
 → AS_EXPECTED
 ```
 
-\---
+---
 
 ## Deterministic verification
 
@@ -426,7 +426,7 @@ Persisted statistical output is checked again by the Portal service before displ
 
 Principle:
 
-\> Persisted data is not automatically trusted.
+> Persisted data is not automatically trusted.
 
 Field-level checks include complete/unique state codes, valid probabilities, finite numeric values, valid confidence intervals, valid diagnostic states, model version, and generation timestamp.
 
@@ -434,7 +434,7 @@ Row-level verification recomputes the residual and diagnostic state.
 
 Snapshot-level verification requires all 27 rows to share the same `model_version` and `generated_at`.
 
-\---
+---
 
 ## State-summary integrity verification
 
@@ -442,23 +442,23 @@ The state-summary service expects exactly 27 Brazilian state rows and rejects mi
 
 The earlier direct watermark filter temporarily caused sparse state rows to disappear. The correct serving design preserved the 27-state universe and left-joined eligible orders instead of weakening this integrity guard.
 
-\---
+---
 
 ## Security baseline
 
 M10 Portal close-out includes:
 
-\- `Content-Security-Policy`
-\- `X-Content-Type-Options: nosniff`
-\- `Referrer-Policy: strict-origin-when-cross-origin`
-\- `Permissions-Policy`
-\- `X-Frame-Options: DENY`
+- `Content-Security-Policy`
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy`
+- `X-Frame-Options: DENY`
 
 The CSP permits the CARTO basemap required by the analytics map.
 
 The public Portal does not currently include application-level login. A shared organizational deployment should add an authentication boundary or equivalent platform control.
 
-\---
+---
 
 ## Validation at final M10 close-out
 
@@ -468,7 +468,7 @@ ESLint:                    PASS
 Next.js production build:  PASS
 ```
 
-\---
+---
 
 ## Real successful-watermark validation
 
@@ -484,9 +484,9 @@ successful processing window:
 the national analytical serving result was:
 
 ```text
-order_count \= 4
-gmv         \= R$354.75
-aov         \= R$88.69
+order_count = 4
+gmv         = R$354.75
+aov         = R$88.69
 ```
 
 Observed data period:
@@ -515,24 +515,24 @@ SP: 2 orders
 
 State-level GMV summed exactly to the national GMV result.
 
-\---
+---
 
 ## Runtime checks
 
 Final runtime checks confirmed:
 
-\- `/analytics` follows the successful production watermark
-\- active/failed windows do not leak into completed analytics
-\- all 27 states remain present
-\- national KPI totals match state totals
-\- no-evidence states remain semantically distinguishable from measured zero values
-\- historical review-risk diagnostics are clearly separated from current business actions
-\- the analytics map renders under the production CSP
-\- valid finding IDs open finding-detail pages
-\- invalid finding IDs enter the controlled unavailable state
-\- security headers are present in production responses
+- `/analytics` follows the successful production watermark
+- active/failed windows do not leak into completed analytics
+- all 27 states remain present
+- national KPI totals match state totals
+- no-evidence states remain semantically distinguishable from measured zero values
+- historical review-risk diagnostics are clearly separated from current business actions
+- the analytics map renders under the production CSP
+- valid finding IDs open finding-detail pages
+- invalid finding IDs enter the controlled unavailable state
+- security headers are present in production responses
 
-\---
+---
 
 ## M11 handoff
 

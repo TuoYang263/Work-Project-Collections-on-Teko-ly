@@ -7,7 +7,7 @@ Instead of exposing the historical dataset as one static full-history snapshot, 
 **Live portal:** https://olist-analytics-portal.onrender.com
 **Health check:** https://olist-analytics-portal.onrender.com/health
 
-\> The public demo runs on Render's free tier, so the first request after inactivity can take longer while the service wakes up.
+> The public demo runs on Render's free tier, so the first request after inactivity can take longer while the service wakes up.
 
 ## What this project does
 
@@ -62,17 +62,17 @@ When the source end is reached, the controller starts a new `cycle_id` from the 
 
 ## Engineering highlights
 
-\- **Governed monthly processing:** forward-only calendar-month `[window_start, window_end)` execution with explicit `cycle_id`.
-\- **Failure-safe watermark semantics:** a failed workload never advances the successful watermark.
-\- **Exact-window retry:** retries reuse the same failed window with a new attempt ID, incremented attempt number, and explicit retry lineage.
-\- **Transactional control state:** BigQuery transaction \+ `control_version` compare-and-set protection keeps current state and append-only audit history consistent.
-\- **Exact observability correlation:** each controlled attempt resolves the exact M8 monitoring run through `control_attempt_id`.
-\- **Deterministic reliability review:** R001-R006 preserve `PASS / TRIGGERED / NOT_EVALUATED`; optional AI explanation cannot modify deterministic findings or severity.
-\- **Successful-watermark analytics:** KPI and state-level serving expose data only through `last_successful_window_end`.
-\- **Complete 27-state analytical universe:** states remain visible even when the current analytical scope contains no orders for them.
-\- **Decision-oriented analytics:** deterministic business actions combine commercial value, delivery quality, and review evidence.
-\- **Historical statistical diagnostics:** review-risk diagnostics remain a separately persisted historical statistical layer rather than being confused with current watermark-scoped KPIs.
-\- **Production-oriented delivery:** Portal and pipeline CI/CD are separate, with GitHub OIDC, Workload Identity Federation, and least-privilege GCP identities.
+- **Governed monthly processing:** forward-only calendar-month `[window_start, window_end)` execution with explicit `cycle_id`.
+- **Failure-safe watermark semantics:** a failed workload never advances the successful watermark.
+- **Exact-window retry:** retries reuse the same failed window with a new attempt ID, incremented attempt number, and explicit retry lineage.
+- **Transactional control state:** BigQuery transaction + `control_version` compare-and-set protection keeps current state and append-only audit history consistent.
+- **Exact observability correlation:** each controlled attempt resolves the exact M8 monitoring run through `control_attempt_id`.
+- **Deterministic reliability review:** R001-R006 preserve `PASS / TRIGGERED / NOT_EVALUATED`; optional AI explanation cannot modify deterministic findings or severity.
+- **Successful-watermark analytics:** KPI and state-level serving expose data only through `last_successful_window_end`.
+- **Complete 27-state analytical universe:** states remain visible even when the current analytical scope contains no orders for them.
+- **Decision-oriented analytics:** deterministic business actions combine commercial value, delivery quality, and review evidence.
+- **Historical statistical diagnostics:** review-risk diagnostics remain a separately persisted historical statistical layer rather than being confused with current watermark-scoped KPIs.
+- **Production-oriented delivery:** Portal and pipeline CI/CD are separate, with GitHub OIDC, Workload Identity Federation, and least-privilege GCP identities.
 
 ## Current production behavior
 
@@ -92,19 +92,19 @@ Retry semantics are owned by the M10 controller so that failures preserve the ex
 
 The public Portal therefore changes over time as successful scheduled runs advance through the historical production cycle.
 
-\---
+---
 
 ## Product preview
 
-\![Olist analytics workspace](assets/screenshots/portal/portal-analytics-hero.png)
+![Olist analytics workspace](assets/screenshots/portal/portal-analytics-hero.png)
 
 The analytics workspace connects commercial value and service-health evidence to state-level actions such as **Recover Service**, **Protect Value**, **Investigate**, and **Monitor**.
 
-\---
+---
 
 ## System architecture
 
-\![Olist system architecture](assets/architecture/olist-system-architecture.png)
+![Olist system architecture](assets/architecture/olist-system-architecture.png)
 
 Editable source:
 
@@ -130,7 +130,7 @@ into the dbt runtime.
 
 Only after the complete controlled workload succeeds does the controller persist `WINDOW_SUCCEEDED` and advance the successful watermark.
 
-\---
+---
 
 ## Product capabilities
 
@@ -138,18 +138,18 @@ Only after the complete controlled workload succeeds does the controller persist
 
 The `/analytics` workspace provides:
 
-\- successful-watermark-scoped order count
-\- GMV
-\- average order value
-\- delivery observation count
-\- late-delivery rate
-\- reviewed-order count
-\- average review score
-\- Brazil state-level geospatial selection
-\- deterministic Business Decision Model v1
-\- P1 / P2 / P3 priorities
-\- Historical Statistical Review Diagnostic v2
-\- deterministic validation before persisted diagnostic data reaches the UI
+- successful-watermark-scoped order count
+- GMV
+- average order value
+- delivery observation count
+- late-delivery rate
+- reviewed-order count
+- average review score
+- Brazil state-level geospatial selection
+- deterministic Business Decision Model v1
+- P1 / P2 / P3 priorities
+- Historical Statistical Review Diagnostic v2
+- deterministic validation before persisted diagnostic data reaches the UI
 
 The current business KPI and state-serving layer reads data only through:
 
@@ -172,19 +172,19 @@ Eligible orders are watermark-filtered and then left-joined to the complete stat
 For zero-order states:
 
 ```text
-order_count \= 0
-gmv         \= 0
-aov         \= 0
+order_count = 0
+gmv         = 0
+aov         = 0
 ```
 
 Metrics that require observed evidence remain unavailable rather than being fabricated:
 
 ```text
-late_delivery_rate   \= NULL when no delivery observations exist
-average_review_score \= NULL when no reviewed orders exist
+late_delivery_rate   = NULL when no delivery observations exist
+average_review_score = NULL when no reviewed orders exist
 ```
 
-\---
+---
 
 ## Business Decision Model v1
 
@@ -231,7 +231,7 @@ The current successful-watermark analytical layer does not yet expose a governed
 
 `EXPAND` is reserved until a governed comparison series exists.
 
-\---
+---
 
 ## Historical Review Diagnostic v2
 
@@ -261,7 +261,7 @@ Historical orders evaluated
 
 This prevents a historical model estimate from being mistaken for current watermark-scoped KPI evidence.
 
-\---
+---
 
 ## Reliability
 
@@ -286,24 +286,24 @@ The deterministic rule set is:
 | R005 | Row-Count Anomaly |
 | R006 | Runtime Regression |
 
-\---
+---
 
 ## Operational state
 
 The `/overview` workspace exposes:
 
-\- current controller state
-\- environment
-\- cycle ID
-\- active attempt
-\- active processing window
-\- last successful processing window
-\- control version
-\- controller freshness
-\- retry/failure information
-\- latest error evidence
+- current controller state
+- environment
+- cycle ID
+- active attempt
+- active processing window
+- last successful processing window
+- control version
+- controller freshness
+- retry/failure information
+- latest error evidence
 
-\---
+---
 
 ## Monitoring evidence
 
@@ -323,7 +323,7 @@ M9 deterministic review
 
 The controller does not guess the latest monitoring run.
 
-\---
+---
 
 ## Window and watermark control
 
@@ -346,14 +346,14 @@ Detailed documentation:
 
 [`docs/m10_window_control.md`](docs/m10_window_control.md)
 
-\---
+---
 
 ## Production validation
 
 The first real deployed monthly production window was:
 
 ```text
-cycle_id \= 1
+cycle_id = 1
 2016-09-01T00:00:00+00:00
 →
 2016-10-01T00:00:00+00:00
@@ -372,9 +372,9 @@ The first watermark-scoped analytical serving result contained:
 
 ```text
 4 orders
-GMV \= R$354.75
-AOV \= R$88.69
-observed order dates \= 2016-09-04 → 2016-09-15
+GMV = R$354.75
+AOV = R$88.69
+observed order dates = 2016-09-04 → 2016-09-15
 ```
 
 State-serving integrity check:
@@ -393,7 +393,7 @@ ESLint:                   PASS
 Next.js production build: PASS
 ```
 
-\---
+---
 
 ## Tech stack
 
@@ -413,7 +413,7 @@ Next.js production build: PASS
 | CI/CD | GitHub Actions, OIDC, Workload Identity Federation |
 | Portal hosting | Render |
 
-\---
+---
 
 ## Current boundary and M11
 
@@ -427,12 +427,12 @@ The cycle mechanism is a normal forward production simulation, not an arbitrary 
 
 M11 is reserved for controlled historical playback and recovery:
 
-\- one-window replay
-\- multi-window backfill
-\- resume after failure
-\- replay idempotency
-\- replay versus incremental consistency checks
-\- separate replay state from the normal forward watermark
-\- replay audit history
+- one-window replay
+- multi-window backfill
+- resume after failure
+- replay idempotency
+- replay versus incremental consistency checks
+- separate replay state from the normal forward watermark
+- replay audit history
 
 Replay must never silently move the normal incremental production watermark backward.
