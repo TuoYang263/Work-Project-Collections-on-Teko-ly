@@ -100,6 +100,7 @@ class TestControlState(unittest.TestCase):
         )
 
         self.assertEqual(control_state.state, PipelineState.IDLE)
+        self.assertEqual(control_state.cycle_id, 1)
         self.assertIsNone(control_state.active_attempt)
         self.assertIsNone(control_state.active_window)
 
@@ -145,6 +146,25 @@ class TestControlState(unittest.TestCase):
                 environment="prod",
                 state=PipelineState.IDLE,
                 active_attempt=self.attempt,
+            )
+
+    def test_cycle_zero_is_valid_for_legacy_history(self) -> None:
+        control_state = ControlState(
+            pipeline_name="olist-dbt-build-job",
+            environment="prod",
+            state=PipelineState.IDLE,
+            cycle_id=0,
+        )
+
+        self.assertEqual(control_state.cycle_id, 0)
+
+    def test_rejects_negative_cycle_id(self) -> None:
+        with self.assertRaises(ValueError):
+            ControlState(
+                pipeline_name="olist-dbt-build-job",
+                environment="prod",
+                state=PipelineState.IDLE,
+                cycle_id=-1,
             )
 
     def test_rejects_negative_control_version(self) -> None:

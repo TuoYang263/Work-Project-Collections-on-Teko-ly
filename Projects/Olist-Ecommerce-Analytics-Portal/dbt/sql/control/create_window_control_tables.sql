@@ -3,6 +3,8 @@ CREATE TABLE IF NOT EXISTS `olist_control.pipeline_control_state`
     pipeline_name STRING NOT NULL,
     environment STRING NOT NULL,
 
+    cycle_id INT64 NOT NULL,
+
     state STRING NOT NULL,
 
     last_successful_window_start TIMESTAMP,
@@ -33,6 +35,7 @@ CREATE TABLE IF NOT EXISTS `olist_control.pipeline_window_events`
 
     pipeline_name STRING NOT NULL,
     environment STRING NOT NULL,
+    cycle_id INT64 NOT NULL,
 
     window_start TIMESTAMP NOT NULL,
     window_end TIMESTAMP NOT NULL,
@@ -64,3 +67,25 @@ CLUSTER BY
     environment,
     attempt_id,
     to_state;
+
+-- Monthly-cycle schema migration for existing M10 control tables.
+--
+-- New tables define cycle_id as NOT NULL above. Existing BigQuery tables
+-- require adding the column as nullable first, followed by a one-time
+-- legacy backfill.
+ALTER TABLE `olist_control.pipeline_control_state`
+ADD COLUMN IF NOT EXISTS cycle_id INT64;
+
+ALTER TABLE `olist_control.pipeline_window_events`
+ADD COLUMN IF NOT EXISTS cycle_id INT64;
+
+-- Existing pre-monthly M10 control history belongs to legacy cycle 0.
+-- This migration does not change historical window, attempt, state,
+-- version, or event semantics.
+UPDATE `olist_control.pipeline_control_state`
+SET cycle_id = 0
+WHERE cycle_id IS NULL;
+
+UPDATE `olist_control.pipeline_window_events`
+SET cycle_id = 0
+WHERE cycle_id IS NULL;
