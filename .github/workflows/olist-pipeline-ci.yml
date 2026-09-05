@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/olist-analytics-portal
+      - feature/olist-m10-monthly-cycle
       - main
     paths:
       - "Projects/Olist-Ecommerce-Analytics-Portal/dbt/**"
@@ -159,6 +160,9 @@ jobs:
             --project="${GCP_PROJECT_ID}" \
             --region="${CLOUD_RUN_REGION}" \
             --image="${REMOTE_IMAGE}" \
+            --command=python \
+            --args=/app/dbt/control/run_window_controller.py,--project-id="${GCP_PROJECT_ID}",--dataset-id=olist_control,--pipeline-name=olist-dbt-build-job,--environment=prod,--dbt-dataset=olist,--location=EU,--source-start=2016-09-01T00:00:00+00:00,--source-end=2018-11-01T00:00:00+00:00 \
+            --max-retries=0 \
             --quiet
 
       - name: Verify deployed image
