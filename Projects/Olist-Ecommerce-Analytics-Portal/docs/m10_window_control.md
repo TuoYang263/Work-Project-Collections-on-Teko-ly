@@ -1,35 +1,35 @@
-# M10 U1 - Window and Watermark Control
+# M10 \- Window and Watermark Control
 
 ## Status
 
 ```text
-Completed: 2026-08-15
+U1 controller completed:      2026-08-15
+Production-cycle deployment: 2026-09-05
 ```
 
-M10 U1 adds explicit processing state around the Olist dbt workload.
+M10 adds explicit governed processing state around the Olist dbt workload and deploys the Window Controller as the scheduled production entry point.
 
-The main rule is:
+The central invariant is:
 
-> A window advances only after the full controlled workload succeeds.
+\> A processing window advances the successful watermark only after the complete controlled workload succeeds.
 
-If the workload fails, the watermark stays where it was and the same window can be retried with a new attempt ID.
+If the workload fails:
 
----
+```text
+successful watermark stays unchanged
+failed window stays identifiable
+retry reuses the same window
+```
 
-## Why this was added
+\---
 
-Before M10, the project could run dbt, store monitoring history, and review that history. It did not yet keep a durable record of which business-data window had been successfully processed.
+## Why this exists
 
-M10 U1 adds that missing control state.
+Before M10, the project could run dbt, persist monitoring evidence, review monitoring history, and serve analytical marts, but it did not keep durable production state describing which business-data window was being processed, which window completed successfully, which exact failed window should be retried, which attempt created which monitoring evidence, or whether another writer already changed state.
 
-It answers four questions:
+M10 adds that control plane.
 
-1. What window should run next?
-2. Has that window succeeded?
-3. If it failed, which exact window should be retried?
-4. Can two writers update the same control state at the same time?
-
----
+\---
 
 ## Main components
 
@@ -43,14 +43,6 @@ dbt/control/window_controller/repository.py
 dbt/control/window_controller/controller.py
 ```
 
-SQL setup:
-
-```text
-dbt/sql/control/create_olist_control_dataset.sql
-dbt/sql/control/create_window_control_tables.sql
-dbt/sql/control/validate_cutover_baseline.sql
-```
-
 Monitoring correlation:
 
 ```text
@@ -58,13 +50,11 @@ dbt/monitoring/monitoring_run_resolver.py
 dbt/monitoring/resolve_monitoring_run.py
 ```
 
----
+\---
 
 ## BigQuery control tables
 
 ### `pipeline_control_state`
-
-This table stores the current state for one pipeline/environment pair.
 
 Important fields:
 
@@ -72,6 +62,7 @@ Important fields:
 pipeline_name
 environment
 state
+cycle_id
 last_successful_window_start
 last_successful_window_end
 active_window_start
@@ -85,39 +76,33 @@ last_error_message
 updated_at
 ```
 
-The row is updated in place because it represents current state.
-
 ### `pipeline_window_events`
 
-This table is append-only.
+This table is append-only and stores every accepted transition with cycle, window, attempt, state, version, retry, event, and error context.
 
-It stores every accepted transition with:
+The state table answers "where are we now?". The event table answers "how did we get here?".
+
+\---
+
+## Cycle migration
+
+M10 originally validated forward processing using 24-hour historical windows before the production-cycle design was finalized.
+
+Existing control history was preserved and classified as:
 
 ```text
-event_id
-attempt_id
-pipeline_name
-environment
-window_start
-window_end
-attempt_number
-from_state
-to_state
-from_control_version
-to_control_version
-event_type
-event_time
-retry_of_attempt_id
-error_code
-error_message
-metadata_json
+cycle_id \= 0
 ```
 
-The current state table answers "where are we now?".
+The first deployed calendar-month production simulation begins with:
 
-The event table answers "how did we get here?".
+```text
+cycle_id \= 1
+```
 
----
+The migration preserved current state, `control_version`, successful watermark, event count, and audit history.
+
+\---
 
 ## State model
 
@@ -133,60 +118,114 @@ RUNNING
                RUNNING
 ```
 
-`QUARANTINED` is also defined as a state.
+`QUARANTINED` is also defined.
 
-U1 does not add automatic retry limits, automatic quarantine, or a release workflow. Those controls can be added later without changing the basic forward-window rule.
-
----
+\---
 
 ## Explicit initialization
 
-The runtime does not create control state automatically.
+Runtime code does not silently create control state.
 
-Initialization is done with:
+Initialization is performed separately through:
 
 ```text
 bootstrap_window_control.py
 ```
 
-Expected first state:
+Initial state:
 
 ```text
-state = IDLE
-control_version = 0
-last_successful_window = NULL
-active_attempt = NULL
+state \= IDLE
+control_version \= 0
+last_successful_window \= NULL
+active_attempt \= NULL
 ```
 
-A second initialization attempt is rejected.
+A second bootstrap attempt is rejected.
 
----
+\---
 
-## Window rule
-
-The first window starts from an explicit `initial_start`.
-
-After the first success:
+## Production source bounds
 
 ```text
-next_window.start = last_successful_window.end
+SOURCE_START \= 2016-09-01T00:00:00+00:00
+SOURCE_END   \= 2018-11-01T00:00:00+00:00
 ```
 
-For a 24-hour window:
+These bounds define the historical production simulation.
+
+\---
+
+## Calendar-month window rule
+
+Production processing uses half-open calendar-month windows:
 
 ```text
-[start, start + 24h)
+[2016-09-01, 2016-10-01)
+[2016-10-01, 2016-11-01)
+[2016-11-01, 2016-12-01)
 ```
 
-The end is exclusive.
+Within one cycle:
 
-This keeps adjacent windows continuous without overlap.
+```text
+next_window.start \= last_successful_window.end
+```
 
----
+The next end is the following calendar-month boundary.
 
-## dbt windowing
+\---
 
-The controller sets:
+## Cycle rollover
+
+If the current successful window ends before `SOURCE_END`, the controller stays in the same `cycle_id` and derives the next month.
+
+If:
+
+```text
+last_successful_window_end \== SOURCE_END
+```
+
+the controller starts:
+
+```text
+cycle_id \= previous cycle_id \+ 1
+window_start \= SOURCE_START
+```
+
+The previous cycle is not rewound.
+
+\---
+
+## Production-cycle interpretation
+
+The bounded source range contains approximately 26 monthly windows.
+
+With the current Scheduler cadence:
+
+```text
+0 * * * *
+```
+
+one successful historical cycle takes roughly 26 scheduled hours, assuming one successful monthly execution per trigger.
+
+This creates an observable production simulation for the public portfolio system; it is not intended to mimic the original wall-clock chronology of Olist events.
+
+\---
+
+## M11 boundary
+
+A new `cycle_id` at `SOURCE_END` is normal production-cycle behavior. It is not the same thing as an arbitrary replay API.
+
+M10 does not implement arbitrary old-month replay, multi-window backfill, backward watermark movement, independent replay state, or replay-versus-incremental consistency verification.
+
+Those belong to M11.
+
+\---
+
+## dbt window propagation
+
+The controller exports:
 
 ```text
 CONTROL_ATTEMPT_ID
@@ -194,416 +233,411 @@ CONTROL_WINDOW_START
 CONTROL_WINDOW_END
 ```
 
-`run_dbt_job.sh` passes the window to dbt as variables.
+`run_dbt_job.sh` passes the window to dbt variables and `int_orders_windowed` filters `stg_orders` using `order_purchase_timestamp`.
 
-`int_orders_windowed` applies the window to `stg_orders` using `order_purchase_timestamp`.
+Dimensions remain full-history reference tables. Transactional facts use incremental `MERGE` with stable unique keys, allowing the same failed window to run again without blindly appending duplicate fact keys.
 
-```text
-stg_orders
-    ↓
-int_orders_windowed
-    ↓
-current order IDs
- ↙      ↓       ↘
-items payments reviews
- ↘      ↓       ↙
-incremental facts
-```
-
-Dimensions remain full-history tables.
-
-Facts use incremental `MERGE` with stable unique keys.
-
-This matters for retry: the same window can run again without simply appending another copy of the same fact key.
-
----
+\---
 
 ## Full-history compatibility mode
 
-`run_dbt_job.sh` can still run without control window variables.
-
-In that case it prints:
+`run_dbt_job.sh` still supports execution without control-window variables:
 
 ```text
 No control window supplied.
 Running in full-history compatibility mode.
 ```
 
-This keeps the existing M7/M8 Cloud Run path working while M10 is introduced separately.
+This compatibility mode is retained for historical/manual use.
 
-The current scheduled Cloud Run Job still uses this script as its container entry point.
+It is **not** the current scheduled production entry point.
 
-The scheduled job has not yet been changed to start the M10 controller.
+The deployed Cloud Run Job starts:
 
----
+```text
+python
+/app/dbt/control/run_window_controller.py
+```
+
+\---
+
+## Scheduler and Cloud Run boundary
+
+Current production path:
+
+```text
+Cloud Scheduler
+        ↓
+Cloud Run Job
+        ↓
+M10 Window Controller
+        ↓
+run_dbt_job.sh
+        ↓
+dbt / monitoring / M9
+```
+
+Scheduler configuration:
+
+```text
+resource: olist-dbt-daily-trigger
+schedule: 0 * * * *
+timezone: Europe/Helsinki
+```
+
+The historical resource name is retained even though the job is now hourly.
+
+\---
+
+## Platform retry boundary
+
+The Cloud Run Job is configured with:
+
+```text
+maxRetries \= 0
+```
+
+Retry ownership stays inside the controller.
+
+Controller retry preserves the same failed window and `cycle_id`, while creating a new attempt ID, incremented attempt number, retry lineage, state transition, and audit event.
+
+\---
 
 ## Success behavior
 
-A successful attempt changes:
+A successful attempt performs:
 
 ```text
 RUNNING → IDLE
 ```
 
-It then:
+It moves `last_successful_window` to the completed monthly window, clears active attempt/error fields, increments `control_version`, and appends `WINDOW_SUCCEEDED`.
 
-- moves `last_successful_window` to the completed window
-- clears `active_attempt`
-- clears the last error
-- increments `control_version`
-- writes `WINDOW_SUCCEEDED`
+The successful watermark is `last_successful_window_end`.
 
-The watermark is the end of the last successful window.
-
----
+\---
 
 ## Failure behavior
 
-A failed attempt changes:
+A failed attempt performs:
 
 ```text
 RUNNING → FAILED
 ```
 
-It:
+It preserves the active processing window and failed attempt identity, records error evidence, increments `control_version`, appends `WINDOW_FAILED`, and does not advance the successful watermark.
 
-- keeps the active window
-- keeps the failed attempt ID
-- records the error
-- increments `control_version`
-- writes `WINDOW_FAILED`
-- does not advance the last successful window
-
-This is the key safety rule for forward processing.
-
----
+\---
 
 ## Retry behavior
 
-A retry starts from `FAILED` or `WAITING_RETRY`.
-
-Normal path:
+Normal retry path:
 
 ```text
 FAILED
-  ↓ WINDOW_RETRY_SCHEDULED
+   ↓ WINDOW_RETRY_SCHEDULED
 WAITING_RETRY
-  ↓ WINDOW_RETRY_STARTED
+   ↓ WINDOW_RETRY_STARTED
 RUNNING
 ```
 
-The retry uses:
+Retry preserves `window_start`, `window_end`, and `cycle_id`, but creates a new `attempt_id`, increments `attempt_number`, and sets `retry_of_attempt_id`.
 
-```text
-same window
-new attempt_id
-attempt_number + 1
-retry_of_attempt_id = previous attempt_id
-```
+\---
 
-If the runtime stops after `WAITING_RETRY` is already stored, the next retry call can continue from that state instead of scheduling it twice.
+## Compare-and-set protection
 
----
-
-## BigQuery compare-and-set protection
-
-Every control transition uses the expected `control_version`.
+Every transition uses the expected `control_version`.
 
 The update condition includes:
 
 ```text
 pipeline_name
 environment
-control_version = expected_control_version
+control_version \= expected_control_version
 ```
 
-If the version is stale, zero rows are updated.
+A stale writer updates zero rows and is rejected as `ConcurrentStateUpdateError`.
 
-The repository treats this as a concurrent state update and rejects the transition.
+\---
 
-This prevents an older writer from overwriting a newer state.
+## Atomic state and audit persistence
 
----
-
-## Atomic state and audit write
-
-The repository writes the state update and audit event inside one BigQuery transaction.
+State mutation and audit insertion happen inside one BigQuery transaction:
 
 ```text
 BEGIN TRANSACTION
-    update current state with expected version
-    check affected row count
-    insert audit event
+update current state using expected control_version
+verify affected-row count
+insert audit event
 COMMIT
 ```
 
 If any step fails, the transaction rolls back.
 
-A stale-writer validation confirmed that:
+\---
 
-- the stale state update was rejected
-- the current state stayed unchanged
-- the test audit event was not inserted
+## M8 monitoring correlation
 
----
+M10 adds `control_attempt_id` to `olist_monitoring.pipeline_runs`.
 
-## M8 correlation
-
-M10 adds this field to `olist_monitoring.pipeline_runs`:
+Correlation path:
 
 ```text
-control_attempt_id
-```
-
-The artifact parser reads `CONTROL_ATTEMPT_ID` from the runtime environment and stores it with the monitoring run.
-
-The resolver then uses:
-
-```text
-control_attempt_id
+controller attempt_id
         ↓
-pipeline_runs
+pipeline_runs.control_attempt_id
         ↓
 monitoring_run_id
 ```
 
-It requires exactly one matching row.
+The resolver requires exactly one matching row.
 
-This gives the controller a direct link to the monitoring evidence created by its own attempt.
-
----
+\---
 
 ## M9 exact-run review
 
-In window-controlled mode, after M8 finishes:
+After M8 persistence:
 
 ```text
 resolve exact monitoring_run_id
         ↓
-run M9 with --monitoring-run-id
+run M9 with \--monitoring-run-id
 ```
 
-The runtime does not guess the latest monitoring run.
+M9 remains deterministic for rule results. Optional Vertex AI only explains triggered findings.
 
-The M9 review remains deterministic for rule results. Vertex AI is optional and only explains triggered findings.
-
-A deterministic `TRIGGERED` finding is not by itself a controller failure. The controlled workload fails only if the reviewer process itself cannot complete as required by the script.
-
----
+\---
 
 ## Validation environment
 
-M10 was tested with:
+M10 controller behavior was validated independently using:
 
 ```text
-environment = validation
-dbt base dataset = olist_validation
+environment \= validation
+dbt base dataset \= olist_validation
 ```
 
-This creates isolated staging, intermediate, and marts datasets for validation while using the shared raw source.
+This isolates non-production staging, intermediate, and marts outputs while still using the shared raw source.
 
-The runtime blocks a non-production controller run from using the default `olist` dbt dataset.
+\---
 
----
+## Historical cutover baseline
 
-## Cutover baseline check
+Before validating windowed processing, existing full-history marts were compared with source-aligned historical ranges for orders, order items, payments, and reviews.
 
-Before running historical validation windows, the existing full-history marts were compared with the source-aligned historical range.
+Expected and existing keys/counts matched for the validated range.
 
-The check covered:
+\---
+
+## Original failure and retry validation
+
+Before production monthly cutover, controller retry semantics were exercised using a controlled historical test window.
+
+The audit history included:
 
 ```text
-orders
-order items
-payments
-reviews
+WINDOW_STARTED
+WINDOW_FAILED
+WINDOW_RETRY_SCHEDULED
+WINDOW_RETRY_STARTED
+WINDOW_FAILED
+WINDOW_RETRY_SCHEDULED
+WINDOW_RETRY_STARTED
+WINDOW_SUCCEEDED
 ```
 
-For the checked range, expected and existing counts matched with no missing or unexpected keys.
+Three attempts used the same processing window. The successful watermark did not advance after either failed attempt and moved only after the third attempt succeeded.
 
-This provided evidence that the existing full-history marts were a safe reference point before validating the new windowed path.
+\---
 
-The project did not force a production watermark reset or historical backfill as part of M10 U1.
+## Real deployed production validation
 
----
-
-## Real happy-path validation
-
-A controlled historical window completed this full path:
+The production deployment completed:
 
 ```text
-controller
+Cloud Scheduler
+→ Cloud Run Job
+→ M10 controller
 → BigQuery state claim
-→ windowed dbt build
+→ monthly dbt build
 → dbt tests
 → M8 monitoring load
 → exact monitoring run resolution
-→ M9 review
+→ M9 deterministic review
 → WINDOW_SUCCEEDED
-→ watermark advance
+→ successful watermark advance
 ```
 
-Current dbt validation result:
+Validated production window:
 
 ```text
-22 models
-96 tests
-118 / 118 PASS
+cycle_id \= 1
+2016-09-01T00:00:00+00:00
+→
+2016-10-01T00:00:00+00:00
 ```
 
-A second successful window confirmed that the controller derived the next window from the previous successful window end.
-
----
-
-## Real failure and retry validation
-
-The window:
+Audit history:
 
 ```text
-2016-09-06 00:00:00
-→ 2016-09-07 00:00:00
+WINDOW_STARTED
+WINDOW_SUCCEEDED
 ```
 
-was used for the retry test.
-
-The audit history was:
+The control-version transition was:
 
 ```text
-v4  → v5   WINDOW_STARTED          attempt 1
-v5  → v6   WINDOW_FAILED           attempt 1
-v6  → v7   WINDOW_RETRY_SCHEDULED  attempt 1
-v7  → v8   WINDOW_RETRY_STARTED    attempt 2
-v8  → v9   WINDOW_FAILED           attempt 2
-v9  → v10  WINDOW_RETRY_SCHEDULED  attempt 2
-v10 → v11  WINDOW_RETRY_STARTED    attempt 3
-v11 → v12  WINDOW_SUCCEEDED        attempt 3
+0 → 1
+1 → 2
 ```
 
-The same window was used for all three attempts.
-
-Attempt 2 linked to attempt 1. Attempt 3 linked to attempt 2.
-
-The watermark did not move after attempt 1 or attempt 2 failed.
-
-After attempt 3 succeeded, the final state was:
+Final state:
 
 ```text
-state = IDLE
-control_version = 12
-last_successful_window = 2016-09-06 → 2016-09-07
-active attempt = NULL
-last error = NULL
+state \= IDLE
+cycle_id \= 1
+control_version \= 2
+last_successful_window_start \= 2016-09-01T00:00:00+00:00
+last_successful_window_end   \= 2016-10-01T00:00:00+00:00
+active attempt \= NULL
 ```
 
----
+\---
 
-## Real stale-write validation
+## Exact production monitoring evidence
 
-After the final state reached version 12, a test writer tried to persist a transition using expected version 11.
+The same controller attempt appeared in `olist_monitoring.pipeline_runs.control_attempt_id`.
 
-Result:
+The matching monitoring run completed with:
 
 ```text
-ConcurrentStateUpdateError
+22 / 22 models successful
+96 / 96 tests passed
 ```
 
-The follow-up check showed:
+\---
+
+## Analytics watermark integration
+
+The production analytical serving layer uses `last_successful_window_end` as its upper bound.
+
+Therefore active or failed processing windows are not exposed as completed business data. Analytics advances only after `WINDOW_SUCCEEDED`.
+
+\---
+
+## Analytics state-universe integration
+
+A direct fact-row filter would remove states with no currently eligible orders and violate the Portal's 27-state integrity invariant.
+
+The final design therefore uses:
 
 ```text
-state = IDLE
-control_version = 12
-cas_probe_event_count = 0
+complete state universe
+        ↓
+watermark-filtered eligible orders
+        ↓
+LEFT JOIN
 ```
 
-This proves the stale transaction did not change the state or append a false event.
+This preserves all states while keeping evidence-dependent metrics nullable when no observation exists.
 
----
+\---
 
 ## Unit tests
 
-Current test inventory:
+Current Python regression inventory:
 
 ```text
-window controller:           52
-monitoring-run resolver:      5
-M9 reviewer:                 53
-                            ----
-total:                      110
+Window Controller:       52
+Monitoring resolver:      5
+M9 reviewer:             59
+                         \---
+Total:                  116
 ```
 
-Controller tests cover models, allowed transitions, service rules, repository behavior, execution flow, and retry behavior.
+Controller tests cover models, state transitions, calendar-window derivation, cycle behavior, repository persistence, execution orchestration, retry semantics, and stale-writer handling.
 
----
+\---
 
 ## Useful commands
 
 ### Controller help
 
 ```bash
-python dbt/control/run_window_controller.py --help
+python dbt/control/run_window_controller.py \--help
 ```
 
 ### Run controller tests
 
 ```bash
-python -m unittest discover \
-  -s dbt/control/window_controller/tests \
-  -t dbt/control \
-  -v
+python \-m unittest discover \\
+  \-s dbt/control/window_controller/tests \\
+  \-t dbt/control \\
+  \-v
 ```
 
 ### Run a new validation window
 
 ```bash
-python dbt/control/run_window_controller.py \
-  --project-id "$DBT_PROJECT_ID" \
-  --dataset-id olist_control \
-  --pipeline-name olist-dbt-build-job \
-  --environment validation \
-  --dbt-dataset olist_validation \
-  --location EU \
-  --initial-start 2016-09-04T00:00:00+00:00 \
-  --window-size-hours 24
+python dbt/control/run_window_controller.py \\
+  \--project-id "$DBT_PROJECT_ID" \\
+  \--dataset-id olist_control \\
+  \--pipeline-name olist-dbt-build-job \\
+  \--environment validation \\
+  \--dbt-dataset olist_validation \\
+  \--location EU \\
+  \--source-start 2016-09-01T00:00:00+00:00 \\
+  \--source-end 2018-11-01T00:00:00+00:00
 ```
 
 ### Retry the current failed window
 
 ```bash
-python dbt/control/run_window_controller.py \
-  --project-id "$DBT_PROJECT_ID" \
-  --dataset-id olist_control \
-  --pipeline-name olist-dbt-build-job \
-  --environment validation \
-  --dbt-dataset olist_validation \
-  --location EU \
-  --retry
+python dbt/control/run_window_controller.py \\
+  \--project-id "$DBT_PROJECT_ID" \\
+  \--dataset-id olist_control \\
+  \--pipeline-name olist-dbt-build-job \\
+  \--environment validation \\
+  \--dbt-dataset olist_validation \\
+  \--location EU \\
+  \--source-start 2016-09-01T00:00:00+00:00 \\
+  \--source-end 2018-11-01T00:00:00+00:00 \\
+  \--retry
 ```
 
----
+\---
 
-## U1 boundary
+## Final M10 boundary
 
-M10 U1 is complete for:
+M10 is complete for:
 
-- normal forward windows
-- successful watermark advance
-- failure without watermark advance
-- same-window retry
-- repeated retry
-- audit history
-- stale-write rejection
-- windowed dbt facts
-- exact M8/M9 run correlation
+\- normal forward calendar-month windows
+\- explicit production `cycle_id`
+\- bounded source cycling
+\- successful watermark advancement
+\- failure without watermark advancement
+\- exact-window retry
+\- repeated retry
+\- append-only audit history
+\- stale-writer rejection
+\- transactional state \+ event persistence
+\- windowed dbt fact processing
+\- exact M8 monitoring correlation
+\- exact M9 review scope
+\- scheduled Cloud Run controller deployment
+\- hourly Cloud Scheduler invocation
+\- successful-watermark analytical serving
+\- full 27-state analytical integrity
 
-Not included in U1:
+Not included in M10:
 
-- automatic retry scheduling
-- automatic retry limit
-- full quarantine workflow
-- replay
-- backfill
-- backward watermark movement
-- portal screens
-- alert delivery
+\- arbitrary historical replay
+\- multi-window backfill
+\- backward movement of the normal production watermark
+\- independent replay-state management
+\- replay versus incremental consistency verification
+\- automatic quarantine-release workflow
+\- alert delivery
 
-Replay and backfill belong to M11. Portal and analytics work continues in M10.
+Replay, backfill, and recovery orchestration belong to M11.
