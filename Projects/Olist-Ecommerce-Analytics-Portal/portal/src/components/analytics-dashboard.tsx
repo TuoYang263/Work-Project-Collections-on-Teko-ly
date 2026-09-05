@@ -551,14 +551,15 @@ export function AnalyticsDashboard({
         <Card className="h-full">
           <CardHeader>
             <CardTitle>
-              Review risk vs expected
+              Historical review risk vs expected
             </CardTitle>
 
             <p className="mt-1 text-sm text-muted-foreground">
-              Business action shows what to do.
-              This diagnostic shows whether
+              Business action shows what to do
+              for the current watermark-scoped data.
+              This historical diagnostic shows whether
               negative-review risk for{" "}
-              {scopeLabel} is unusually high or
+              {scopeLabel} was unusually high or
               low after accounting for the order
               and delivery mix.
             </p>
@@ -627,7 +628,7 @@ export function AnalyticsDashboard({
 
                 <div>
                   <div className="text-xs text-muted-foreground">
-                    Orders evaluated
+                    Historical orders evaluated
                   </div>
 
                   <div className="font-medium">
