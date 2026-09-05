@@ -330,16 +330,16 @@ The controller does not guess the latest monitoring run.
 Core M10 invariants:
 
 ```text
-1\. Normal production processing uses forward calendar-month windows.
-2\. A successful window advances the successful watermark.
-3\. A failed workload does not advance the successful watermark.
-4\. Retry reuses the exact failed window.
-5\. Every retry receives a new attempt_id.
-6\. State and audit-event writes commit in one BigQuery transaction.
-7\. Stale concurrent writers are rejected by control_version CAS.
-8\. One controller attempt resolves one exact monitoring run.
-9\. Reaching SOURCE_END creates a new cycle_id instead of rewinding a cycle.
-10\. Arbitrary replay/backfill does not silently move the normal production watermark.
+1. Normal production processing uses forward calendar-month windows.
+2. A successful window advances the successful watermark.
+3. A failed workload does not advance the successful watermark.
+4. Retry reuses the exact failed window.
+5. Every retry receives a new attempt_id.
+6. State and audit-event writes commit in one BigQuery transaction.
+7. Stale concurrent writers are rejected by control_version CAS.
+8. One controller attempt resolves one exact monitoring run.
+9. Reaching SOURCE_END creates a new cycle_id instead of rewinding a cycle.
+10. Arbitrary replay/backfill does not silently move the normal production watermark.
 ```
 
 Detailed documentation:
