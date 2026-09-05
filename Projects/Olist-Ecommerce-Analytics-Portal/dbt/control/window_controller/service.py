@@ -31,23 +31,112 @@ def derive_next_window(
         end=window_start + window_size,
     )
 
+def derive_next_monthly_window(
+    control_state: ControlState,
+    *,
+    source_start: datetime,
+    source_end: datetime,
+) -> tuple[int, Window]:
+    _validate_source_bounds(
+        source_start=source_start,
+        source_end=source_end,
+    )
+
+    if control_state.cycle_id == 0:
+        cycle_id = 1
+        window_start = source_start
+
+    elif control_state.last_successful_window is None:
+        cycle_id = control_state.cycle_id
+        window_start = source_start
+
+    else:
+        last_window_end = (
+            control_state.last_successful_window.end
+        )
+
+        if last_window_end < source_end:
+            cycle_id = control_state.cycle_id
+            window_start = last_window_end
+
+        elif last_window_end == source_end:
+            cycle_id = control_state.cycle_id + 1
+            window_start = source_start
+
+        else:
+            raise ValueError(
+                "last successful window extends "
+                "beyond configured source end"
+            )
+
+    _validate_month_boundary(
+        "window_start",
+        window_start,
+    )
+
+    window_end = _next_calendar_month(
+        window_start
+    )
+
+    if window_end > source_end:
+        raise ValueError(
+            "derived calendar-month window "
+            "extends beyond configured source end"
+        )
+
+    return (
+        cycle_id,
+        Window(
+            start=window_start,
+            end=window_end,
+        ),
+    )
 
 def start_new_window(
     control_state: ControlState,
     *,
     window: Window,
     attempt_id: str,
+    cycle_id: int | None = None,
 ) -> ControlState:
     validate_transition(
         control_state.state,
         PipelineState.RUNNING,
     )
 
-    if control_state.last_successful_window is not None:
-        expected_start = control_state.last_successful_window.end
+    effective_cycle_id = (
+        control_state.cycle_id
+        if cycle_id is None
+        else cycle_id
+    )
+
+    if effective_cycle_id < control_state.cycle_id:
+        raise ValueError(
+            "new window cannot move to an earlier cycle"
+        )
+
+    if (
+        effective_cycle_id
+        > control_state.cycle_id + 1
+    ):
+        raise ValueError(
+            "new window cannot skip processing cycles"
+        )
+
+    if (
+        effective_cycle_id == control_state.cycle_id
+        and control_state.last_successful_window
+        is not None
+    ):
+        expected_start = (
+            control_state.last_successful_window.end
+        )
 
         if window.start != expected_start:
-            raise ValueError("new window must start at the last successful window end")
+            raise ValueError(
+                "new window must start at the "
+                "last successful window end"
+            )
 
     attempt = Attempt(
         attempt_id=attempt_id,
@@ -58,6 +147,7 @@ def start_new_window(
     return replace(
         control_state,
         state=PipelineState.RUNNING,
+        cycle_id=effective_cycle_id,
         active_attempt=attempt,
         control_version=control_state.control_version + 1,
         last_error_code=None,
@@ -176,3 +266,60 @@ def _require_active_attempt(
         raise ValueError("control state has no active attempt")
 
     return control_state.active_attempt
+
+
+def _next_calendar_month(
+    value: datetime,
+) -> datetime:
+    if value.month == 12:
+        return value.replace(
+            year=value.year + 1,
+            month=1,
+        )
+
+    return value.replace(
+        month=value.month + 1,
+    )
+
+
+def _validate_month_boundary(
+    field_name: str,
+    value: datetime,
+) -> None:
+    if value.tzinfo is None:
+        raise ValueError(
+            f"{field_name} must be timezone-aware"
+        )
+
+    if (
+        value.day != 1
+        or value.hour != 0
+        or value.minute != 0
+        or value.second != 0
+        or value.microsecond != 0
+    ):
+        raise ValueError(
+            f"{field_name} must be a "
+            "calendar-month boundary"
+        )
+
+
+def _validate_source_bounds(
+    *,
+    source_start: datetime,
+    source_end: datetime,
+) -> None:
+    _validate_month_boundary(
+        "source_start",
+        source_start,
+    )
+
+    _validate_month_boundary(
+        "source_end",
+        source_end,
+    )
+
+    if source_end <= source_start:
+        raise ValueError(
+            "source_end must be greater than source_start"
+        )

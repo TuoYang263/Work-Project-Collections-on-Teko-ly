@@ -4,7 +4,7 @@ import argparse
 import os
 import sys
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from google.cloud import bigquery
 
@@ -77,18 +77,23 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--initial-start",
+        "--source-start",
         type=parse_datetime,
         help=(
-            "Initial window start. Required for normal "
-            "new-window execution; not used for --retry."
+            "Inclusive start of the bounded historical "
+            "production cycle. Required for new-window "
+            "execution."
         ),
     )
 
     parser.add_argument(
-        "--window-size-hours",
-        type=int,
-        default=24,
+        "--source-end",
+        type=parse_datetime,
+        help=(
+            "Exclusive end of the bounded historical "
+            "production cycle. Required for new-window "
+            "execution."
+        ),
     )
 
     parser.add_argument(
@@ -106,26 +111,17 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
-    if args.window_size_hours <= 0:
-        print(
-            "ERROR: --window-size-hours must be > 0",
-            file=sys.stderr,
-        )
-        return 2
-
-    if args.retry and args.initial_start is not None:
-        print(
-            "ERROR: --initial-start must not be supplied " "with --retry.",
-            file=sys.stderr,
-        )
-        return 2
-
-    if not args.retry and args.initial_start is None:
-        print(
-            "ERROR: --initial-start is required for a " "new window.",
-            file=sys.stderr,
-        )
-        return 2
+    if not args.retry:
+        if (
+            args.source_start is None
+            or args.source_end is None
+        ):
+            print(
+                "ERROR: --source-start and --source-end "
+                "are required for a new window.",
+                file=sys.stderr,
+            )
+            return 2
 
     if args.environment != "prod" and args.dbt_dataset == "olist":
         print(
@@ -189,14 +185,15 @@ def main() -> int:
             print("execution_mode=new_window")
 
             # main() has already validated this invariant.
-            assert args.initial_start is not None
+            assert args.source_start is not None
+            assert args.source_end is not None
 
             final_state = execute_new_window(
                 repository,
                 pipeline_name=args.pipeline_name,
                 environment=args.environment,
-                initial_start=args.initial_start,
-                window_size=timedelta(hours=args.window_size_hours),
+                source_start=args.source_start,
+                source_end=args.source_end,
                 attempt_id=attempt_id,
                 started_event_id=started_event_id,
                 final_event_id=final_event_id,
@@ -231,6 +228,7 @@ def main() -> int:
         return 5
 
     print(f"final_state={final_state.state.value}")
+    print(f"cycle_id={final_state.cycle_id}")
     print(f"control_version={final_state.control_version}")
 
     if final_state.last_successful_window is not None:

@@ -141,6 +141,7 @@ class TestBigQueryWindowControlRepository(unittest.TestCase):
                 {
                     "pipeline_name": "olist-dbt-build-job",
                     "environment": "prod",
+                    "cycle_id": 1,
                     "state": "IDLE",
                     "last_successful_window_start": datetime(
                         2026,
@@ -179,6 +180,7 @@ class TestBigQueryWindowControlRepository(unittest.TestCase):
             PipelineState.IDLE,
         )
         self.assertEqual(state.control_version, 7)
+        self.assertEqual(state.cycle_id, 1)
         self.assertIsNone(state.active_attempt)
 
         self.assertEqual(
@@ -197,6 +199,7 @@ class TestBigQueryWindowControlRepository(unittest.TestCase):
                 {
                     "pipeline_name": "olist-dbt-build-job",
                     "environment": "prod",
+                    "cycle_id": 1,
                     "state": "FAILED",
                     "last_successful_window_start": datetime(
                         2026,
@@ -244,6 +247,8 @@ class TestBigQueryWindowControlRepository(unittest.TestCase):
             PipelineState.FAILED,
         )
 
+        self.assertEqual(state.cycle_id, 1)
+
         self.assertEqual(
             state.active_attempt.attempt_id,
             "attempt-002",
@@ -259,10 +264,41 @@ class TestBigQueryWindowControlRepository(unittest.TestCase):
             "attempt-001",
         )
 
+    def test_null_cycle_id_is_rejected(self):
+        row = {
+            "pipeline_name": "olist-dbt-build-job",
+            "environment": "prod",
+            "cycle_id": None,
+            "state": "IDLE",
+            "last_successful_window_start": None,
+            "last_successful_window_end": None,
+            "active_window_start": None,
+            "active_window_end": None,
+            "active_attempt_id": None,
+            "active_attempt_number": None,
+            "active_retry_of_attempt_id": None,
+            "control_version": 0,
+            "last_error_code": None,
+            "last_error_message": None,
+        }
+
+        repository = BigQueryWindowControlRepository(
+            FakeBigQueryClient([row])
+        )
+
+        with self.assertRaises(
+            ControlStateIntegrityError
+        ):
+            repository.load_state(
+                pipeline_name="olist-dbt-build-job",
+                environment="prod",
+            )
+
     def test_duplicate_state_rows_are_rejected(self):
         row = {
             "pipeline_name": "olist-dbt-build-job",
             "environment": "prod",
+            "cycle_id": 1,
             "state": "IDLE",
             "last_successful_window_start": None,
             "last_successful_window_end": None,
@@ -290,6 +326,7 @@ class TestBigQueryWindowControlRepository(unittest.TestCase):
         row = {
             "pipeline_name": "olist-dbt-build-job",
             "environment": "prod",
+            "cycle_id": 1,
             "state": "IDLE",
             "last_successful_window_start": datetime(2026, 8, 9, tzinfo=timezone.utc),
             "last_successful_window_end": None,
@@ -315,6 +352,7 @@ class TestBigQueryWindowControlRepository(unittest.TestCase):
         row = {
             "pipeline_name": "olist-dbt-build-job",
             "environment": "prod",
+            "cycle_id": 1,
             "state": "FAILED",
             "last_successful_window_start": None,
             "last_successful_window_end": None,
@@ -376,6 +414,32 @@ class TestBigQueryWindowControlRepository(unittest.TestCase):
         self.assertIn(
             "ROLLBACK TRANSACTION",
             client.last_query,
+        )
+
+        self.assertIn(
+            "cycle_id = @cycle_id",
+            client.last_query,
+        )
+
+        self.assertIn(
+            "@event_cycle_id",
+            client.last_query,
+        )
+
+        parameters = {
+            parameter.name: parameter.value
+            for parameter
+            in client.last_job_config.query_parameters
+        }
+
+        self.assertEqual(
+            parameters["cycle_id"],
+            new_state.cycle_id,
+        )
+
+        self.assertEqual(
+            parameters["event_cycle_id"],
+            new_state.cycle_id,
         )
 
     def test_persist_transition_rejects_stale_version(self):
@@ -462,6 +526,157 @@ class TestBigQueryWindowControlRepository(unittest.TestCase):
                 event_type="WINDOW_FAILED",
             )
 
+    def test_persist_transition_rejects_cycle_regression(
+        self,
+    ):
+        client = FakeBigQueryClient()
+        repository = BigQueryWindowControlRepository(
+            client
+        )
+
+        previous_state, new_state = (
+            self._build_state_pair()
+        )
+
+        previous_state = ControlState(
+            pipeline_name=previous_state.pipeline_name,
+            environment=previous_state.environment,
+            state=previous_state.state,
+            cycle_id=2,
+            last_successful_window=(
+                previous_state.last_successful_window
+            ),
+            active_attempt=previous_state.active_attempt,
+            control_version=7,
+        )
+
+        invalid_state = ControlState(
+            pipeline_name=new_state.pipeline_name,
+            environment=new_state.environment,
+            state=new_state.state,
+            cycle_id=1,
+            last_successful_window=(
+                new_state.last_successful_window
+            ),
+            active_attempt=new_state.active_attempt,
+            control_version=8,
+            last_error_code=new_state.last_error_code,
+            last_error_message=(
+                new_state.last_error_message
+            ),
+        )
+
+        with self.assertRaises(ValueError):
+            repository.persist_transition(
+                previous_state=previous_state,
+                new_state=invalid_state,
+                event_id="event-invalid",
+                event_type="WINDOW_FAILED",
+            )
+
+    def test_persist_transition_rejects_cycle_skip(
+        self,
+    ):
+        client = FakeBigQueryClient()
+        repository = BigQueryWindowControlRepository(
+            client
+        )
+
+        previous_state, new_state = (
+            self._build_state_pair()
+        )
+
+        invalid_state = ControlState(
+            pipeline_name=new_state.pipeline_name,
+            environment=new_state.environment,
+            state=new_state.state,
+            cycle_id=3,
+            last_successful_window=(
+                new_state.last_successful_window
+            ),
+            active_attempt=new_state.active_attempt,
+            control_version=8,
+            last_error_code=new_state.last_error_code,
+            last_error_message=(
+                new_state.last_error_message
+            ),
+        )
+
+        with self.assertRaises(ValueError):
+            repository.persist_transition(
+                previous_state=previous_state,
+                new_state=invalid_state,
+                event_id="event-invalid",
+                event_type="WINDOW_FAILED",
+            )
+
+    def test_persist_transition_writes_next_cycle(
+        self,
+    ):
+        client = FakeBigQueryClient()
+        repository = BigQueryWindowControlRepository(
+            client
+        )
+
+        window = Window(
+            start=datetime(
+                2016,
+                9,
+                1,
+                tzinfo=timezone.utc,
+            ),
+            end=datetime(
+                2016,
+                10,
+                1,
+                tzinfo=timezone.utc,
+            ),
+        )
+
+        previous_state = ControlState(
+            pipeline_name="olist-dbt-build-job",
+            environment="prod",
+            state=PipelineState.IDLE,
+            cycle_id=1,
+            control_version=10,
+        )
+
+        new_state = ControlState(
+            pipeline_name="olist-dbt-build-job",
+            environment="prod",
+            state=PipelineState.RUNNING,
+            cycle_id=2,
+            active_attempt=Attempt(
+                attempt_id="attempt-cycle-2",
+                attempt_number=1,
+                window=window,
+            ),
+            control_version=11,
+        )
+
+        repository.persist_transition(
+            previous_state=previous_state,
+            new_state=new_state,
+            event_id="event-cycle-2",
+            event_type="WINDOW_STARTED",
+        )
+
+        parameters = {
+            parameter.name: parameter.value
+            for parameter
+            in client.last_job_config.query_parameters
+        }
+
+        self.assertEqual(
+            parameters["cycle_id"],
+            2,
+        )
+
+        self.assertEqual(
+            parameters["event_cycle_id"],
+            2,
+        )
+
     def test_completed_transition_uses_previous_attempt(self):
         previous_state, _ = self._build_state_pair()
 
@@ -500,6 +715,21 @@ class TestBigQueryWindowControlRepository(unittest.TestCase):
             1,
         )
 
+        self.assertEqual(
+            parameters["event_cycle_id"],
+            completed_state.cycle_id,
+        )
+
+        self.assertEqual(
+            parameters["event_cycle_id"],
+            completed_state.cycle_id,
+        )
+
+        self.assertEqual(
+            parameters["event_cycle_id"],
+            completed_state.cycle_id,
+        )
+
     def test_initialize_state_creates_idle_version_zero(self):
         client = FakeBigQueryClient()
 
@@ -518,6 +748,21 @@ class TestBigQueryWindowControlRepository(unittest.TestCase):
         self.assertEqual(
             state.control_version,
             0,
+        )
+
+        self.assertEqual(
+            state.cycle_id,
+            1,
+        )
+
+        self.assertEqual(
+            state.cycle_id,
+            1,
+        )
+
+        self.assertEqual(
+            state.cycle_id,
+            1,
         )
 
         self.assertIsNone(state.last_successful_window)

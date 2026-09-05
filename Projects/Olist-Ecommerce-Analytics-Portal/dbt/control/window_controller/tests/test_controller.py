@@ -15,6 +15,20 @@ from window_controller.models import (
     Window,
 )
 
+SOURCE_START = datetime(
+    2016,
+    9,
+    1,
+    tzinfo=timezone.utc,
+)
+
+SOURCE_END = datetime(
+    2018,
+    11,
+    1,
+    tzinfo=timezone.utc,
+)
+
 
 class FakeRepository:
     def __init__(self, state):
@@ -98,19 +112,12 @@ class TestWindowController(unittest.TestCase):
 
         repository = FakeRepository(initial_state)
 
-        initial_start = datetime(
-            2026,
-            8,
-            1,
-            tzinfo=timezone.utc,
-        )
-
         running_state = claim_new_window(
             repository,
             pipeline_name="olist-dbt-build-job",
             environment="prod",
-            initial_start=initial_start,
-            window_size=timedelta(days=1),
+            source_start=SOURCE_START,
+            source_end=SOURCE_END,
             attempt_id="attempt-001",
             event_id="event-001",
         )
@@ -128,12 +135,20 @@ class TestWindowController(unittest.TestCase):
             "attempt-001",
         )
         self.assertEqual(
-            running_state.active_attempt.window.start,
-            initial_start,
+            running_state.active_attempt.window,
+            Window(
+                start=SOURCE_START,
+                end=datetime(
+                    2016,
+                    10,
+                    1,
+                    tzinfo=timezone.utc,
+                ),
+            ),
         )
         self.assertEqual(
-            running_state.active_attempt.window.end,
-            initial_start + timedelta(days=1),
+            running_state.cycle_id,
+            1,
         )
         self.assertEqual(
             repository.persist_calls[0]["event_type"],
@@ -143,18 +158,15 @@ class TestWindowController(unittest.TestCase):
     def test_claim_requires_explicit_bootstrap(self):
         repository = FakeRepository(None)
 
-        with self.assertRaises(ControlStateNotInitializedError):
+        with self.assertRaises(
+            ControlStateNotInitializedError
+        ):
             claim_new_window(
                 repository,
                 pipeline_name="olist-dbt-build-job",
                 environment="prod",
-                initial_start=datetime(
-                    2026,
-                    8,
-                    1,
-                    tzinfo=timezone.utc,
-                ),
-                window_size=timedelta(days=1),
+                source_start=SOURCE_START,
+                source_end=SOURCE_END,
                 attempt_id="attempt-001",
                 event_id="event-001",
             )
@@ -175,19 +187,12 @@ class TestWindowController(unittest.TestCase):
             captured_env.update(env)
             return 0
 
-        initial_start = datetime(
-            2026,
-            8,
-            1,
-            tzinfo=timezone.utc,
-        )
-
         final_state = execute_new_window(
             repository,
             pipeline_name="olist-dbt-build-job",
             environment="prod",
-            initial_start=initial_start,
-            window_size=timedelta(days=1),
+            source_start=SOURCE_START,
+            source_end=SOURCE_END,
             attempt_id="attempt-001",
             started_event_id="event-start-001",
             final_event_id="event-success-001",
@@ -203,12 +208,33 @@ class TestWindowController(unittest.TestCase):
             2,
         )
         self.assertEqual(
-            final_state.last_successful_window.start,
-            initial_start,
+            final_state.last_successful_window,
+            Window(
+                start=SOURCE_START,
+                end=datetime(
+                    2016,
+                    10,
+                    1,
+                    tzinfo=timezone.utc,
+                ),
+            ),
         )
         self.assertEqual(
-            final_state.last_successful_window.end,
-            initial_start + timedelta(days=1),
+            final_state.cycle_id,
+            1,
+        )
+        self.assertEqual(
+            captured_env["CONTROL_WINDOW_START"],
+            SOURCE_START.isoformat(),
+        )
+        self.assertEqual(
+            captured_env["CONTROL_WINDOW_END"],
+            datetime(
+                2016,
+                10,
+                1,
+                tzinfo=timezone.utc,
+            ).isoformat(),
         )
         self.assertIsNone(final_state.active_attempt)
         self.assertEqual(
@@ -245,13 +271,8 @@ class TestWindowController(unittest.TestCase):
             repository,
             pipeline_name="olist-dbt-build-job",
             environment="prod",
-            initial_start=datetime(
-                2026,
-                8,
-                1,
-                tzinfo=timezone.utc,
-            ),
-            window_size=timedelta(days=1),
+            source_start=SOURCE_START,
+            source_end=SOURCE_END,
             attempt_id="attempt-001",
             started_event_id="event-start-001",
             final_event_id="event-failed-001",
@@ -267,7 +288,23 @@ class TestWindowController(unittest.TestCase):
             2,
         )
         self.assertIsNone(final_state.last_successful_window)
+        self.assertEqual(
+            final_state.cycle_id,
+            1,
+        )
         self.assertIsNotNone(final_state.active_attempt)
+        self.assertEqual(
+            final_state.active_attempt.window,
+            Window(
+                start=SOURCE_START,
+                end=datetime(
+                    2016,
+                    10,
+                    1,
+                    tzinfo=timezone.utc,
+                ),
+            ),
+        )
         self.assertEqual(
             final_state.active_attempt.attempt_id,
             "attempt-001",
@@ -283,6 +320,71 @@ class TestWindowController(unittest.TestCase):
         self.assertEqual(
             repository.persist_calls[1]["event_type"],
             "WINDOW_FAILED",
+        )
+
+    def test_claim_new_window_rolls_to_next_cycle(
+        self,
+    ) -> None:
+        state = ControlState(
+            pipeline_name="olist-dbt-build-job",
+            environment="prod",
+            state=PipelineState.IDLE,
+            cycle_id=1,
+            last_successful_window=Window(
+                start=datetime(
+                    2018,
+                    10,
+                    1,
+                    tzinfo=timezone.utc,
+                ),
+                end=SOURCE_END,
+            ),
+            control_version=10,
+        )
+
+        repository = FakeRepository(state)
+
+        running_state = claim_new_window(
+            repository,
+            pipeline_name="olist-dbt-build-job",
+            environment="prod",
+            source_start=SOURCE_START,
+            source_end=SOURCE_END,
+            attempt_id="attempt-cycle-2",
+            event_id="event-cycle-2",
+        )
+
+        self.assertEqual(
+            running_state.state,
+            PipelineState.RUNNING,
+        )
+
+        self.assertEqual(
+            running_state.cycle_id,
+            2,
+        )
+
+        self.assertEqual(
+            running_state.active_attempt.window,
+            Window(
+                start=SOURCE_START,
+                end=datetime(
+                    2016,
+                    10,
+                    1,
+                    tzinfo=timezone.utc,
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            running_state.control_version,
+            11,
+        )
+
+        self.assertEqual(
+            repository.persist_calls[0]["event_type"],
+            "WINDOW_STARTED",
         )
 
     def test_claim_retry_from_failed_reuses_window_and_links_attempt(self):
@@ -307,6 +409,10 @@ class TestWindowController(unittest.TestCase):
             4,
         )
         self.assertEqual(
+            running_state.cycle_id,
+            failed_state.cycle_id,
+        )
+        self.assertEqual(
             running_state.active_attempt.window,
             failed_state.active_attempt.window,
         )
@@ -326,6 +432,10 @@ class TestWindowController(unittest.TestCase):
                 "WINDOW_RETRY_SCHEDULED",
                 "WINDOW_RETRY_STARTED",
             ],
+        )
+        self.assertEqual(
+            running_state.cycle_id,
+            failed_state.cycle_id,
         )
 
     def test_claim_retry_resumes_from_waiting_retry(self):
@@ -398,6 +508,10 @@ class TestWindowController(unittest.TestCase):
             5,
         )
         self.assertEqual(
+            final_state.cycle_id,
+            failed_state.cycle_id,
+        )
+        self.assertEqual(
             final_state.last_successful_window,
             failed_state.active_attempt.window,
         )
@@ -444,6 +558,10 @@ class TestWindowController(unittest.TestCase):
         self.assertEqual(
             final_state.control_version,
             5,
+        )
+        self.assertEqual(
+            final_state.cycle_id,
+            failed_state.cycle_id,
         )
         self.assertEqual(
             final_state.last_successful_window,

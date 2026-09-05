@@ -51,6 +51,7 @@ class BigQueryWindowControlRepository:
         SELECT
             pipeline_name,
             environment,
+            cycle_id,
             state,
             last_successful_window_start,
             last_successful_window_end,
@@ -112,6 +113,7 @@ class BigQueryWindowControlRepository:
             pipeline_name=pipeline_name,
             environment=environment,
             state=PipelineState.IDLE,
+            cycle_id=1,
             last_successful_window=None,
             active_attempt=None,
             control_version=0,
@@ -147,6 +149,7 @@ class BigQueryWindowControlRepository:
         (
             pipeline_name,
             environment,
+            cycle_id,
             state,
 
             last_successful_window_start,
@@ -169,6 +172,7 @@ class BigQueryWindowControlRepository:
         (
             @pipeline_name,
             @environment,
+            1,
             'IDLE',
 
             NULL,
@@ -286,6 +290,7 @@ class BigQueryWindowControlRepository:
 
         UPDATE `{self._state_table_fqn}`
         SET
+            cycle_id = @cycle_id,
             state = @state,
 
             last_successful_window_start =
@@ -339,6 +344,7 @@ class BigQueryWindowControlRepository:
 
             pipeline_name,
             environment,
+            cycle_id,
 
             window_start,
             window_end,
@@ -368,6 +374,7 @@ class BigQueryWindowControlRepository:
 
             @pipeline_name,
             @environment,
+            @event_cycle_id,
 
             @event_window_start,
             @event_window_end,
@@ -407,6 +414,11 @@ class BigQueryWindowControlRepository:
 
         job_config = bigquery.QueryJobConfig(
             query_parameters=[
+                bigquery.ScalarQueryParameter(
+                    "cycle_id",
+                    "INT64",
+                    new_state.cycle_id,
+                ),
                 bigquery.ScalarQueryParameter(
                     "pipeline_name",
                     "STRING",
@@ -494,6 +506,11 @@ class BigQueryWindowControlRepository:
                     event_attempt.attempt_id,
                 ),
                 bigquery.ScalarQueryParameter(
+                    "event_cycle_id",
+                    "INT64",
+                    new_state.cycle_id,
+                ),
+                bigquery.ScalarQueryParameter(
                     "event_attempt_number",
                     "INT64",
                     event_attempt.attempt_number,
@@ -566,10 +583,18 @@ class BigQueryWindowControlRepository:
 
         active_attempt = _build_optional_attempt(row)
 
+        cycle_id = row["cycle_id"]
+
+        if cycle_id is None:
+            raise ControlStateIntegrityError(
+                "persisted control state requires cycle_id"
+            )
+
         return ControlState(
             pipeline_name=row["pipeline_name"],
             environment=row["environment"],
             state=PipelineState(row["state"]),
+            cycle_id=cycle_id,
             last_successful_window=last_successful_window,
             active_attempt=active_attempt,
             control_version=row["control_version"],
@@ -588,6 +613,19 @@ class BigQueryWindowControlRepository:
             or previous_state.environment != new_state.environment
         ):
             raise ValueError("state update cannot change pipeline identity")
+
+        if new_state.cycle_id < previous_state.cycle_id:
+            raise ValueError(
+                "cycle_id cannot move backwards"
+            )
+
+        if (
+            new_state.cycle_id
+            > previous_state.cycle_id + 1
+        ):
+            raise ValueError(
+                "cycle_id cannot skip cycles"
+            )
 
         expected_new_version = previous_state.control_version + 1
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from .models import (
@@ -15,7 +15,7 @@ from .repository import (
 )
 from .service import (
     complete_current_window,
-    derive_next_window,
+    derive_next_monthly_window,
     fail_current_window,
     move_to_waiting_retry,
     start_new_window,
@@ -38,8 +38,8 @@ def claim_new_window(
     *,
     pipeline_name: str,
     environment: str,
-    initial_start: datetime,
-    window_size: timedelta,
+    source_start: datetime,
+    source_end: datetime,
     attempt_id: str,
     event_id: str,
 ) -> ControlState:
@@ -55,14 +55,15 @@ def claim_new_window(
             f"environment={environment!r}"
         )
 
-    window = derive_next_window(
+    cycle_id, window = derive_next_monthly_window(
         current_state,
-        initial_start=initial_start,
-        window_size=window_size,
+        source_start=source_start,
+        source_end=source_end,
     )
 
     running_state = start_new_window(
         current_state,
+        cycle_id=cycle_id,
         window=window,
         attempt_id=attempt_id,
     )
@@ -74,6 +75,7 @@ def claim_new_window(
         event_type="WINDOW_STARTED",
         metadata={
             "operation": "claim_new_window",
+            "cycle_id": cycle_id,
         },
     )
 
@@ -149,8 +151,8 @@ def execute_new_window(
     *,
     pipeline_name: str,
     environment: str,
-    initial_start: datetime,
-    window_size: timedelta,
+    source_start: datetime,
+    source_end: datetime,
     attempt_id: str,
     started_event_id: str,
     final_event_id: str,
@@ -160,8 +162,8 @@ def execute_new_window(
         repository,
         pipeline_name=pipeline_name,
         environment=environment,
-        initial_start=initial_start,
-        window_size=window_size,
+        source_start=source_start,
+        source_end=source_end,
         attempt_id=attempt_id,
         event_id=started_event_id,
     )

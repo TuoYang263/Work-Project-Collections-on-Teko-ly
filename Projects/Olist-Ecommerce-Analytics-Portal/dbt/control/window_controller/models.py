@@ -44,6 +44,8 @@ class ControlState:
     environment: str
     state: PipelineState
 
+    cycle_id: int = 1
+
     last_successful_window: Window | None = None
     active_attempt: Attempt | None = None
 
@@ -61,6 +63,11 @@ class ControlState:
 
         if self.control_version < 0:
             raise ValueError("control_version must be greater than or equal to 0")
+
+        if self.cycle_id < 0:
+            raise ValueError(
+                "cycle_id must be greater than or equal to 0"
+            )
 
         if self.state == PipelineState.RUNNING and self.active_attempt is None:
             raise ValueError("RUNNING state requires an active attempt")
