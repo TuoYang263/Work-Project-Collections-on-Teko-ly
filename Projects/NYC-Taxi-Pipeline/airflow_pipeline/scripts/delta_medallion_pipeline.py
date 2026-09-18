@@ -7,6 +7,7 @@
 
 import os
 import sys
+import time
 from functools import reduce
 from typing import List
 
@@ -120,6 +121,58 @@ def get_spark(app_name: str = "NYC Medallion (Delta)") -> SparkSession:
 
     return spark
 
+# ---------- Spark baseline instrumentation ----------
+
+BASELINE_SPARK_CONF_KEYS = [
+    "spark.sql.shuffle.partitions",
+    "spark.sql.adaptive.enabled",
+    "spark.sql.autoBroadcastJoinThreshold",
+]
+
+
+def log_spark_baseline(
+    spark: SparkSession,
+    label: str,
+) -> None:
+    """
+    Log Spark runtime and configuration metadata without touching
+    DataFrame execution.
+    """
+    logger.info(f"[BASELINE][{label}] spark_version={spark.version}")
+    logger.info(f"[BASELINE][{label}] master={spark.sparkContext.master}")
+    logger.info(
+        f"[BASELINE][{label}] "
+        f"default_parallelism={spark.sparkContext.defaultParallelism}"
+    )
+
+    for key in BASELINE_SPARK_CONF_KEYS:
+        try:
+            value = spark.conf.get(key)
+        except Exception:
+            value = "<unset>"
+
+        logger.info(f"[BASELINE][{label}] {key}={value}")
+
+
+def log_physical_plan(
+    df: DataFrame,
+    label: str,
+) -> None:
+    """
+    Print the formatted Spark physical plan without triggering
+    an explicit DataFrame action.
+    """
+    logger.info(
+        f"[BASELINE][{label}] formatted_physical_plan_start"
+    )
+
+    df.explain(mode="formatted")
+
+    logger.info(
+        f"[BASELINE][{label}] formatted_physical_plan_end"
+    )
+
+
 # ---------- Bronze ----------
 def write_bronze(year: int, months: List[int]) -> str:
     """
@@ -197,7 +250,10 @@ def write_silver() -> str:
 
 
 # ---------- Gold ----------
-def write_gold() -> dict:
+def write_gold(
+    hourly_only: bool = False,
+    hourly_output_path: str | None = None,
+) -> dict:
     """
     Build Gold Delta tables:
       - trip_summary_hourly
@@ -206,6 +262,29 @@ def write_gold() -> dict:
     """
     spark = get_spark("Gold Aggregate (Delta)")
     logger.info(f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}")
+
+    aqe_override = os.getenv("NYC_SPARK_AQE")
+
+    if aqe_override is not None:
+        spark.conf.set(
+            "spark.sql.adaptive.enabled",
+            aqe_override.lower(),
+        )
+
+    shuffle_override = os.getenv("NYC_SPARK_SHUFFLE_PARTITIONS")
+
+    if shuffle_override is not None:
+        shuffle_partitions = int(shuffle_override)
+
+        if shuffle_partitions <= 0:
+            raise ValueError(
+                "NYC_SPARK_SHUFFLE_PARTITIONS must be greater than 0"
+            )
+
+        spark.conf.set(
+            "spark.sql.shuffle.partitions",
+            str(shuffle_partitions),
+        )
     
     df = spark.read.format("delta").load(SILVER_TRIPS)
 
@@ -229,6 +308,11 @@ def write_gold() -> dict:
         (F.month("tpep_pickup_datetime").isin(months))
     )
 
+    log_spark_baseline(
+        spark=spark,
+        label="gold_input_after_filters",
+    )
+
     # Hourly summary
     summary_hourly = (
         df.withColumn("pickup_hour", F.date_trunc("hour", F.col("tpep_pickup_datetime")))
@@ -242,8 +326,39 @@ def write_gold() -> dict:
           )
           .orderBy("pickup_hour")
     )
-    logger.info(f"[Gold] Writing hourly summary to: {GOLD_SUMMARY_HOURLY}")
-    summary_hourly.write.mode("overwrite").format("delta").save(GOLD_SUMMARY_HOURLY)
+    
+    log_spark_baseline(
+        spark=spark,
+        label="gold_hourly_summary",
+    )
+
+    log_physical_plan(
+        df=summary_hourly,
+        label="gold_hourly_summary",
+    )
+
+    hourly_target = hourly_output_path or GOLD_SUMMARY_HOURLY
+
+    logger.info(f"[Gold] Writing hourly summary to: {hourly_target}")
+
+    started_at = time.perf_counter()
+
+    summary_hourly.write \
+        .mode("overwrite") \
+        .format("delta") \
+        .save(hourly_target)
+
+    elapsed_seconds = time.perf_counter() - started_at
+
+    logger.info(
+        f"[BASELINE][gold_hourly_summary] "
+        f"write_wall_seconds={elapsed_seconds:.3f}"
+    )
+
+    if hourly_only:
+        return {
+            "hourly_summary": hourly_target,
+        }
 
     # Zone summaries (daily) for pickup & dropoff
     def write_zone_summary(loc: str, out_path: str):
@@ -271,7 +386,7 @@ def write_gold() -> dict:
     write_zone_summary("dropoff", GOLD_ZONE_DROPOFF_DAILY)
 
     return {
-        "hourly_summary": GOLD_SUMMARY_HOURLY,
+        "hourly_summary": hourly_target,
         "zone_pickup_daily": GOLD_ZONE_PICKUP_DAILY,
         "zone_dropoff_daily": GOLD_ZONE_DROPOFF_DAILY,
     }
