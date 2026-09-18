@@ -14,6 +14,7 @@ export interface ControlStateOverview {
   pipelineName: string;
   environment: string;
   state: PipelineState;
+  cycleId: number;
   controlVersion: number;
 
   lastSuccessfulWindow: {
