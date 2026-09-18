@@ -38,7 +38,11 @@ export function ReliabilityOverviewPanel({
 
         <div className="text-right">
           <div className="text-sm font-medium">
-            {formatTimestamp(data.reviewedAt)}
+            {formatUtc(data.reviewedAt)}
+          </div>
+
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            {formatHelsinki(data.reviewedAt)}
           </div>
 
           <div className="mt-0.5 text-xs text-muted-foreground">
@@ -74,6 +78,7 @@ export function ReliabilityOverviewPanel({
           value={data.summary.notEvaluated}
           icon={CircleDashed}
           tone="neutral"
+          description="Evidence unavailable or not comparable; not counted as PASS."
         />
       </div>
 
@@ -194,6 +199,7 @@ type MetricCardProps = {
   value: number
   icon: typeof ListChecks
   tone: MetricTone
+  description?: string
 }
 
 function MetricCard({
@@ -201,6 +207,7 @@ function MetricCard({
   value,
   icon: Icon,
   tone,
+  description,
 }: MetricCardProps) {
   const toneClass = {
     neutral:
@@ -223,6 +230,12 @@ function MetricCard({
             <div className="mt-2 text-3xl font-semibold tracking-tight">
               {value}
             </div>
+
+            {description ? (
+              <p className="mt-2 max-w-48 text-xs leading-5 text-muted-foreground">
+                {description}
+              </p>
+            ) : null}
           </div>
 
           <div
@@ -244,10 +257,22 @@ function shortId(value: string): string {
   return `${value.slice(0, 8)}…${value.slice(-4)}`
 }
 
-function formatTimestamp(value: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(new Date(value))
+function formatUtc(value: string): string {
+  return (
+    new Intl.DateTimeFormat("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    }).format(new Date(value)) + " UTC"
+  )
+}
+
+function formatHelsinki(value: string): string {
+  return (
+    new Intl.DateTimeFormat("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Europe/Helsinki",
+    }).format(new Date(value)) + " Helsinki"
+  )
 }
