@@ -59,14 +59,25 @@ logger = get_logger()
 BASE_DIR = getattr(config, "BASE_DIR", PROJECT_ROOT)
 DELTA_BASE = os.path.join(BASE_DIR, "data", "delta")
 
+REFERENCE_DIR = os.path.join(BASE_DIR, "data", "reference")
+TAXI_ZONE_LOOKUP = os.path.join(
+    REFERENCE_DIR,
+    "taxi_zone_lookup.csv",
+)
+
 BRONZE_TRIPS = os.path.join(DELTA_BASE, "bronze", "trips")          # raw delta
 SILVER_TRIPS = os.path.join(DELTA_BASE, "silver", "trips_clean")    # cleaned
 GOLD_SUMMARY_HOURLY = os.path.join(DELTA_BASE, "gold", "trip_summary_hourly")
 GOLD_ZONE_PICKUP_DAILY = os.path.join(DELTA_BASE, "gold", "zone_summary_pickup_daily")
 GOLD_ZONE_DROPOFF_DAILY = os.path.join(DELTA_BASE, "gold", "zone_summary_dropoff_daily")
+GOLD_FLOW_IMBALANCE_DAILY = os.path.join(
+    DELTA_BASE,
+    "gold",
+    "flow_imbalance_daily",
+)
 
-for p in [BRONZE_TRIPS, SILVER_TRIPS, GOLD_SUMMARY_HOURLY,
-           GOLD_ZONE_PICKUP_DAILY, GOLD_ZONE_DROPOFF_DAILY]:
+for p in [BRONZE_TRIPS, SILVER_TRIPS, GOLD_SUMMARY_HOURLY,GOLD_ZONE_PICKUP_DAILY,
+           GOLD_ZONE_DROPOFF_DAILY, GOLD_FLOW_IMBALANCE_DAILY]:
     os.makedirs(p, exist_ok=True)
 
 # ---------- Spark ----------
@@ -249,6 +260,34 @@ def write_silver() -> str:
     return SILVER_TRIPS
 
 
+def build_hourly_summary(df: DataFrame) -> DataFrame:
+    """
+    Build the Gold hourly trip summary from an already-filtered
+    Silver trip DataFrame.
+
+    Grain:
+        One row per pickup_hour.
+    """
+    return (
+        df.withColumn(
+            "pickup_hour",
+            F.date_trunc(
+                "hour",
+                F.col("tpep_pickup_datetime"),
+            ),
+        )
+        .groupBy("pickup_hour")
+        .agg(
+            F.count("*").alias("trip_count"),
+            F.round(F.avg("fare_amount"), 2).alias("avg_fare"),
+            F.round(F.avg("tip_amount"), 2).alias("avg_tip"),
+            F.sum("passenger_count").alias("total_passengers"),
+            F.round(F.avg("trip_distance"), 2).alias("avg_distance"),
+        )
+        .orderBy("pickup_hour")
+    )
+
+
 # ---------- Gold ----------
 def write_gold(
     hourly_only: bool = False,
@@ -259,6 +298,7 @@ def write_gold(
       - trip_summary_hourly
       - zone_summary_pickup_daily
       - zone_summary_dropoff_daily
+      - flow_imbalance_daily
     """
     spark = get_spark("Gold Aggregate (Delta)")
     logger.info(f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}")
@@ -314,19 +354,8 @@ def write_gold(
     )
 
     # Hourly summary
-    summary_hourly = (
-        df.withColumn("pickup_hour", F.date_trunc("hour", F.col("tpep_pickup_datetime")))
-          .groupBy("pickup_hour")
-          .agg(
-              F.count("*").alias("trip_count"),
-              F.round(F.avg("fare_amount"), 2).alias("avg_fare"),
-              F.round(F.avg("tip_amount"), 2).alias("avg_tip"),
-              F.sum("passenger_count").alias("total_passengers"),
-              F.round(F.avg("trip_distance"), 2).alias("avg_distance"),
-          )
-          .orderBy("pickup_hour")
-    )
-    
+    summary_hourly = build_hourly_summary(df)
+
     log_spark_baseline(
         spark=spark,
         label="gold_hourly_summary",
@@ -360,6 +389,26 @@ def write_gold(
             "hourly_summary": hourly_target,
         }
 
+    # Zone passenger-flow imbalance
+    flow_imbalance = build_zone_flow_imbalance(df)
+
+    flow_imbalance = enrich_with_taxi_zone(
+        flow_imbalance,
+        spark,
+    )
+
+    logger.info(
+        f"[Gold] Writing flow imbalance daily to: "
+        f"{GOLD_FLOW_IMBALANCE_DAILY}"
+    )
+
+    (
+        flow_imbalance.write
+        .mode("overwrite")
+        .format("delta")
+        .save(GOLD_FLOW_IMBALANCE_DAILY)
+    )
+
     # Zone summaries (daily) for pickup & dropoff
     def write_zone_summary(loc: str, out_path: str):
         # loc = 'pickup' | 'dropoff'
@@ -389,7 +438,114 @@ def write_gold(
         "hourly_summary": hourly_target,
         "zone_pickup_daily": GOLD_ZONE_PICKUP_DAILY,
         "zone_dropoff_daily": GOLD_ZONE_DROPOFF_DAILY,
+        "flow_imbalance_daily": GOLD_FLOW_IMBALANCE_DAILY,
     }
+
+
+def build_zone_flow_imbalance(df: DataFrame) -> DataFrame:
+    pickups = (
+        df.withColumn(
+            "service_day",
+            F.to_date(F.col("tpep_pickup_datetime")),
+        )
+        .groupBy(
+            "service_day",
+            F.col("pulocationid").alias("zone_id"),
+        )
+        .agg(
+            F.count("*").alias("pickup_count"),
+        )
+    )
+
+    dropoffs = (
+        df.withColumn(
+            "service_day",
+            F.to_date(F.col("tpep_dropoff_datetime")),
+        )
+        .groupBy(
+            "service_day",
+            F.col("dolocationid").alias("zone_id"),
+        )
+        .agg(
+            F.count("*").alias("dropoff_count"),
+        )
+    )
+
+    return (
+        pickups
+        .join(
+            dropoffs,
+            on=["service_day", "zone_id"],
+            how="full",
+        )
+        .fillna(
+            0,
+            subset=["pickup_count", "dropoff_count"],
+        )
+        .withColumn(
+            "total_flow",
+            F.col("pickup_count") + F.col("dropoff_count"),
+        )
+        .withColumn(
+            "flow_imbalance",
+            F.round(
+                (
+                    F.col("pickup_count") -
+                    F.col("dropoff_count")
+                )
+                /
+                F.col("total_flow"),
+                4,
+            ),
+        )
+        .orderBy("service_day", "zone_id")
+    )
+
+
+def enrich_with_taxi_zone(
+    df: DataFrame,
+    spark: SparkSession,
+) -> DataFrame:
+    """
+    Enrich a zone-level DataFrame with the official NYC TLC
+    taxi-zone dimension.
+
+    The lookup is intentionally broadcast because it is a very
+    small reference dataset compared with the trip fact data.
+    """
+
+    zone_lookup = (
+        spark.read
+        .option("header", True)
+        .option("inferSchema", True)
+        .csv(TAXI_ZONE_LOOKUP)
+        .select(
+            F.col("LocationID").cast("long").alias("zone_id"),
+            F.col("Borough").alias("borough"),
+            F.col("Zone").alias("zone"),
+            F.col("service_zone"),
+        )
+    )
+
+    return (
+        df.join(
+            F.broadcast(zone_lookup),
+            on="zone_id",
+            how="left",
+        )
+        .select(
+            "service_day",
+            "zone_id",
+            "borough",
+            "zone",
+            "service_zone",
+            "pickup_count",
+            "dropoff_count",
+            "total_flow",
+            "flow_imbalance",
+        )
+        .orderBy("service_day", "zone_id")
+    )
 
 # ---------- Export Gold → BigQuery (3 tables) ----------
 def _bq_table_ref(project_id: str, dataset_id: str, table_name: str) -> str:
