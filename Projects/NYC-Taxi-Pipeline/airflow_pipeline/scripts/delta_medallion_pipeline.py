@@ -75,9 +75,27 @@ GOLD_FLOW_IMBALANCE_DAILY = os.path.join(
     "gold",
     "flow_imbalance_daily",
 )
+GOLD_AIRPORT_ECONOMICS_DAILY = os.path.join(
+    DELTA_BASE,
+    "gold",
+    "airport_economics_daily",
+)
 
-for p in [BRONZE_TRIPS, SILVER_TRIPS, GOLD_SUMMARY_HOURLY,GOLD_ZONE_PICKUP_DAILY,
-           GOLD_ZONE_DROPOFF_DAILY, GOLD_FLOW_IMBALANCE_DAILY]:
+AIRPORT_ZONE_CODES = {
+    "JFK Airport": "JFK",
+    "LaGuardia Airport": "LGA",
+    "Newark Airport": "EWR",
+}
+
+for p in [
+    BRONZE_TRIPS,
+    SILVER_TRIPS,
+    GOLD_SUMMARY_HOURLY,
+    GOLD_ZONE_PICKUP_DAILY,
+    GOLD_ZONE_DROPOFF_DAILY,
+    GOLD_FLOW_IMBALANCE_DAILY,
+    GOLD_AIRPORT_ECONOMICS_DAILY,
+]:
     os.makedirs(p, exist_ok=True)
 
 # ---------- Spark ----------
@@ -295,10 +313,11 @@ def write_gold(
 ) -> dict:
     """
     Build Gold Delta tables:
-      - trip_summary_hourly
-      - zone_summary_pickup_daily
-      - zone_summary_dropoff_daily
-      - flow_imbalance_daily
+    - trip_summary_hourly
+    - zone_summary_pickup_daily
+    - zone_summary_dropoff_daily
+    - flow_imbalance_daily
+    - airport_economics_daily
     """
     spark = get_spark("Gold Aggregate (Delta)")
     logger.info(f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}")
@@ -392,6 +411,11 @@ def write_gold(
     # Zone passenger-flow imbalance
     flow_imbalance = build_zone_flow_imbalance(df)
 
+    flow_imbalance = flow_imbalance.filter(
+        (F.year("service_day") == year)
+        & (F.month("service_day").isin(months))
+    )
+
     flow_imbalance = enrich_with_taxi_zone(
         flow_imbalance,
         spark,
@@ -407,6 +431,29 @@ def write_gold(
         .mode("overwrite")
         .format("delta")
         .save(GOLD_FLOW_IMBALANCE_DAILY)
+    )
+
+    # Airport economics
+    airport_economics = build_airport_economics_daily(
+        df,
+        spark,
+    )
+
+    airport_economics = airport_economics.filter(
+        (F.year("service_day") == year)
+        & (F.month("service_day").isin(months))
+    )
+
+    logger.info(
+        f"[Gold] Writing airport economics daily to: "
+        f"{GOLD_AIRPORT_ECONOMICS_DAILY}"
+    )
+
+    (
+        airport_economics.write
+        .mode("overwrite")
+        .format("delta")
+        .save(GOLD_AIRPORT_ECONOMICS_DAILY)
     )
 
     # Zone summaries (daily) for pickup & dropoff
@@ -439,6 +486,7 @@ def write_gold(
         "zone_pickup_daily": GOLD_ZONE_PICKUP_DAILY,
         "zone_dropoff_daily": GOLD_ZONE_DROPOFF_DAILY,
         "flow_imbalance_daily": GOLD_FLOW_IMBALANCE_DAILY,
+        "airport_economics_daily": GOLD_AIRPORT_ECONOMICS_DAILY,
     }
 
 
@@ -499,6 +547,182 @@ def build_zone_flow_imbalance(df: DataFrame) -> DataFrame:
             ),
         )
         .orderBy("service_day", "zone_id")
+    )
+
+
+def build_airport_flow_daily(
+    zone_flow_df: DataFrame,
+) -> DataFrame:
+    """
+    Build daily airport passenger-flow metrics from the enriched
+    zone flow imbalance dataset.
+
+    Grain:
+        One row per service_day x airport_code.
+    """
+
+    airport_code = (
+        F.when(F.col("zone") == "JFK Airport", F.lit("JFK"))
+        .when(F.col("zone") == "LaGuardia Airport", F.lit("LGA"))
+        .when(F.col("zone") == "Newark Airport", F.lit("EWR"))
+    )
+
+    return (
+        zone_flow_df
+        .filter(F.col("zone").isin(list(AIRPORT_ZONE_CODES.keys())))
+        .withColumn("airport_code", airport_code)
+        .withColumnRenamed("zone", "airport_name")
+        .select(
+            "service_day",
+            "airport_code",
+            "airport_name",
+            "borough",
+            "pickup_count",
+            "dropoff_count",
+            "total_flow",
+            "flow_imbalance",
+        )
+        .orderBy("service_day", "airport_code")
+    )
+
+
+def build_airport_economics_daily(
+    df: DataFrame,
+    spark: SparkSession,
+) -> DataFrame:
+    """
+    Build daily airport economics by airport and trip direction.
+
+    Grain:
+        One row per service_day x airport_code x direction.
+    """
+
+    airport_lookup = (
+        spark.read
+        .option("header", True)
+        .option("inferSchema", True)
+        .csv(TAXI_ZONE_LOOKUP)
+        .filter(
+            F.col("Zone").isin(
+                list(AIRPORT_ZONE_CODES.keys())
+            )
+        )
+        .select(
+            F.col("LocationID").cast("long").alias("zone_id"),
+            F.col("Zone").alias("airport_name"),
+        )
+        .withColumn(
+            "airport_code",
+            F.when(
+                F.col("airport_name") == "JFK Airport",
+                F.lit("JFK"),
+            )
+            .when(
+                F.col("airport_name") == "LaGuardia Airport",
+                F.lit("LGA"),
+            )
+            .when(
+                F.col("airport_name") == "Newark Airport",
+                F.lit("EWR"),
+            )
+        )
+    )
+
+    base = (
+        df.withColumn(
+            "trip_duration_minutes",
+            (
+                F.col("tpep_dropoff_datetime").cast("long")
+                - F.col("tpep_pickup_datetime").cast("long")
+            ) / 60.0,
+        )
+        .filter(F.col("trip_duration_minutes") > 0)
+    )
+
+    departures = (
+        base.join(
+            F.broadcast(
+                airport_lookup.select(
+                    F.col("zone_id").alias("pulocationid"),
+                    "airport_code",
+                    "airport_name",
+                )
+            ),
+            on="pulocationid",
+            how="inner",
+        )
+        .withColumn(
+            "service_day",
+            F.to_date("tpep_pickup_datetime"),
+        )
+        .withColumn("direction", F.lit("DEPARTURE"))
+    )
+
+    arrivals = (
+        base.join(
+            F.broadcast(
+                airport_lookup.select(
+                    F.col("zone_id").alias("dolocationid"),
+                    "airport_code",
+                    "airport_name",
+                )
+            ),
+            on="dolocationid",
+            how="inner",
+        )
+        .withColumn(
+            "service_day",
+            F.to_date("tpep_dropoff_datetime"),
+        )
+        .withColumn("direction", F.lit("ARRIVAL"))
+    )
+
+    airport_trips = departures.unionByName(
+        arrivals,
+        allowMissingColumns=True,
+    )
+
+    # EWR departures are excluded from airport economics.
+    # NYC yellow taxis are not permitted to pick up passengers
+    # at Newark Airport, and observed pickup records contain
+    # substantial anomalous / non-representative trip patterns.
+    airport_trips = airport_trips.filter(
+        ~(
+            (F.col("airport_code") == "EWR")
+            & (F.col("direction") == "DEPARTURE")
+        )
+    )
+
+    return (
+        airport_trips
+        .groupBy(
+            "service_day",
+            "airport_code",
+            "airport_name",
+            "direction",
+        )
+        .agg(
+            F.count("*").alias("trip_count"),
+            F.round(F.sum("total_amount"), 2).alias("gross_amount"),
+            F.round(F.avg("total_amount"), 2).alias("avg_total_amount"),
+            F.round(F.avg("fare_amount"), 2).alias("avg_fare_amount"),
+            F.round(F.avg("trip_distance"), 2).alias("avg_trip_distance"),
+            F.round(
+                F.avg("trip_duration_minutes"),
+                2,
+            ).alias("avg_duration_minutes"),
+            F.round(
+                F.sum("total_amount")
+                /
+                (F.sum("trip_duration_minutes") / 60.0),
+                2,
+            ).alias("gross_amount_per_occupied_hour"),
+        )
+        .orderBy(
+            "service_day",
+            "airport_code",
+            "direction",
+        )
     )
 
 
