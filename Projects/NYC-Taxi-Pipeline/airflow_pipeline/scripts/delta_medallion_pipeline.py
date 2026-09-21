@@ -80,6 +80,11 @@ GOLD_AIRPORT_ECONOMICS_DAILY = os.path.join(
     "gold",
     "airport_economics_daily",
 )
+GOLD_OD_CORRIDOR_DAILY = os.path.join(
+    DELTA_BASE,
+    "gold",
+    "od_corridor_daily",
+)
 
 AIRPORT_ZONE_CODES = {
     "JFK Airport": "JFK",
@@ -95,6 +100,7 @@ for p in [
     GOLD_ZONE_DROPOFF_DAILY,
     GOLD_FLOW_IMBALANCE_DAILY,
     GOLD_AIRPORT_ECONOMICS_DAILY,
+    GOLD_OD_CORRIDOR_DAILY,
 ]:
     os.makedirs(p, exist_ok=True)
 
@@ -318,6 +324,7 @@ def write_gold(
     - zone_summary_dropoff_daily
     - flow_imbalance_daily
     - airport_economics_daily
+    - od_corridor_daily
     """
     spark = get_spark("Gold Aggregate (Delta)")
     logger.info(f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}")
@@ -456,6 +463,24 @@ def write_gold(
         .save(GOLD_AIRPORT_ECONOMICS_DAILY)
     )
 
+    # OD corridor intelligence
+    od_corridor = build_od_corridor_daily(
+        df,
+        spark,
+    )
+
+    logger.info(
+        f"[Gold] Writing OD corridor daily to: "
+        f"{GOLD_OD_CORRIDOR_DAILY}"
+    )
+
+    (
+        od_corridor.write
+        .mode("overwrite")
+        .format("delta")
+        .save(GOLD_OD_CORRIDOR_DAILY)
+    )
+
     # Zone summaries (daily) for pickup & dropoff
     def write_zone_summary(loc: str, out_path: str):
         # loc = 'pickup' | 'dropoff'
@@ -487,6 +512,7 @@ def write_gold(
         "zone_dropoff_daily": GOLD_ZONE_DROPOFF_DAILY,
         "flow_imbalance_daily": GOLD_FLOW_IMBALANCE_DAILY,
         "airport_economics_daily": GOLD_AIRPORT_ECONOMICS_DAILY,
+        "od_corridor_daily": GOLD_OD_CORRIDOR_DAILY,
     }
 
 
@@ -722,6 +748,220 @@ def build_airport_economics_daily(
             "service_day",
             "airport_code",
             "direction",
+        )
+    )
+
+
+def build_od_corridor_daily(
+    df: DataFrame,
+    spark: SparkSession,
+) -> DataFrame:
+    """
+    Build daily directional origin-destination corridor metrics.
+
+    Grain:
+        One row per
+        service_day x pickup_zone_id x dropoff_zone_id.
+
+    Corridor semantics:
+        pickup zone -> dropoff zone
+
+    The reverse direction is a different corridor.
+    """
+
+    base = (
+        df
+        .withColumn(
+            "service_day",
+            F.to_date("tpep_pickup_datetime"),
+        )
+        .withColumn(
+            "trip_duration_minutes",
+            (
+                F.col("tpep_dropoff_datetime").cast("long")
+                - F.col("tpep_pickup_datetime").cast("long")
+            ) / 60.0,
+        )
+        .filter(
+            (F.col("trip_duration_minutes") > 0)
+            & (F.col("trip_distance") > 0)
+        )
+        .withColumn(
+            "trip_duration_per_mile",
+            F.col("trip_duration_minutes")
+            / F.col("trip_distance"),
+        )
+    )
+
+    corridor = (
+        base
+        .groupBy(
+            "service_day",
+            F.col("pulocationid").alias("pickup_zone_id"),
+            F.col("dolocationid").alias("dropoff_zone_id"),
+        )
+        .agg(
+            F.count("*").alias("trip_count"),
+
+            F.round(
+                F.sum("total_amount"),
+                2,
+            ).alias("gross_amount"),
+
+            F.round(
+                F.avg("total_amount"),
+                2,
+            ).alias("avg_total_amount"),
+
+            F.round(
+                F.avg("fare_amount"),
+                2,
+            ).alias("avg_fare_amount"),
+
+            F.round(
+                F.avg("trip_distance"),
+                2,
+            ).alias("avg_trip_distance"),
+
+            F.round(
+                F.avg("trip_duration_minutes"),
+                2,
+            ).alias("avg_duration_minutes"),
+
+            F.round(
+                F.percentile_approx(
+                    "trip_duration_minutes",
+                    0.5,
+                    10000,
+                ),
+                2,
+            ).alias("median_duration_minutes"),
+
+            F.round(
+                F.percentile_approx(
+                    "trip_duration_minutes",
+                    0.9,
+                    10000,
+                ),
+                2,
+            ).alias("p90_duration_minutes"),
+
+            F.round(
+                F.sum("total_amount")
+                /
+                (
+                    F.sum("trip_duration_minutes")
+                    / 60.0
+                ),
+                2,
+            ).alias(
+                "gross_amount_per_occupied_hour"
+            ),
+
+            F.round(
+                F.percentile_approx(
+                    "trip_duration_per_mile",
+                    0.5,
+                    10000,
+                ),
+                2,
+            ).alias("median_duration_per_mile"),
+
+            F.round(
+                F.percentile_approx(
+                    "trip_duration_per_mile",
+                    0.9,
+                    10000,
+                ),
+                2,
+            ).alias("p90_duration_per_mile"),
+        )
+    )
+
+    zone_lookup = (
+        spark.read
+        .option("header", True)
+        .option("inferSchema", True)
+        .csv(TAXI_ZONE_LOOKUP)
+        .select(
+            F.col("LocationID")
+            .cast("long")
+            .alias("zone_id"),
+
+            F.col("Borough")
+            .alias("borough"),
+
+            F.col("Zone")
+            .alias("zone"),
+        )
+    )
+
+    pickup_lookup = (
+        zone_lookup
+        .select(
+            F.col("zone_id").alias(
+                "pickup_zone_id"
+            ),
+            F.col("borough").alias(
+                "pickup_borough"
+            ),
+            F.col("zone").alias(
+                "pickup_zone"
+            ),
+        )
+    )
+
+    dropoff_lookup = (
+        zone_lookup
+        .select(
+            F.col("zone_id").alias(
+                "dropoff_zone_id"
+            ),
+            F.col("borough").alias(
+                "dropoff_borough"
+            ),
+            F.col("zone").alias(
+                "dropoff_zone"
+            ),
+        )
+    )
+
+    return (
+        corridor
+        .join(
+            F.broadcast(pickup_lookup),
+            on="pickup_zone_id",
+            how="left",
+        )
+        .join(
+            F.broadcast(dropoff_lookup),
+            on="dropoff_zone_id",
+            how="left",
+        )
+        .select(
+            "service_day",
+            "pickup_zone_id",
+            "dropoff_zone_id",
+            "pickup_borough",
+            "pickup_zone",
+            "dropoff_borough",
+            "dropoff_zone",
+            "trip_count",
+            "gross_amount",
+            "avg_total_amount",
+            "avg_fare_amount",
+            "avg_trip_distance",
+            "avg_duration_minutes",
+            "median_duration_minutes",
+            "p90_duration_minutes",
+            "gross_amount_per_occupied_hour",
+            "median_duration_per_mile",
+            "p90_duration_per_mile",
+        )
+        .orderBy(
+            "service_day",
+            "pickup_zone_id",
+            "dropoff_zone_id",
         )
     )
 
