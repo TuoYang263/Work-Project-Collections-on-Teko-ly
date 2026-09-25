@@ -81,6 +81,7 @@ with DAG(
     execution_contract = PythonOperator(
         task_id="validate_execution_contract",
         python_callable=validate_execution_contract,
+        retries=0,
     )
 
     bronze = PythonOperator(
