@@ -23,15 +23,10 @@ from scripts import config as project_config
 from scripts.execution_contract import (
     build_current_execution_contract,
 )
+from scripts.pipeline_runner import submit_stage
 
 from scripts import get_logger  # or scripts.logger, both ok
 logger = get_logger("nyc_taxi_medallion_dag")
-
-# Robust import of pipeline module
-try:
-    import scripts.delta_medallion_pipeline as pipeline  # type: ignore
-except Exception:
-    import delta_medallion_pipeline as pipeline  # type: ignore
 
 default_args = {
     "owner": "airflow",
@@ -90,22 +85,26 @@ with DAG(
 
     bronze = PythonOperator(
         task_id="bronze_ingest_delta",
-        python_callable=pipeline.bronze_task,
+        python_callable=submit_stage,
+        op_kwargs={"stage": "bronze"},
     )
 
     silver = PythonOperator(
         task_id="silver_clean_delta",
-        python_callable=pipeline.silver_task,
+        python_callable=submit_stage,
+        op_kwargs={"stage": "silver"},
     )
 
     gold = PythonOperator(
         task_id="gold_aggregate_delta",
-        python_callable=pipeline.gold_task,
+        python_callable=submit_stage,
+        op_kwargs={"stage": "gold"},
     )
 
     export_bq = PythonOperator(
         task_id="export_gold_to_bigquery",
-        python_callable=pipeline.export_bq_all_task,
+        python_callable=submit_stage,
+        op_kwargs={"stage": "export"},
     )
 
     execution_contract >> bronze >> silver >> gold >> export_bq
