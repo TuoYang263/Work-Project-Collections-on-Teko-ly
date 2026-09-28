@@ -98,4 +98,16 @@ def build_current_execution_contract(
         "write_scope": "FULL_TABLE_OVERWRITE",
         "state_mode": "STATELESS",
         "rerun_semantics": "RECOMPUTE_CONFIGURED_WINDOW",
+        "logical_window": {
+            "start": window_start.isoformat(),
+            "end_exclusive": window_end_exclusive.isoformat(),
+            "anchor": "PICKUP_DATETIME",
+        },
+        "read_scope": {
+            "raw_file_months": [
+                f"{year}-{month:02d}"
+                for month in normalized_months
+            ],
+            "boundary_policy": "CONFIGURED_MONTHS_ONLY",
+        },
     }

@@ -87,25 +87,37 @@ with DAG(
     bronze = PythonOperator(
         task_id="bronze_ingest_delta",
         python_callable=submit_stage,
-        op_kwargs={"stage": "bronze"},
+        op_kwargs={
+            "stage": "bronze",
+            "execution_contract": execution_contract.output,
+        },
     )
 
     silver = PythonOperator(
         task_id="silver_clean_delta",
         python_callable=submit_stage,
-        op_kwargs={"stage": "silver"},
+        op_kwargs={
+            "stage": "silver",
+            "execution_contract": execution_contract.output,
+        },
     )
 
     gold = PythonOperator(
         task_id="gold_aggregate_delta",
         python_callable=submit_stage,
-        op_kwargs={"stage": "gold"},
+        op_kwargs={
+            "stage": "gold",
+            "execution_contract": execution_contract.output,
+        },
     )
 
     export_bq = PythonOperator(
         task_id="export_gold_to_bigquery",
         python_callable=submit_stage,
-        op_kwargs={"stage": "export"},
+        op_kwargs={
+            "stage": "export",
+            "execution_contract": execution_contract.output,
+        },
     )
 
     execution_contract >> bronze >> silver >> gold >> export_bq

@@ -47,6 +47,15 @@ try:
 except Exception:
     from get_bigquery_client import get_bigquery_client
 
+try:
+    from scripts.execution_contract import (
+        build_current_execution_contract,
+    )
+except Exception:
+    from execution_contract import (
+        build_current_execution_contract,
+    )
+
 # Optional: delta-spark helper (if available in env)
 try:
     from delta import configure_spark_with_delta_pip
@@ -313,7 +322,34 @@ def build_hourly_summary(df: DataFrame) -> DataFrame:
 
 
 # ---------- Gold ----------
+
+
+def filter_timestamp_window(
+    df: DataFrame,
+    timestamp_column: str,
+    window_start: str,
+    window_end_exclusive: str,
+) -> DataFrame:
+    """
+    Filter rows using half-open window semantics:
+
+        window_start <= timestamp < window_end_exclusive
+    """
+    return df.filter(
+        (
+            F.col(timestamp_column)
+            >= F.lit(window_start).cast("timestamp")
+        )
+        &
+        (
+            F.col(timestamp_column)
+            < F.lit(window_end_exclusive).cast("timestamp")
+        )
+    )
+
+
 def write_gold(
+    execution_contract: dict,
     hourly_only: bool = False,
     hourly_output_path: str | None = None,
 ) -> dict:
@@ -363,24 +399,52 @@ def write_gold(
         df = df.filter(reduce(lambda a, b: a & b, filters))
 
     # Time Range Filtering
-    year = config.SETTINGS["data_config"]["year"]
-    months = config.SETTINGS["data_config"]["months"]
+    year = int(execution_contract["year"])
+
+    months = [
+        int(month)
+        for month in execution_contract["months"]
+    ]
+
+    logical_window = execution_contract["logical_window"]
+
+    window_start = logical_window["start"]
+    window_end_exclusive = logical_window["end_exclusive"]
+
+    logger.info(
+        "[Gold] execution_contract "
+        f"logical_window={logical_window}, "
+        f"write_scope={execution_contract['write_scope']}"
+    )
+
+    gold_input = df
+
+    pickup_window_df = filter_timestamp_window(
+        gold_input,
+        timestamp_column="tpep_pickup_datetime",
+        window_start=window_start,
+        window_end_exclusive=window_end_exclusive,
+    )
+
+    dropoff_window_df = filter_timestamp_window(
+        gold_input,
+        timestamp_column="tpep_dropoff_datetime",
+        window_start=window_start,
+        window_end_exclusive=window_end_exclusive,
+    )
 
     print(f"Year: {year}")
     print(f"Month: {months}")
 
-    df = df.filter(
-        (F.year("tpep_pickup_datetime") == year) &
-        (F.month("tpep_pickup_datetime").isin(months))
-    )
-
     log_spark_baseline(
         spark=spark,
-        label="gold_input_after_filters",
+        label="gold_pickup_window",
     )
 
     # Hourly summary
-    summary_hourly = build_hourly_summary(df)
+    summary_hourly = build_hourly_summary(
+        pickup_window_df
+    )
 
     log_spark_baseline(
         spark=spark,
@@ -416,11 +480,9 @@ def write_gold(
         }
 
     # Zone passenger-flow imbalance
-    flow_imbalance = build_zone_flow_imbalance(df)
-
-    flow_imbalance = flow_imbalance.filter(
-        (F.year("service_day") == year)
-        & (F.month("service_day").isin(months))
+    flow_imbalance = build_zone_flow_imbalance(
+        pickup_window_df,
+        dropoff_window_df,
     )
 
     flow_imbalance = enrich_with_taxi_zone(
@@ -442,7 +504,7 @@ def write_gold(
 
     # Airport economics
     airport_economics = build_airport_economics_daily(
-        df,
+        pickup_window_df,
         spark,
     )
 
@@ -465,7 +527,7 @@ def write_gold(
 
     # OD corridor intelligence
     od_corridor = build_od_corridor_daily(
-        df,
+        pickup_window_df,
         spark,
     )
 
@@ -482,13 +544,17 @@ def write_gold(
     )
 
     # Zone summaries (daily) for pickup & dropoff
-    def write_zone_summary(loc: str, out_path: str):
+    def write_zone_summary(
+        loc: str,
+        out_path: str,
+        source_df: DataFrame,
+    ):
         # loc = 'pickup' | 'dropoff'
         time_col = F.to_date(F.col(f"tpep_{loc}_datetime")).alias(f"{loc}_day")
         zone_col = F.col("pulocationid" if loc == "pickup" else "dolocationid").alias("zone_id")
 
         zdf = (
-            df.withColumn(f"{loc}_day", time_col)
+            source_df.withColumn(f"{loc}_day", time_col)
               .withColumn("zone_id", zone_col)
               .groupBy(f"{loc}_day", "zone_id")
               .agg(
@@ -503,8 +569,16 @@ def write_gold(
         logger.info(f"[Gold] Writing zone summary ({loc}) to: {out_path}")
         zdf.write.mode("overwrite").format("delta").save(out_path)
 
-    write_zone_summary("pickup", GOLD_ZONE_PICKUP_DAILY)
-    write_zone_summary("dropoff", GOLD_ZONE_DROPOFF_DAILY)
+    write_zone_summary(
+        "pickup",
+        GOLD_ZONE_PICKUP_DAILY,
+        pickup_window_df,
+    )
+    write_zone_summary(
+        "dropoff",
+        GOLD_ZONE_DROPOFF_DAILY,
+        dropoff_window_df,
+    )
 
     return {
         "hourly_summary": hourly_target,
@@ -516,9 +590,12 @@ def write_gold(
     }
 
 
-def build_zone_flow_imbalance(df: DataFrame) -> DataFrame:
+def build_zone_flow_imbalance(
+    pickup_df: DataFrame,
+    dropoff_df: DataFrame,
+) -> DataFrame:
     pickups = (
-        df.withColumn(
+        pickup_df.withColumn(
             "service_day",
             F.to_date(F.col("tpep_pickup_datetime")),
         )
@@ -532,7 +609,7 @@ def build_zone_flow_imbalance(df: DataFrame) -> DataFrame:
     )
 
     dropoffs = (
-        df.withColumn(
+        dropoff_df.withColumn(
             "service_day",
             F.to_date(F.col("tpep_dropoff_datetime")),
         )
@@ -1077,25 +1154,59 @@ def export_all_gold_to_bigquery():
     }
 
 # ---------- Airflow-friendly callables ----------
-def bronze_task(**_):
-    y = config.SETTINGS["data_config"]["year"]
-    ms = config.SETTINGS["data_config"]["months"]
-    return write_bronze(y, ms)
+def bronze_task(
+    execution_contract: dict,
+    **_,
+):
+    year = int(
+        execution_contract["year"]
+    )
+
+    months = [
+        int(month)
+        for month in execution_contract["months"]
+    ]
+
+    logger.info(
+        "[Bronze] execution_contract "
+        f"year={year}, months={months}, "
+        f"read_scope={execution_contract['read_scope']}"
+    )
+
+    return write_bronze(
+        year,
+        months,
+    )
 
 def silver_task(**_):
     return write_silver()
 
-def gold_task(**_):
-    return write_gold()
+def gold_task(
+    execution_contract: dict,
+    **_,
+):
+    return write_gold(
+        execution_contract=execution_contract,
+    )
 
 def export_bq_all_task(**_):
     return export_all_gold_to_bigquery()
 
 if __name__ == "__main__":
-    # Local sequential run (optional)
-    y = config.SETTINGS["data_config"]["year"]
-    ms = config.SETTINGS["data_config"]["months"]
-    write_bronze(y, ms)
+    contract = build_current_execution_contract(
+        config.SETTINGS,
+        dag_run_conf={},
+    )
+
+    write_bronze(
+        contract["year"],
+        contract["months"],
+    )
+
     write_silver()
-    write_gold()
+
+    write_gold(
+        execution_contract=contract,
+    )
+
     export_gold_to_bigquery()

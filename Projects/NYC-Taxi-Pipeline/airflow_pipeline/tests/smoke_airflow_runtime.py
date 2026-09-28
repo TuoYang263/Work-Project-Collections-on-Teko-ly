@@ -14,6 +14,7 @@ No Spark jobs or Delta writes are performed.
 
 import subprocess
 import sys
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -61,6 +62,20 @@ def test_dag_loading():
     assert dag.max_active_runs == 1
 
     assert set(dag.task_ids) == set(EXPECTED_TASKS)
+
+    for task_id in EXPECTED_TASKS[1:]:
+        task = dag.get_task(task_id)
+
+        assert "execution_contract" in task.op_kwargs
+
+        contract_arg = task.op_kwargs[
+            "execution_contract"
+        ]
+
+        assert (
+            contract_arg.operator.task_id
+            == "validate_execution_contract"
+        )
 
     for upstream, downstream in zip(
         EXPECTED_TASKS,
@@ -125,17 +140,58 @@ def test_failure_propagation(dag):
         "gold_aggregate_delta"
     )
 
+    valid_contract = {
+        "mode": "CONFIGURED_FULL_REFRESH",
+        "year": 2023,
+        "months": [1, 2, 3],
+        "window_start": "2023-01-01",
+        "window_end_exclusive": "2023-04-01",
+        "logical_window": {
+            "start": "2023-01-01",
+            "end_exclusive": "2023-04-01",
+            "anchor": "PICKUP_DATETIME",
+        },
+        "read_scope": {
+            "raw_file_months": [
+                "2023-01",
+                "2023-02",
+                "2023-03",
+            ],
+            "boundary_policy":
+                "CONFIGURED_MONTHS_ONLY",
+        },
+        "write_scope": "FULL_TABLE_OVERWRITE",
+        "state_mode": "STATELESS",
+        "rerun_semantics":
+            "RECOMPUTE_CONFIGURED_WINDOW",
+    }
+
+    gold_task.op_kwargs = {
+        "stage": "gold",
+        "execution_contract": valid_contract,
+    }
+
     real_run = subprocess.run
 
     def injected_failure(command, **kwargs):
         # Confirm that Airflow submitted the Gold stage
         # through the lightweight runner.
-        assert command == [
+        assert command[:4] == [
             sys.executable,
             "-m",
             "scripts.pipeline_runner",
             "gold",
         ]
+
+        assert command[4] == (
+            "--execution-contract-json"
+        )
+
+        passed_contract = json.loads(
+            command[5]
+        )
+
+        assert passed_contract == valid_contract
 
         assert kwargs["check"] is True
 

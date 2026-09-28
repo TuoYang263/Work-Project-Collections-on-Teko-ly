@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import json
 import logging
 import subprocess
 import sys
+
 from pathlib import Path
+from typing import Any, Mapping
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -26,21 +29,31 @@ def validate_stage(stage: str) -> None:
         raise ValueError(f"Unsupported pipeline stage: {stage}")
 
 
-def submit_stage(stage: str) -> None:
+def submit_stage(
+    stage: str,
+    execution_contract: Mapping[str, Any],
+) -> None:
     """Airflow-facing entry point. No Spark imports here."""
     validate_stage(stage)
+
+    contract_json = json.dumps(
+        dict(execution_contract),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
 
     command = [
         sys.executable,
         "-m",
         "scripts.pipeline_runner",
         stage,
+        "--execution-contract-json",
+        contract_json,
     ]
 
     LOGGER.info(
-        "Submitting pipeline stage=%s, command=%s",
+        "Submitting pipeline stage=%s",
         stage,
-        command,
     )
 
     subprocess.run(
@@ -50,7 +63,10 @@ def submit_stage(stage: str) -> None:
     )
 
 
-def execute_stage(stage: str) -> None:
+def execute_stage(
+    stage: str,
+    execution_contract: Mapping[str, Any],
+) -> None:
     """Child-process entry point. Import compute code only here."""
     validate_stage(stage)
 
@@ -63,7 +79,9 @@ def execute_stage(stage: str) -> None:
         STAGE_FUNCTIONS[stage],
     )
 
-    task()
+    task(
+        execution_contract=dict(execution_contract),
+    )
 
 
 def main() -> None:
@@ -76,9 +94,26 @@ def main() -> None:
         choices=tuple(STAGE_FUNCTIONS),
     )
 
+    parser.add_argument(
+        "--execution-contract-json",
+        required=True,
+    )
+
     args = parser.parse_args()
 
-    execute_stage(args.stage)
+    execution_contract = json.loads(
+        args.execution_contract_json
+    )
+
+    if not isinstance(execution_contract, dict):
+        raise ValueError(
+            "Execution contract must be a JSON object"
+        )
+
+    execute_stage(
+        args.stage,
+        execution_contract,
+    )
 
 
 if __name__ == "__main__":
