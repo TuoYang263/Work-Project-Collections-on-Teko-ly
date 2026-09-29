@@ -15,12 +15,13 @@ def _contract():
         },
         "read_scope": {
             "raw_file_months": [
+                "2022-12",
                 "2023-01",
                 "2023-02",
                 "2023-03",
             ],
             "boundary_policy":
-                "CONFIGURED_MONTHS_ONLY",
+                "INCLUDE_PREVIOUS_MONTH",
         },
         "write_scope": "FULL_TABLE_OVERWRITE",
         "state_mode": "STATELESS",
@@ -53,3 +54,36 @@ def test_gold_task_forwards_execution_contract(
 
     assert recorded["contract"] == _contract()
     assert result == {"ok": True}
+
+
+def test_bronze_task_forwards_read_scope(
+    monkeypatch,
+):
+    recorded = {}
+
+    def fake_write_bronze(
+        raw_file_months,
+    ):
+        recorded["raw_file_months"] = (
+            raw_file_months
+        )
+        return "bronze-ok"
+
+    monkeypatch.setattr(
+        pipeline,
+        "write_bronze",
+        fake_write_bronze,
+    )
+
+    result = pipeline.bronze_task(
+        execution_contract=_contract(),
+    )
+
+    assert recorded["raw_file_months"] == [
+        "2022-12",
+        "2023-01",
+        "2023-02",
+        "2023-03",
+    ]
+
+    assert result == "bronze-ok"

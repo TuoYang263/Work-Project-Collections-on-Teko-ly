@@ -217,15 +217,76 @@ def log_physical_plan(
     )
 
 
+def parse_raw_file_month(
+    raw_file_month: str,
+) -> tuple[int, int]:
+    try:
+        year_text, month_text = raw_file_month.split("-")
+        year = int(year_text)
+        month = int(month_text)
+    except (ValueError, AttributeError) as exc:
+        raise ValueError(
+            f"Invalid raw file month: {raw_file_month!r}. "
+            "Expected YYYY-MM."
+        ) from exc
+
+    if raw_file_month != f"{year:04d}-{month:02d}":
+        raise ValueError(
+            f"Invalid raw file month: {raw_file_month!r}. "
+            "Expected YYYY-MM."
+        )
+
+    if month < 1 or month > 12:
+        raise ValueError(
+            f"Invalid raw file month: {raw_file_month!r}"
+        )
+
+    return year, month
+
+
+def resolve_raw_file_paths(
+    raw_file_months: List[str],
+) -> List[str]:
+    if not raw_file_months:
+        raise ValueError(
+            "read_scope.raw_file_months must not be empty"
+        )
+
+    local_paths = []
+
+    for raw_file_month in raw_file_months:
+        year, month = parse_raw_file_month(
+            raw_file_month
+        )
+
+        local_paths.extend(
+            download_to_local(
+                year,
+                [month],
+            )
+        )
+
+    return local_paths
+
+
 # ---------- Bronze ----------
-def write_bronze(year: int, months: List[int]) -> str:
+def write_bronze(
+    raw_file_months: List[str],
+) -> str:
     """
     Ingest raw monthly parquet files and persist as a single Delta table (Bronze).
     Adds _ingest_time and partitions by pickup_day (if pickup timestsamp exists).
     """
     spark = get_spark("Bronze Ingest (Delta)")
     logger.info(f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}")
-    local_paths = download_to_local(year, months)   # returns local file paths
+    logger.info(
+        "[Bronze] read_scope "
+        f"raw_file_months={raw_file_months}"
+    )
+
+    local_paths = resolve_raw_file_paths(
+        raw_file_months
+    )
     if not local_paths:
         raise RuntimeError("No input files found for Bronze ingest.")
     
@@ -505,12 +566,8 @@ def write_gold(
     # Airport economics
     airport_economics = build_airport_economics_daily(
         pickup_window_df,
+        dropoff_window_df,
         spark,
-    )
-
-    airport_economics = airport_economics.filter(
-        (F.year("service_day") == year)
-        & (F.month("service_day").isin(months))
     )
 
     logger.info(
@@ -690,7 +747,8 @@ def build_airport_flow_daily(
 
 
 def build_airport_economics_daily(
-    df: DataFrame,
+    pickup_df: DataFrame,
+    dropoff_df: DataFrame,
     spark: SparkSession,
 ) -> DataFrame:
     """
@@ -731,19 +789,33 @@ def build_airport_economics_daily(
         )
     )
 
-    base = (
-        df.withColumn(
-            "trip_duration_minutes",
-            (
-                F.col("tpep_dropoff_datetime").cast("long")
-                - F.col("tpep_pickup_datetime").cast("long")
-            ) / 60.0,
+    def add_trip_duration(
+        source_df: DataFrame,
+    ) -> DataFrame:
+        return (
+            source_df
+            .withColumn(
+                "trip_duration_minutes",
+                (
+                    F.col("tpep_dropoff_datetime").cast("long")
+                    - F.col("tpep_pickup_datetime").cast("long")
+                ) / 60.0,
+            )
+            .filter(
+                F.col("trip_duration_minutes") > 0
+            )
         )
-        .filter(F.col("trip_duration_minutes") > 0)
+
+    departure_base = add_trip_duration(
+        pickup_df
+    )
+
+    arrival_base = add_trip_duration(
+        dropoff_df
     )
 
     departures = (
-        base.join(
+        departure_base.join(
             F.broadcast(
                 airport_lookup.select(
                     F.col("zone_id").alias("pulocationid"),
@@ -762,7 +834,7 @@ def build_airport_economics_daily(
     )
 
     arrivals = (
-        base.join(
+        arrival_base.join(
             F.broadcast(
                 airport_lookup.select(
                     F.col("zone_id").alias("dolocationid"),
@@ -1158,25 +1230,25 @@ def bronze_task(
     execution_contract: dict,
     **_,
 ):
-    year = int(
-        execution_contract["year"]
+    raw_file_months = list(
+        execution_contract[
+            "read_scope"
+        ][
+            "raw_file_months"
+        ]
     )
-
-    months = [
-        int(month)
-        for month in execution_contract["months"]
-    ]
 
     logger.info(
         "[Bronze] execution_contract "
-        f"year={year}, months={months}, "
-        f"read_scope={execution_contract['read_scope']}"
+        f"raw_file_months={raw_file_months}, "
+        f"boundary_policy="
+        f"{execution_contract['read_scope']['boundary_policy']}"
     )
 
     return write_bronze(
-        year,
-        months,
+        raw_file_months=raw_file_months,
     )
+
 
 def silver_task(**_):
     return write_silver()
@@ -1199,8 +1271,11 @@ if __name__ == "__main__":
     )
 
     write_bronze(
-        contract["year"],
-        contract["months"],
+        raw_file_months=contract[
+            "read_scope"
+        ][
+            "raw_file_months"
+        ],
     )
 
     write_silver()

@@ -35,11 +35,12 @@ def test_current_execution_contract():
 
         "read_scope": {
             "raw_file_months": [
+                "2022-12",
                 "2023-01",
                 "2023-02",
                 "2023-03",
             ],
-            "boundary_policy": "CONFIGURED_MONTHS_ONLY",
+            "boundary_policy": "INCLUDE_PREVIOUS_MONTH",
         },
 
         "write_scope": "FULL_TABLE_OVERWRITE",
@@ -93,10 +94,11 @@ def test_execution_contract_crosses_year_boundary():
 
     assert contract["read_scope"] == {
         "raw_file_months": [
+            "2023-10",
             "2023-11",
             "2023-12",
         ],
-        "boundary_policy": "CONFIGURED_MONTHS_ONLY",
+        "boundary_policy": "INCLUDE_PREVIOUS_MONTH",
     }
 
     assert contract["write_scope"] == (
@@ -104,7 +106,7 @@ def test_execution_contract_crosses_year_boundary():
     )
 
 
-def test_contract_read_scope_matches_execution_months():
+def test_contract_read_scope_includes_previous_month():
     contract = build_current_execution_contract(
         _settings(),
         dag_run_conf={},
@@ -113,10 +115,12 @@ def test_contract_read_scope_matches_execution_months():
     assert contract["year"] == 2023
     assert contract["months"] == [1, 2, 3]
 
-    assert contract["read_scope"][
-        "raw_file_months"
-    ] == [
-        "2023-01",
-        "2023-02",
-        "2023-03",
-    ]
+    assert contract["read_scope"] == {
+        "raw_file_months": [
+            "2022-12",
+            "2023-01",
+            "2023-02",
+            "2023-03",
+        ],
+        "boundary_policy": "INCLUDE_PREVIOUS_MONTH",
+    }

@@ -24,6 +24,16 @@ def _next_month(year: int, month: int) -> date:
     return date(year, month + 1, 1)
 
 
+def _previous_month(
+    year: int,
+    month: int,
+) -> tuple[int, int]:
+    if month == 1:
+        return year - 1, 12
+
+    return year, month - 1
+
+
 def build_current_execution_contract(
     settings: Mapping[str, Any],
     dag_run_conf: Mapping[str, Any] | None = None,
@@ -89,6 +99,19 @@ def build_current_execution_contract(
         normalized_months[-1],
     )
 
+    previous_year, previous_month = _previous_month(
+        year,
+        normalized_months[0],
+    )
+
+    raw_file_months = [
+        f"{previous_year}-{previous_month:02d}",
+        *[
+            f"{year}-{month:02d}"
+            for month in normalized_months
+        ],
+    ]
+
     return {
         "mode": "CONFIGURED_FULL_REFRESH",
         "year": year,
@@ -104,10 +127,7 @@ def build_current_execution_contract(
             "anchor": "PICKUP_DATETIME",
         },
         "read_scope": {
-            "raw_file_months": [
-                f"{year}-{month:02d}"
-                for month in normalized_months
-            ],
-            "boundary_policy": "CONFIGURED_MONTHS_ONLY",
+            "raw_file_months": raw_file_months,
+            "boundary_policy": "INCLUDE_PREVIOUS_MONTH",
         },
     }
