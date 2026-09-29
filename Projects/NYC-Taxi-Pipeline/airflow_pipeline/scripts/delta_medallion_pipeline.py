@@ -617,11 +617,11 @@ def write_gold(
         f"{GOLD_AIRPORT_ECONOMICS_DAILY}"
     )
 
-    (
-        airport_economics.write
-        .mode("overwrite")
-        .format("delta")
-        .save(GOLD_AIRPORT_ECONOMICS_DAILY)
+    write_delta_table(
+        airport_economics,
+        target_path=GOLD_AIRPORT_ECONOMICS_DAILY,
+        execution_contract=execution_contract,
+        label="airport_economics_daily",
     )
 
     # OD corridor intelligence

@@ -1,4 +1,5 @@
 import pytest
+import inspect
 
 from scripts import delta_medallion_pipeline as pipeline
 
@@ -72,3 +73,11 @@ def test_delta_writer_rejects_unsupported_scope():
         )
 
     assert df.writer.actions == []
+
+
+def test_gold_write_path_does_not_bypass_delta_writer():
+    source = inspect.getsource(
+        pipeline.write_gold
+    )
+
+    assert ".write" not in source
