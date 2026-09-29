@@ -1,6 +1,5 @@
 import pytest
 
-from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
 from scripts import delta_medallion_pipeline as pipeline
@@ -17,12 +16,15 @@ WINDOW_END_EXCLUSIVE = "2023-04-01"
 
 @pytest.fixture(scope="module")
 def spark():
-    session = (
-        SparkSession.builder
-        .master("local[1]")
-        .appName("NYC Gold Window Semantics Test")
-        .config("spark.sql.session.timeZone", "UTC")
-        .getOrCreate()
+    # Initialize Spark through the production Delta-aware
+    # factory so later Delta tests share a compatible JVM.
+    session = pipeline.get_spark(
+        "NYC Gold Window Semantics Test"
+    )
+
+    session.conf.set(
+        "spark.sql.session.timeZone",
+        "UTC",
     )
 
     yield session

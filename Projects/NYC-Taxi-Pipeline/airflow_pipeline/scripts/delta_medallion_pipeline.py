@@ -94,6 +94,14 @@ GOLD_OD_CORRIDOR_DAILY = os.path.join(
     "gold",
     "od_corridor_daily",
 )
+GOLD_WINDOW_COLUMNS = {
+    "trip_summary_hourly": "pickup_hour",
+    "zone_summary_pickup_daily": "pickup_day",
+    "zone_summary_dropoff_daily": "dropoff_day",
+    "flow_imbalance_daily": "service_day",
+    "airport_economics_daily": "service_day",
+    "od_corridor_daily": "service_day",
+}
 
 AIRPORT_ZONE_CODES = {
     "JFK Airport": "JFK",
@@ -412,41 +420,92 @@ def write_delta_table(
     target_path: str,
     execution_contract: dict,
     label: str,
+    window_column: str | None = None,
 ) -> str:
     """
     Write a Delta table according to the execution contract.
 
-    Current safety boundary:
-        only FULL_TABLE_OVERWRITE is supported.
-
-    Window-scoped replacement will be implemented separately.
+    Supported scopes:
+        FULL_TABLE_OVERWRITE
+        WINDOW_REPLACE
     """
     write_scope = execution_contract.get(
         "write_scope"
     )
 
-    if write_scope != "FULL_TABLE_OVERWRITE":
-        raise ValueError(
-            "Unsupported write_scope for Delta writer: "
-            f"{write_scope!r}. "
-            "Only FULL_TABLE_OVERWRITE is allowed until "
-            "window-scoped writes are implemented."
+    if write_scope == "FULL_TABLE_OVERWRITE":
+        logger.info(
+            f"[DeltaWrite][{label}] "
+            f"scope={write_scope}, "
+            f"target={target_path}"
         )
 
-    logger.info(
-        f"[DeltaWrite][{label}] "
-        f"scope={write_scope}, "
-        f"target={target_path}"
-    )
+        (
+            df.write
+            .mode("overwrite")
+            .format("delta")
+            .save(target_path)
+        )
 
-    (
-        df.write
-        .mode("overwrite")
-        .format("delta")
-        .save(target_path)
-    )
+        return target_path
 
-    return target_path
+    if write_scope == "WINDOW_REPLACE":
+        if not window_column:
+            raise ValueError(
+                "WINDOW_REPLACE requires window_column"
+            )
+
+        logical_window = execution_contract.get(
+            "logical_window"
+        )
+
+        if not logical_window:
+            raise ValueError(
+                "WINDOW_REPLACE requires logical_window"
+            )
+
+        window_start = logical_window.get("start")
+        window_end_exclusive = logical_window.get(
+            "end_exclusive"
+        )
+
+        if not window_start or not window_end_exclusive:
+            raise ValueError(
+                "WINDOW_REPLACE requires logical_window "
+                "start and end_exclusive"
+            )
+
+        predicate = (
+            f"{window_column} >= '{window_start}' "
+            f"AND {window_column} < "
+            f"'{window_end_exclusive}'"
+        )
+
+        logger.info(
+            f"[DeltaWrite][{label}] "
+            f"scope={write_scope}, "
+            f"window_column={window_column}, "
+            f"predicate={predicate}, "
+            f"target={target_path}"
+        )
+
+        (
+            df.write
+            .mode("overwrite")
+            .format("delta")
+            .option(
+                "replaceWhere",
+                predicate,
+            )
+            .save(target_path)
+        )
+
+        return target_path
+
+    raise ValueError(
+        "Unsupported write_scope for Delta writer: "
+        f"{write_scope!r}"
+    )
 
 
 def write_gold(
@@ -568,6 +627,9 @@ def write_gold(
         target_path=hourly_target,
         execution_contract=execution_contract,
         label="trip_summary_hourly",
+        window_column=GOLD_WINDOW_COLUMNS[
+            "trip_summary_hourly"
+        ],
     )
 
     elapsed_seconds = time.perf_counter() - started_at
@@ -603,6 +665,9 @@ def write_gold(
         target_path=GOLD_FLOW_IMBALANCE_DAILY,
         execution_contract=execution_contract,
         label="flow_imbalance_daily",
+        window_column=GOLD_WINDOW_COLUMNS[
+            "flow_imbalance_daily"
+        ],
     )
 
     # Airport economics
@@ -622,6 +687,9 @@ def write_gold(
         target_path=GOLD_AIRPORT_ECONOMICS_DAILY,
         execution_contract=execution_contract,
         label="airport_economics_daily",
+        window_column=GOLD_WINDOW_COLUMNS[
+            "airport_economics_daily"
+        ],
     )
 
     # OD corridor intelligence
@@ -640,6 +708,9 @@ def write_gold(
         target_path=GOLD_OD_CORRIDOR_DAILY,
         execution_contract=execution_contract,
         label="od_corridor_daily",
+        window_column=GOLD_WINDOW_COLUMNS[
+            "od_corridor_daily"
+        ],
     )
 
     # Zone summaries (daily) for pickup & dropoff
@@ -666,11 +737,15 @@ def write_gold(
               .orderBy(f"{loc}_day", "zone_id")
         )
         logger.info(f"[Gold] Writing zone summary ({loc}) to: {out_path}")
+        
+        label = f"zone_summary_{loc}_daily"
+
         write_delta_table(
             zdf,
             target_path=out_path,
             execution_contract=execution_contract,
-            label=f"zone_summary_{loc}_daily",
+            label=label,
+            window_column=GOLD_WINDOW_COLUMNS[label],
         )
 
     write_zone_summary(
