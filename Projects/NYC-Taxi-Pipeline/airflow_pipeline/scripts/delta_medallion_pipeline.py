@@ -737,7 +737,7 @@ def write_gold(
               .orderBy(f"{loc}_day", "zone_id")
         )
         logger.info(f"[Gold] Writing zone summary ({loc}) to: {out_path}")
-        
+
         label = f"zone_summary_{loc}_daily"
 
         write_delta_table(
