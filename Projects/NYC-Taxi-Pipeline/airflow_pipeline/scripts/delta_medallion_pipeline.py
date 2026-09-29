@@ -383,8 +383,6 @@ def build_hourly_summary(df: DataFrame) -> DataFrame:
 
 
 # ---------- Gold ----------
-
-
 def filter_timestamp_window(
     df: DataFrame,
     timestamp_column: str,
@@ -407,6 +405,48 @@ def filter_timestamp_window(
             < F.lit(window_end_exclusive).cast("timestamp")
         )
     )
+
+
+def write_delta_table(
+    df: DataFrame,
+    target_path: str,
+    execution_contract: dict,
+    label: str,
+) -> str:
+    """
+    Write a Delta table according to the execution contract.
+
+    Current safety boundary:
+        only FULL_TABLE_OVERWRITE is supported.
+
+    Window-scoped replacement will be implemented separately.
+    """
+    write_scope = execution_contract.get(
+        "write_scope"
+    )
+
+    if write_scope != "FULL_TABLE_OVERWRITE":
+        raise ValueError(
+            "Unsupported write_scope for Delta writer: "
+            f"{write_scope!r}. "
+            "Only FULL_TABLE_OVERWRITE is allowed until "
+            "window-scoped writes are implemented."
+        )
+
+    logger.info(
+        f"[DeltaWrite][{label}] "
+        f"scope={write_scope}, "
+        f"target={target_path}"
+    )
+
+    (
+        df.write
+        .mode("overwrite")
+        .format("delta")
+        .save(target_path)
+    )
+
+    return target_path
 
 
 def write_gold(
@@ -523,10 +563,12 @@ def write_gold(
 
     started_at = time.perf_counter()
 
-    summary_hourly.write \
-        .mode("overwrite") \
-        .format("delta") \
-        .save(hourly_target)
+    write_delta_table(
+        summary_hourly,
+        target_path=hourly_target,
+        execution_contract=execution_contract,
+        label="trip_summary_hourly",
+    )
 
     elapsed_seconds = time.perf_counter() - started_at
 
@@ -556,11 +598,11 @@ def write_gold(
         f"{GOLD_FLOW_IMBALANCE_DAILY}"
     )
 
-    (
-        flow_imbalance.write
-        .mode("overwrite")
-        .format("delta")
-        .save(GOLD_FLOW_IMBALANCE_DAILY)
+    write_delta_table(
+        flow_imbalance,
+        target_path=GOLD_FLOW_IMBALANCE_DAILY,
+        execution_contract=execution_contract,
+        label="flow_imbalance_daily",
     )
 
     # Airport economics
@@ -593,11 +635,11 @@ def write_gold(
         f"{GOLD_OD_CORRIDOR_DAILY}"
     )
 
-    (
-        od_corridor.write
-        .mode("overwrite")
-        .format("delta")
-        .save(GOLD_OD_CORRIDOR_DAILY)
+    write_delta_table(
+        od_corridor,
+        target_path=GOLD_OD_CORRIDOR_DAILY,
+        execution_contract=execution_contract,
+        label="od_corridor_daily",
     )
 
     # Zone summaries (daily) for pickup & dropoff
@@ -624,7 +666,12 @@ def write_gold(
               .orderBy(f"{loc}_day", "zone_id")
         )
         logger.info(f"[Gold] Writing zone summary ({loc}) to: {out_path}")
-        zdf.write.mode("overwrite").format("delta").save(out_path)
+        write_delta_table(
+            zdf,
+            target_path=out_path,
+            execution_contract=execution_contract,
+            label=f"zone_summary_{loc}_daily",
+        )
 
     write_zone_summary(
         "pickup",
