@@ -1,12 +1,12 @@
-
 """
-Unit 3A.3 — Airflow runtime smoke test.
+Unit 3B.3c — Airflow routing runtime smoke test.
 
 Verifies:
 1. DAG imports without loading the heavy PySpark pipeline.
-2. Task dependencies and max_active_runs are configured.
-3. Unsupported backfill parameters are rejected.
-4. A real child-process failure propagates through
+2. Full refresh and Gold-only backfill topology are configured.
+3. Unsafe direct window overrides are rejected.
+4. Execution contracts route to the correct branch.
+5. A real child-process failure propagates through
    the lightweight runner and Airflow PythonOperator.
 
 No Spark jobs or Delta writes are performed.
@@ -27,10 +27,12 @@ DAG_ID = "nyc_taxi_medallion_delta"
 
 EXPECTED_TASKS = [
     "validate_execution_contract",
+    "route_execution",
     "bronze_ingest_delta",
     "silver_clean_delta",
     "gold_aggregate_delta",
     "export_gold_to_bigquery",
+    "gold_backfill_delta",
 ]
 
 
@@ -42,7 +44,7 @@ def assert_no_heavy_pipeline_import():
 
 
 def test_dag_loading():
-    print("\n[1/3] Checking Airflow DAG loading...")
+    print("\n[1/4] Checking Airflow DAG loading...")
 
     bag = DagBag(
         dag_folder=(
@@ -63,7 +65,16 @@ def test_dag_loading():
 
     assert set(dag.task_ids) == set(EXPECTED_TASKS)
 
-    for task_id in EXPECTED_TASKS[1:]:
+    contract_consumers = [
+        "route_execution",
+        "bronze_ingest_delta",
+        "silver_clean_delta",
+        "gold_aggregate_delta",
+        "export_gold_to_bigquery",
+        "gold_backfill_delta",
+    ]
+
+    for task_id in contract_consumers:
         task = dag.get_task(task_id)
 
         assert "execution_contract" in task.op_kwargs
@@ -77,27 +88,76 @@ def test_dag_loading():
             == "validate_execution_contract"
         )
 
-    for upstream, downstream in zip(
-        EXPECTED_TASKS,
-        EXPECTED_TASKS[1:],
-    ):
-        task = dag.get_task(upstream)
+    validate = dag.get_task(
+        "validate_execution_contract"
+    )
 
-        assert downstream in task.downstream_task_ids, (
-            f"Missing dependency: {upstream} -> {downstream}"
-        )
+    route = dag.get_task(
+        "route_execution"
+    )
 
-    assert_no_heavy_pipeline_import()
+    bronze = dag.get_task(
+        "bronze_ingest_delta"
+    )
+
+    silver = dag.get_task(
+        "silver_clean_delta"
+    )
+
+    gold = dag.get_task(
+        "gold_aggregate_delta"
+    )
+
+    export_bq = dag.get_task(
+        "export_gold_to_bigquery"
+    )
+
+    gold_backfill = dag.get_task(
+        "gold_backfill_delta"
+    )
+
+    assert route.task_id in (
+        validate.downstream_task_ids
+    )
+
+    assert route.downstream_task_ids == {
+        "bronze_ingest_delta",
+        "gold_backfill_delta",
+    }
+
+    assert silver.task_id in (
+        bronze.downstream_task_ids
+    )
+
+    assert gold.task_id in (
+        silver.downstream_task_ids
+    )
+
+    assert export_bq.task_id in (
+        gold.downstream_task_ids
+    )
+
+    assert (
+        "export_gold_to_bigquery"
+        not in gold_backfill.downstream_task_ids
+    )
+
+    assert (
+        gold_backfill.downstream_task_ids
+        == set()
+    )
 
     print("PASS: DAG imports without the heavy pipeline")
-    print("PASS: Task dependencies")
+    print("PASS: Full-refresh topology")
+    print("PASS: Gold-only backfill topology")
+    print("PASS: Backfill does not reach export")
     print("PASS: max_active_runs=1")
 
     return dag
 
 
 def test_execution_contract(dag):
-    print("\n[2/3] Checking execution contract...")
+    print("\n[2/4] Checking execution contract...")
 
     contract_task = dag.get_task(
         "validate_execution_contract"
@@ -119,7 +179,10 @@ def test_execution_contract(dag):
         )
 
     except ValueError as exc:
-        assert "Window/backfill overrides" in str(exc)
+        assert (
+            "Direct window overrides"
+            in str(exc)
+        )
 
         print(
             "PASS: Unsafe window rejected before Spark"
@@ -133,8 +196,100 @@ def test_execution_contract(dag):
     assert_no_heavy_pipeline_import()
 
 
+def test_execution_routing(dag):
+    print(
+        "\n[3/4] Checking execution routing..."
+    )
+
+    route_task = dag.get_task(
+        "route_execution"
+    )
+
+    route_callable = (
+        route_task.python_callable
+    )
+
+    full_refresh_contract = {
+        "mode": "CONFIGURED_FULL_REFRESH",
+        "write_scope":
+            "FULL_TABLE_OVERWRITE",
+    }
+
+    assert route_callable(
+        execution_contract=
+            full_refresh_contract,
+    ) == "bronze_ingest_delta"
+
+    backfill_contract = {
+        "mode": "BACKFILL",
+        "execution_scope": "GOLD_ONLY",
+        "write_scope": "WINDOW_REPLACE",
+    }
+
+    assert route_callable(
+        execution_contract=
+            backfill_contract,
+    ) == "gold_backfill_delta"
+
+    try:
+        route_callable(
+            execution_contract={
+                "mode": "BACKFILL",
+                "execution_scope":
+                    "BRONZE_TO_GOLD",
+                "write_scope":
+                    "WINDOW_REPLACE",
+            },
+        )
+
+    except ValueError as exc:
+        assert (
+            "GOLD_ONLY"
+            in str(exc)
+        )
+
+    else:
+        raise AssertionError(
+            "Unsupported backfill scope "
+            "was not rejected"
+        )
+
+    try:
+        route_callable(
+            execution_contract={
+                "mode": "UNKNOWN_MODE",
+                "write_scope":
+                    "WINDOW_REPLACE",
+            },
+        )
+
+    except ValueError as exc:
+        assert (
+            "Unsupported execution mode"
+            in str(exc)
+        )
+
+    else:
+        raise AssertionError(
+            "Unknown execution mode "
+            "was not rejected"
+        )
+
+    assert_no_heavy_pipeline_import()
+
+    print(
+        "PASS: Full refresh routes to Bronze"
+    )
+    print(
+        "PASS: Gold-only backfill routes to Gold"
+    )
+    print(
+        "PASS: Unsupported routing fails closed"
+    )
+
+
 def test_failure_propagation(dag):
-    print("\n[3/3] Checking child-process failure...")
+    print("\n[4/4] Checking child-process failure...")
 
     gold_task = dag.get_task(
         "gold_aggregate_delta"
@@ -153,12 +308,13 @@ def test_failure_propagation(dag):
         },
         "read_scope": {
             "raw_file_months": [
+                "2022-12",
                 "2023-01",
                 "2023-02",
                 "2023-03",
             ],
             "boundary_policy":
-                "CONFIGURED_MONTHS_ONLY",
+                "INCLUDE_PREVIOUS_MONTH",
         },
         "write_scope": "FULL_TABLE_OVERWRITE",
         "state_mode": "STATELESS",
@@ -242,6 +398,8 @@ def main():
     dag = test_dag_loading()
 
     test_execution_contract(dag)
+
+    test_execution_routing(dag)
 
     test_failure_propagation(dag)
 

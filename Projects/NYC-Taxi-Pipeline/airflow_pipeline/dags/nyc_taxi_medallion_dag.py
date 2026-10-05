@@ -7,7 +7,10 @@ import sys
 from datetime import datetime, timedelta
 
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.operators.python import (
+    BranchPythonOperator,
+    PythonOperator,
+)
 
 # Ensure project root & scripts/ are importable
 DAG_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -69,6 +72,48 @@ def validate_execution_contract(**context):
     return contract
 
 
+def route_execution(
+    execution_contract: dict,
+    **_,
+):
+    mode = execution_contract.get("mode")
+    write_scope = execution_contract.get(
+        "write_scope"
+    )
+
+    if mode == "CONFIGURED_FULL_REFRESH":
+        if write_scope != "FULL_TABLE_OVERWRITE":
+            raise ValueError(
+                "CONFIGURED_FULL_REFRESH requires "
+                "write_scope='FULL_TABLE_OVERWRITE'"
+            )
+
+        return "bronze_ingest_delta"
+
+    if mode == "BACKFILL":
+        execution_scope = execution_contract.get(
+            "execution_scope"
+        )
+
+        if execution_scope != "GOLD_ONLY":
+            raise ValueError(
+                "BACKFILL currently supports only "
+                "execution_scope='GOLD_ONLY'"
+            )
+
+        if write_scope != "WINDOW_REPLACE":
+            raise ValueError(
+                "GOLD_ONLY backfill requires "
+                "write_scope='WINDOW_REPLACE'"
+            )
+
+        return "gold_backfill_delta"
+
+    raise ValueError(
+        f"Unsupported execution mode: {mode!r}"
+    )
+
+
 with DAG(
     dag_id="nyc_taxi_medallion_delta",
     default_args=default_args,
@@ -82,6 +127,26 @@ with DAG(
         task_id="validate_execution_contract",
         python_callable=validate_execution_contract,
         retries=0,
+    )
+
+    route = BranchPythonOperator(
+        task_id="route_execution",
+        python_callable=route_execution,
+        op_kwargs={
+            "execution_contract":
+                execution_contract.output,
+        },
+        retries=0,
+    )
+
+    gold_backfill = PythonOperator(
+        task_id="gold_backfill_delta",
+        python_callable=submit_stage,
+        op_kwargs={
+            "stage": "gold",
+            "execution_contract":
+                execution_contract.output,
+        },
     )
 
     bronze = PythonOperator(
@@ -120,4 +185,9 @@ with DAG(
         },
     )
 
-    execution_contract >> bronze >> silver >> gold >> export_bq
+    execution_contract >> route
+
+    route >> bronze
+    bronze >> silver >> gold >> export_bq
+
+    route >> gold_backfill
