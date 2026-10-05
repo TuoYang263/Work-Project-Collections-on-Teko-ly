@@ -13,7 +13,6 @@ WINDOW_OVERRIDE_KEYS = {
     "window_start",
     "window_end",
     "window_end_exclusive",
-    "backfill",
 }
 
 
@@ -34,10 +33,137 @@ def _previous_month(
     return year, month - 1
 
 
+def _build_single_month_backfill_contract(
+    backfill_config: Mapping[str, Any],
+) -> dict[str, Any]:
+    allowed_keys = {
+        "year",
+        "month",
+    }
+
+    unknown_keys = sorted(
+        set(backfill_config.keys())
+        - allowed_keys
+    )
+
+    if unknown_keys:
+        raise ValueError(
+            "Unsupported backfill parameters: "
+            f"{unknown_keys}"
+        )
+
+    missing_keys = sorted(
+        allowed_keys
+        - set(backfill_config.keys())
+    )
+
+    if missing_keys:
+        raise ValueError(
+            "Missing required backfill parameters: "
+            f"{missing_keys}"
+        )
+
+    try:
+        year = int(
+            backfill_config["year"]
+        )
+        month = int(
+            backfill_config["month"]
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "backfill year and month must be integers"
+        ) from exc
+
+    if month < 1 or month > 12:
+        raise ValueError(
+            f"Invalid backfill month: {month}"
+        )
+
+    window_start = date(
+        year,
+        month,
+        1,
+    )
+
+    window_end_exclusive = _next_month(
+        year,
+        month,
+    )
+
+    return {
+        "mode": "BACKFILL",
+        "execution_scope": "GOLD_ONLY",
+
+        "year": year,
+        "months": [month],
+
+        "window_start":
+            window_start.isoformat(),
+
+        "window_end_exclusive":
+            window_end_exclusive.isoformat(),
+
+        "logical_window": {
+            "start":
+                window_start.isoformat(),
+            "end_exclusive":
+                window_end_exclusive.isoformat(),
+            "anchor": "PICKUP_DATETIME",
+        },
+
+        "read_scope": {
+            "input_layer": "SILVER",
+            "boundary_policy":
+                "REUSE_EXISTING_SILVER_STATE",
+        },
+
+        "write_scope":
+            "WINDOW_REPLACE",
+
+        "state_mode":
+            "STATELESS",
+
+        "rerun_semantics":
+            "REPLACE_LOGICAL_WINDOW_IDEMPOTENT",
+    }
+
+
 def build_current_execution_contract(
     settings: Mapping[str, Any],
     dag_run_conf: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    conf = dict(dag_run_conf or {})
+    
+    unsupported_overrides = sorted(
+        WINDOW_OVERRIDE_KEYS.intersection(conf.keys())
+    )
+
+    if unsupported_overrides:
+        raise ValueError(
+            "Direct window overrides are not supported. "
+            "Use the controlled backfill contract instead. "
+            "Refusing unsafe DAG-run parameters: "
+            f"{unsupported_overrides}"
+        )
+
+    backfill_config = conf.get(
+        "backfill"
+    )
+
+    if backfill_config is not None:
+        if not isinstance(
+            backfill_config,
+            Mapping,
+        ):
+            raise ValueError(
+                "backfill must be an object "
+                "with year and month"
+            )
+
+        return _build_single_month_backfill_contract(
+            backfill_config
+        )
 
     data_config = settings.get("data_config", {})
 
@@ -72,20 +198,6 @@ def build_current_execution_contract(
         raise ValueError(
             "Current execution contract requires contiguous configured months. "
             f"Received: {months}"
-        )
-
-    conf = dict(dag_run_conf or {})
-
-    unsupported_overrides = sorted(
-        WINDOW_OVERRIDE_KEYS.intersection(conf.keys())
-    )
-
-    if unsupported_overrides:
-        raise ValueError(
-            "Window/backfill overrides are not supported yet because the "
-            "pipeline still uses full-table overwrite semantics. "
-            "Refusing to silently ignore unsafe DAG-run parameters: "
-            f"{unsupported_overrides}"
         )
 
     window_start = date(

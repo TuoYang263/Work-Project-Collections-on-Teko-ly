@@ -52,7 +52,7 @@ def test_current_execution_contract():
 def test_rejects_unsafe_manual_window_override():
     with pytest.raises(
         ValueError,
-        match="Window/backfill overrides are not supported yet",
+        match="Direct window overrides are not supported",
     ):
         build_current_execution_contract(
             _settings(),
@@ -124,3 +124,89 @@ def test_contract_read_scope_includes_previous_month():
         ],
         "boundary_policy": "INCLUDE_PREVIOUS_MONTH",
     }
+
+
+def test_builds_gold_only_single_month_backfill():
+    contract = build_current_execution_contract(
+        _settings(),
+        dag_run_conf={
+            "backfill": {
+                "year": 2023,
+                "month": 2,
+            },
+        },
+    )
+
+    assert contract["mode"] == "BACKFILL"
+    assert contract["execution_scope"] == (
+        "GOLD_ONLY"
+    )
+
+    assert contract["logical_window"] == {
+        "start": "2023-02-01",
+        "end_exclusive": "2023-03-01",
+        "anchor": "PICKUP_DATETIME",
+    }
+
+    assert contract["read_scope"] == {
+        "input_layer": "SILVER",
+        "boundary_policy":
+            "REUSE_EXISTING_SILVER_STATE",
+    }
+
+    assert contract["write_scope"] == (
+        "WINDOW_REPLACE"
+    )
+
+
+def test_backfill_january_window_crosses_year_boundary():
+    contract = build_current_execution_contract(
+        _settings(),
+        dag_run_conf={
+            "backfill": {
+                "year": 2023,
+                "month": 1,
+            },
+        },
+    )
+
+    assert contract[
+        "window_start"
+    ] == "2023-01-01"
+
+    assert contract[
+        "window_end_exclusive"
+    ] == "2023-02-01"
+
+
+def test_rejects_invalid_backfill_month():
+    with pytest.raises(
+        ValueError,
+        match="Invalid backfill month",
+    ):
+        build_current_execution_contract(
+            _settings(),
+            dag_run_conf={
+                "backfill": {
+                    "year": 2023,
+                    "month": 13,
+                },
+            },
+        )
+
+
+def test_rejects_backfill_mixed_with_direct_override():
+    with pytest.raises(
+        ValueError,
+        match="Direct window overrides",
+    ):
+        build_current_execution_contract(
+            _settings(),
+            dag_run_conf={
+                "month": 2,
+                "backfill": {
+                    "year": 2023,
+                    "month": 2,
+                },
+            },
+        )
