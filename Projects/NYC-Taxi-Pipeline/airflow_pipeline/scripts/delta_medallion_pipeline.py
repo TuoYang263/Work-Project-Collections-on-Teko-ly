@@ -267,11 +267,19 @@ def resolve_raw_file_paths(
             raw_file_month
         )
 
-        local_paths.extend(
-            download_to_local(
-                year,
-                [month],
+        downloaded_paths = download_to_local(
+            year,
+            [month],
+        )
+
+        if len(downloaded_paths) != 1:
+            raise RuntimeError(
+                "Required raw file month unavailable: "
+                f"{raw_file_month}"
             )
+
+        local_paths.extend(
+            downloaded_paths
         )
 
     return local_paths
@@ -1361,7 +1369,7 @@ def bronze_task(
             "Bronze does not support "
             f"write_scope={write_scope!r} yet"
         )
-    
+
     raw_file_months = list(
         execution_contract[
             "read_scope"
