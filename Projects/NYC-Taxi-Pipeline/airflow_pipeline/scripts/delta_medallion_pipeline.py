@@ -1352,6 +1352,16 @@ def bronze_task(
     execution_contract: dict,
     **_,
 ):
+    write_scope = execution_contract.get(
+        "write_scope"
+    )
+
+    if write_scope != "FULL_TABLE_OVERWRITE":
+        raise ValueError(
+            "Bronze does not support "
+            f"write_scope={write_scope!r} yet"
+        )
+    
     raw_file_months = list(
         execution_contract[
             "read_scope"
@@ -1372,7 +1382,20 @@ def bronze_task(
     )
 
 
-def silver_task(**_):
+def silver_task(
+    execution_contract: dict,
+    **_,
+):
+    write_scope = execution_contract.get(
+        "write_scope"
+    )
+
+    if write_scope != "FULL_TABLE_OVERWRITE":
+        raise ValueError(
+            "Silver does not support "
+            f"write_scope={write_scope!r} yet"
+        )
+
     return write_silver()
 
 def gold_task(

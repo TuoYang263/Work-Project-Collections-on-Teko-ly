@@ -1,5 +1,6 @@
-from scripts import delta_medallion_pipeline as pipeline
+import pytest
 
+from scripts import delta_medallion_pipeline as pipeline
 
 def _contract():
     return {
@@ -87,3 +88,29 @@ def test_bronze_task_forwards_read_scope(
     ]
 
     assert result == "bronze-ok"
+
+
+def test_bronze_rejects_window_replace():
+    contract = _contract()
+    contract["write_scope"] = "WINDOW_REPLACE"
+
+    with pytest.raises(
+        ValueError,
+        match="Bronze does not support",
+    ):
+        pipeline.bronze_task(
+            execution_contract=contract,
+        )
+
+
+def test_silver_rejects_window_replace():
+    contract = _contract()
+    contract["write_scope"] = "WINDOW_REPLACE"
+
+    with pytest.raises(
+        ValueError,
+        match="Silver does not support",
+    ):
+        pipeline.silver_task(
+            execution_contract=contract,
+        )
