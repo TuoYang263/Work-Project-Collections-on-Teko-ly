@@ -44,7 +44,7 @@ def assert_no_heavy_pipeline_import():
 
 
 def test_dag_loading():
-    print("\n[1/4] Checking Airflow DAG loading...")
+    print("\n[1/5] Checking Airflow DAG loading...")
 
     bag = DagBag(
         dag_folder=(
@@ -156,8 +156,9 @@ def test_dag_loading():
     return dag
 
 
+
 def test_execution_contract(dag):
-    print("\n[2/4] Checking execution contract...")
+    print("\n[2/5] Checking execution contract...")
 
     contract_task = dag.get_task(
         "validate_execution_contract"
@@ -165,40 +166,49 @@ def test_execution_contract(dag):
 
     assert contract_task.retries == 0
 
-    # An unsupported February override must fail.
     invalid_run = SimpleNamespace(
         conf={"month": 2},
         run_id="smoke_invalid_window",
     )
 
-    try:
-        contract_task.execute(
-            context={
-                "dag_run": invalid_run,
-            }
-        )
+    start_calls = []
 
-    except ValueError as exc:
-        assert (
-            "Direct window overrides"
-            in str(exc)
-        )
+    def fake_start(*args, **kwargs):
+        start_calls.append((args, kwargs))
 
-        print(
-            "PASS: Unsafe window rejected before Spark"
-        )
+    with patch.dict(
+        contract_task.python_callable.__globals__,
+        {"start_pipeline_run": fake_start},
+    ):
+        try:
+            contract_task.execute(
+                context={"dag_run": invalid_run}
+            )
 
-    else:
-        raise AssertionError(
-            "Unsafe window request was not rejected"
-        )
+        except ValueError as exc:
+            assert (
+                "Direct window overrides"
+                in str(exc)
+            )
+
+        else:
+            raise AssertionError(
+                "Unsafe window request was not rejected"
+            )
+
+    assert start_calls == [], (
+        "Invalid contract must not create run evidence"
+    )
 
     assert_no_heavy_pipeline_import()
+
+    print("PASS: Unsafe window rejected before Spark")
+    print("PASS: Invalid contract creates no evidence")
 
 
 def test_execution_routing(dag):
     print(
-        "\n[3/4] Checking execution routing..."
+        "\n[3/5] Checking execution routing..."
     )
 
     route_task = dag.get_task(
@@ -288,8 +298,158 @@ def test_execution_routing(dag):
     )
 
 
+def test_lifecycle_wiring(dag):
+    print("\n[4/5] Checking lifecycle wiring...")
+
+    validate = dag.get_task(
+        "validate_execution_contract"
+    )
+
+    context = {
+        "dag_run": SimpleNamespace(
+            run_id="smoke_lifecycle",
+            conf={},
+        ),
+    }
+
+    started = []
+
+    def fake_start(ctx, contract):
+        started.append(
+            (ctx["dag_run"].run_id, contract)
+        )
+
+    with patch.dict(
+        validate.python_callable.__globals__,
+        {"start_pipeline_run": fake_start},
+    ):
+        contract = validate.python_callable(
+            **context
+        )
+
+    assert len(started) == 1
+    assert started[0][0] == "smoke_lifecycle"
+    assert started[0][1] == contract
+
+    def single_callback(callback):
+        if isinstance(callback, (list, tuple)):
+            assert len(callback) == 1
+            callback = callback[0]
+
+        assert callable(callback)
+        return callback
+
+    success = single_callback(
+        dag.on_success_callback
+    )
+    failure = single_callback(
+        dag.on_failure_callback
+    )
+
+    results = []
+
+    def fake_success(ctx):
+        results.append(
+            ("success", ctx["dag_run"].run_id)
+        )
+
+    def fake_failure(ctx):
+        results.append(
+            ("failure", ctx["dag_run"].run_id)
+        )
+
+    with patch.dict(
+        success.__globals__,
+        {"mark_pipeline_success": fake_success},
+    ):
+        success(context)
+
+    with patch.dict(
+        failure.__globals__,
+        {"mark_pipeline_failure": fake_failure},
+    ):
+        failure(context)
+
+    assert results == [
+        ("success", "smoke_lifecycle"),
+        ("failure", "smoke_lifecycle"),
+    ]
+
+    assert_no_heavy_pipeline_import()
+
+    print("PASS: RUNNING evidence hook")
+    print("PASS: DAG success callback")
+    print("PASS: DAG failure callback")
+
+
+
+def test_missing_evidence_failure_callback(dag):
+    print(
+        "\nChecking missing-evidence failure path..."
+    )
+
+    failure_callback = dag.on_failure_callback
+
+    if isinstance(
+        failure_callback,
+        (list, tuple),
+    ):
+        assert len(failure_callback) == 1
+        failure_callback = failure_callback[0]
+
+    assert callable(failure_callback)
+
+    context = {
+        "dag_run": SimpleNamespace(
+            run_id="validation_failed",
+        ),
+    }
+
+    failure_calls = []
+
+    def fake_missing_evidence(ctx):
+        failure_calls.append(
+            ctx["dag_run"].run_id
+        )
+        raise FileNotFoundError(
+            "Run evidence not found"
+        )
+
+    callback_globals = (
+        failure_callback.__globals__
+    )
+
+    with patch.dict(
+        callback_globals,
+        {
+            "mark_pipeline_failure":
+                fake_missing_evidence
+        },
+    ), patch.object(
+        callback_globals["logger"],
+        "error",
+    ) as mock_error:
+        failure_callback(context)
+
+    assert failure_calls == [
+        "validation_failed"
+    ]
+
+    mock_error.assert_called_once()
+
+    args, kwargs = mock_error.call_args
+
+    assert "Run evidence missing" in args[0]
+    assert kwargs["exc_info"] is True
+
+    print(
+        "PASS: Missing evidence handled without "
+        "callback exception"
+    )
+
+
 def test_failure_propagation(dag):
-    print("\n[4/4] Checking child-process failure...")
+    print("\n[5/5] Checking child-process failure...")
 
     gold_task = dag.get_task(
         "gold_aggregate_delta"
@@ -400,6 +560,10 @@ def main():
     test_execution_contract(dag)
 
     test_execution_routing(dag)
+
+    test_lifecycle_wiring(dag)
+
+    test_missing_evidence_failure_callback(dag)
 
     test_failure_propagation(dag)
 

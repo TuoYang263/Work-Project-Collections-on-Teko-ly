@@ -27,6 +27,11 @@ from scripts.execution_contract import (
     build_current_execution_contract,
 )
 from scripts.pipeline_runner import submit_stage
+from scripts.run_lifecycle import (
+    start_pipeline_run,
+    mark_pipeline_success,
+    mark_pipeline_failure,
+)
 
 from scripts import get_logger  # or scripts.logger, both ok
 logger = get_logger("nyc_taxi_medallion_dag")
@@ -67,6 +72,11 @@ def validate_execution_contract(**context):
 
     logger.info(
         f"[CONTROL] execution_contract={contract}"
+    )
+
+    start_pipeline_run(
+        context,
+        contract,
     )
 
     return contract
@@ -114,8 +124,27 @@ def route_execution(
     )
 
 
+def on_pipeline_success(context):
+    mark_pipeline_success(context)
+
+
+def on_pipeline_failure(context):
+    try:
+        mark_pipeline_failure(context)
+
+    except FileNotFoundError:
+        logger.error(
+            "[CONTROL] Run evidence missing. "
+            "Execution may have failed before "
+            "evidence creation.",
+            exc_info=True,
+        )
+
+
 with DAG(
     dag_id="nyc_taxi_medallion_delta",
+    on_success_callback=on_pipeline_success,
+    on_failure_callback=on_pipeline_failure,
     default_args=default_args,
     description="NYC Yellow Taxi Medallion Pipeline with Delta Lake",
     schedule_interval=None,   # manual trigger for now
