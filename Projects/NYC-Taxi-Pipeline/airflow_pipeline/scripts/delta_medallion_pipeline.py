@@ -1406,6 +1406,7 @@ def silver_task(
 
     return write_silver()
 
+
 def gold_task(
     execution_contract: dict,
     **_,
@@ -1413,6 +1414,40 @@ def gold_task(
     return write_gold(
         execution_contract=execution_contract,
     )
+
+
+def quality_task(
+    execution_contract: dict,
+    **_,
+):
+    """
+    Validate all six Gold Delta tables before export.
+    """
+    from scripts.gold_quality_gate import (
+        validate_all_gold_tables,
+    )
+
+    spark = get_spark("NYC Gold Quality Gate")
+
+    table_paths = {
+        "trip_summary_hourly": GOLD_SUMMARY_HOURLY,
+        "zone_summary_pickup_daily": GOLD_ZONE_PICKUP_DAILY,
+        "zone_summary_dropoff_daily": GOLD_ZONE_DROPOFF_DAILY,
+        "flow_imbalance_daily": GOLD_FLOW_IMBALANCE_DAILY,
+        "airport_economics_daily": GOLD_AIRPORT_ECONOMICS_DAILY,
+        "od_corridor_daily": GOLD_OD_CORRIDOR_DAILY,
+    }
+
+    validate_all_gold_tables(
+        spark=spark,
+        table_paths=table_paths,
+        execution_contract=execution_contract,
+    )
+
+    logger.info(
+        "[QualityGate] All six Gold tables passed"
+    )
+
 
 def export_bq_all_task(**_):
     return export_all_gold_to_bigquery()

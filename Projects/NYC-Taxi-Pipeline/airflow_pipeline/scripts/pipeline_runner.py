@@ -20,6 +20,7 @@ STAGE_FUNCTIONS = {
     "bronze": "bronze_task",
     "silver": "silver_task",
     "gold": "gold_task",
+    "quality": "quality_task",
     "export": "export_bq_all_task",
 }
 

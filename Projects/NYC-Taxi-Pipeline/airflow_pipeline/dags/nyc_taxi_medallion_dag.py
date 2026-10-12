@@ -205,6 +205,25 @@ with DAG(
         },
     )
 
+
+    quality_full_refresh = PythonOperator(
+        task_id="quality_full_refresh",
+        python_callable=submit_stage,
+        op_kwargs={
+            "stage": "quality",
+            "execution_contract": execution_contract.output,
+        },
+    )
+
+    quality_backfill = PythonOperator(
+        task_id="quality_backfill",
+        python_callable=submit_stage,
+        op_kwargs={
+            "stage": "quality",
+            "execution_contract": execution_contract.output,
+        },
+    )
+
     export_bq = PythonOperator(
         task_id="export_gold_to_bigquery",
         python_callable=submit_stage,
@@ -216,7 +235,11 @@ with DAG(
 
     execution_contract >> route
 
+    # Full Refresh
     route >> bronze
-    bronze >> silver >> gold >> export_bq
+    bronze >> silver >> gold
+    gold >> quality_full_refresh >> export_bq
 
+    # Gold-only Backfill
     route >> gold_backfill
+    gold_backfill >> quality_backfill

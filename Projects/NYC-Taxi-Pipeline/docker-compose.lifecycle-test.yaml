@@ -77,5 +77,11 @@ services:
     <<: *lifecycle-airflow
     command: celery worker
 
+  webserver:
+    <<: *lifecycle-airflow
+    command: webserver
+    ports:
+      - "127.0.0.1:18080:8080"
+
 volumes:
   lifecycle_pgdata:

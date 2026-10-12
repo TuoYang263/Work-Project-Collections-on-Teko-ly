@@ -121,3 +121,54 @@ def test_rejects_unknown_stage():
             "february",
             _contract(),
         )
+
+
+
+def test_quality_stage_dispatch(monkeypatch):
+    called = []
+
+    fake_pipeline = SimpleNamespace(
+        quality_task=lambda **kwargs: called.append(
+            kwargs["execution_contract"]
+        ),
+    )
+
+    monkeypatch.setattr(
+        runner.importlib,
+        "import_module",
+        lambda name: fake_pipeline,
+    )
+
+    runner.execute_stage(
+        "quality",
+        _contract(),
+    )
+
+    assert called == [_contract()]
+
+
+def test_quality_stage_failure_propagates(monkeypatch):
+    def failing_quality_task(**kwargs):
+        raise ValueError(
+            "Gold Quality Gate FAILED: "
+            "rule=POSITIVE_COUNT"
+        )
+
+    fake_pipeline = SimpleNamespace(
+        quality_task=failing_quality_task,
+    )
+
+    monkeypatch.setattr(
+        runner.importlib,
+        "import_module",
+        lambda name: fake_pipeline,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Gold Quality Gate FAILED",
+    ):
+        runner.execute_stage(
+            "quality",
+            _contract(),
+        )
