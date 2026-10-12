@@ -135,3 +135,61 @@ def test_terminal_run_cannot_be_overwritten(
             failure_stage="gold",
             directory=tmp_path,
         )
+
+def test_v2_same_run_id_isolated_across_dags(tmp_path):
+    start_run_evidence("shared", _contract(), dag_id="dag_a", directory=tmp_path)
+    start_run_evidence("shared", _contract(), dag_id="dag_b", directory=tmp_path)
+    finalize_run_evidence("shared", "SUCCEEDED", dag_id="dag_a", directory=tmp_path)
+    assert load_run_evidence("shared", dag_id="dag_a", directory=tmp_path)["status"] == "SUCCEEDED"
+    assert load_run_evidence("shared", dag_id="dag_b", directory=tmp_path)["status"] == "RUNNING"
+    assert len(list((tmp_path / "v2").glob("*.json"))) == 2
+
+
+def test_v2_strict_lookup_does_not_fallback_to_v1(tmp_path):
+    start_run_evidence("v1-only", _contract(), directory=tmp_path)
+    assert load_run_evidence("v1-only", directory=tmp_path)["schema_version"] == 1
+    with pytest.raises(FileNotFoundError):
+        load_run_evidence("v1-only", directory=tmp_path, dag_id="dag_a")
+    with pytest.raises(RuntimeError, match="Legacy run evidence"):
+        start_run_evidence("v1-only", _contract(), directory=tmp_path, dag_id="dag_a")
+
+
+def test_v2_identity_validation_and_wrong_dag(tmp_path):
+    start_run_evidence("x", _contract(), dag_id="dag_a", directory=tmp_path)
+    with pytest.raises(FileNotFoundError):
+        load_run_evidence("x", dag_id="dag_b", directory=tmp_path)
+    with pytest.raises(ValueError, match="dag_id must"):
+        start_run_evidence("y", _contract(), dag_id=" ", directory=tmp_path)
+
+
+def test_concurrent_start_only_creates_once(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    def attempt(_):
+        try:
+            start_run_evidence("simultaneous", _contract(), dag_id="test_dag", directory=tmp_path)
+            return "started"
+        except RuntimeError as exc:
+            assert "already exists" in str(exc)
+            return "rejected"
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(attempt, range(2)))
+    assert sorted(results) == ["rejected", "started"]
+
+
+def test_concurrent_terminal_write_only_once(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    start_run_evidence("race", _contract(), dag_id="test_dag", directory=tmp_path)
+    def attempt(status):
+        try:
+            finalize_run_evidence(
+                "race", status, dag_id="test_dag", directory=tmp_path,
+                failure_stage="failed_task" if status == "FAILED" else None,
+            )
+            return "finalized"
+        except RuntimeError as exc:
+            assert "already terminal" in str(exc)
+            return "rejected"
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(attempt, ("FAILED", "SUCCEEDED")))
+    assert sorted(results) == ["finalized", "rejected"]
+    assert load_run_evidence("race", dag_id="test_dag", directory=tmp_path)["status"] in {"FAILED", "SUCCEEDED"}

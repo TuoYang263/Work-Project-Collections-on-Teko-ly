@@ -1,0 +1,81 @@
+x-lifecycle-airflow: &lifecycle-airflow
+  build:
+    context: .
+    dockerfile: Dockerfile.lifecycle-test
+  image: nyc-lifecycle-airflow:2.8.1
+
+  environment:
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "True"
+
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://lifecycle:lifecycle@postgres:5432/lifecycle
+
+    AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://lifecycle:lifecycle@postgres:5432/lifecycle
+
+    PYTHONPATH: /opt/airflow
+    PYTHONDONTWRITEBYTECODE: "1"
+
+  volumes:
+    - ./airflow_pipeline/dags:/opt/airflow/dags:ro
+    - ./airflow_pipeline/scripts:/opt/airflow/scripts:ro
+    - ./airflow_pipeline/config:/opt/airflow/config:ro
+    - ./airflow_pipeline/data:/opt/airflow/data
+    - ./airflow_pipeline/logs:/opt/airflow/logs
+
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: lifecycle
+      POSTGRES_PASSWORD: lifecycle
+      POSTGRES_DB: lifecycle
+    volumes:
+      - lifecycle_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U lifecycle -d lifecycle
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.2-bookworm
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  airflow-init:
+    image: apache/airflow:2.8.1-python3.11
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://lifecycle:lifecycle@postgres:5432/lifecycle
+    command: db migrate
+
+  scheduler:
+    <<: *lifecycle-airflow
+    command: scheduler
+
+  worker:
+    <<: *lifecycle-airflow
+    command: celery worker
+
+volumes:
+  lifecycle_pgdata:

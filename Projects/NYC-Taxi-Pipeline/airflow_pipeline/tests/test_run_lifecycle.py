@@ -34,8 +34,9 @@ def _contract():
     }
 
 
-def _context(run_id, tasks=None):
+def _context(run_id, tasks=None, dag_id="test_medallion_dag"):
     dag_run = SimpleNamespace(
+        dag_id=dag_id,
         run_id=run_id,
         get_task_instances=lambda: tasks or [],
     )
@@ -53,6 +54,8 @@ def test_start_pipeline_run(tmp_path):
     )
 
     assert record["run_id"] == "run-start"
+    assert record["dag_id"] == "test_medallion_dag"
+    assert record["schema_version"] == 2
     assert record["status"] == "RUNNING"
     assert record["mode"] == "BACKFILL"
 
@@ -74,6 +77,7 @@ def test_mark_pipeline_success(tmp_path):
     record = load_run_evidence(
         "run-success",
         directory=tmp_path,
+        dag_id="test_medallion_dag",
     )
 
     assert record["status"] == "SUCCEEDED"
@@ -112,6 +116,7 @@ def test_failure_ignores_skipped_branch(tmp_path):
     record = load_run_evidence(
         "run-failed",
         directory=tmp_path,
+        dag_id="test_medallion_dag",
     )
 
     assert record["status"] == "FAILED"
