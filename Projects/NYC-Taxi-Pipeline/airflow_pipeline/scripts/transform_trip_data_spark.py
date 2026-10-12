@@ -18,6 +18,7 @@ import sys
 # Auto-Locate project root
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from pyspark.sql import functions as F
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import col, to_timestamp, regexp_replace, trim
 from pyspark.sql.types import *
@@ -80,19 +81,64 @@ def cast_column_types(df: DataFrame) -> DataFrame:
             df = df.withColumn(col_name, col(col_name).cast(TimestampType()))
     return df
 
+
 def drop_useless_columns(df: DataFrame) -> DataFrame:
     """
-    Drop empty columns and fix duplicated columns like 'Airport_fee'
+    Drop columns containing only NULL or only empty strings.
+
+    Preserve existing semantics:
+    mixed NULL and "" values must be retained.
+
+    Collect column statistics in one Spark aggregation.
     """
-    # Drop fully null columns
-    # Find out columns whose values are the same one, and this value is empty string or None
-    null_cols = [c for c in df.columns if df.select(col(c)).distinct().count() == 1 and df.select(col(c)).first()[0] in ('', None)]
+    fields = df.schema.fields
 
-    # Drop 'Airport_fee' if both versions exist
-    if 'airport_fee' in df.columns and 'Airport_fee' in df.columns:
-        null_cols.append('Airport_fee')
+    if not fields:
+        return df
 
-    return df.drop(*null_cols)
+    expressions = [
+        F.count(F.lit(1)).alias("row_count")
+    ]
+
+    for i, field in enumerate(fields):
+        column = F.col(field.name)
+
+        expressions.append(
+            F.count(column).alias(f"non_null_{i}")
+        )
+
+        if isinstance(field.dataType, StringType):
+            expressions.append(
+                F.count(
+                    F.when(column == "", 1)
+                ).alias(f"empty_{i}")
+            )
+
+    stats = df.agg(*expressions).first()
+    total_rows = stats["row_count"]
+
+    if total_rows == 0:
+        return df
+
+    columns_to_drop = []
+
+    for i, field in enumerate(fields):
+        non_null_count = stats[f"non_null_{i}"]
+
+        if non_null_count == 0:
+            columns_to_drop.append(field.name)
+
+        elif isinstance(field.dataType, StringType):
+            empty_count = stats[f"empty_{i}"]
+
+            if empty_count == total_rows:
+                columns_to_drop.append(field.name)
+
+    if not columns_to_drop:
+        return df
+
+    return df.drop(*columns_to_drop)
+
 
 def filter_invalid_rows(df: DataFrame) -> DataFrame:
     """
