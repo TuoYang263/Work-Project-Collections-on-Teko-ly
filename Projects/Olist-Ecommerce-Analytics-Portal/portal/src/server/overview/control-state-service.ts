@@ -4,12 +4,12 @@ import {
   PIPELINE_STATES,
   type ControlStateOverview,
   type PipelineState,
-} from "@/server/overview/control-state";
+} from "./control-state";
 
 import {
   loadControlState,
   type ControlStateRow,
-} from "@/server/overview/control-state-repository";
+} from "./control-state-repository";
 
 export async function getControlStateOverview(): Promise<ControlStateOverview> {
   const row = await loadControlState();
@@ -55,6 +55,7 @@ function mapControlState(row: ControlStateRow): ControlStateOverview {
     pipelineName: row.pipeline_name,
     environment: row.environment,
     state,
+    cycleId: row.cycle_id,
     controlVersion: row.control_version,
     lastSuccessfulWindow,
     activeAttempt,

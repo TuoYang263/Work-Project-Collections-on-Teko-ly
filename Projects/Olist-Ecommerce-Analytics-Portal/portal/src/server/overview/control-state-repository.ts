@@ -6,6 +6,7 @@ export interface ControlStateRow {
   pipeline_name: string;
   environment: string;
   state: string;
+  cycle_id: number;
 
   last_successful_window_start: unknown;
   last_successful_window_end: unknown;
@@ -44,6 +45,7 @@ export async function loadControlState(): Promise<ControlStateRow> {
       pipeline_name,
       environment,
       state,
+      cycle_id,
       last_successful_window_start,
       last_successful_window_end,
       active_window_start,

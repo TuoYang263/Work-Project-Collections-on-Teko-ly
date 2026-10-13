@@ -121,19 +121,30 @@ export function ControlStateCard({
         <OverviewMetric
           label="Control version"
           value={String(data.controlVersion)}
-          description={`Updated ${formatUtc(data.updatedAt)}`}
+          description={`CAS-protected revision · Updated ${formatUtc(
+            data.updatedAt
+          )}`}
         />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card className="h-full">
           <CardHeader>
-            <CardTitle>
-              Processing window
-            </CardTitle>
-            <CardDescription>
-              Latest successful watermark and active work.
-            </CardDescription>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle>
+                  Processing progress
+                </CardTitle>
+
+                <CardDescription>
+                  Successful watermark and current production-cycle context.
+                </CardDescription>
+              </div>
+
+              <Badge variant="outline">
+                Cycle {data.cycleId}
+              </Badge>
+            </div>
           </CardHeader>
 
           <CardContent className="space-y-5">
@@ -143,23 +154,31 @@ export function ControlStateCard({
               </div>
 
               {data.lastSuccessfulWindow ? (
-                <div className="mt-2 rounded-lg border bg-muted/20 px-3 py-3">
-                  <div className="text-sm font-medium">
-                    {formatUtc(
-                      data.lastSuccessfulWindow.start
-                    )}
+                <>
+                  <div className="mt-2 rounded-lg border bg-muted/20 px-3 py-3">
+                    <div className="text-sm font-medium">
+                      {formatUtc(
+                        data.lastSuccessfulWindow.start
+                      )}
+                    </div>
+
+                    <div className="my-1 text-xs text-muted-foreground">
+                      to
+                    </div>
+
+                    <div className="text-sm font-medium">
+                      {formatUtc(
+                        data.lastSuccessfulWindow.end
+                      )}
+                    </div>
                   </div>
 
-                  <div className="my-1 text-xs text-muted-foreground">
-                    to
-                  </div>
-
-                  <div className="text-sm font-medium">
-                    {formatUtc(
-                      data.lastSuccessfulWindow.end
-                    )}
-                  </div>
-                </div>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Published analytics include only successfully processed data
+                    before this window end. Processing windows use half-open
+                    [start, end) semantics.
+                  </p>
+                </>
               ) : (
                 <div className="mt-2 rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
                   No successful window yet.
@@ -233,6 +252,7 @@ export function ControlStateCard({
               <Detail
                 label="Controller updated"
                 value={formatUtc(data.updatedAt)}
+                secondary={formatHelsinki(data.updatedAt)}
               />
 
               <Detail
@@ -369,9 +389,11 @@ function formatPipelineState(
 function Detail({
   label,
   value,
+  secondary,
 }: {
   label: string;
   value: string;
+  secondary?: string;
 }) {
   return (
     <div className="min-w-0">
@@ -382,6 +404,12 @@ function Detail({
       <div className="mt-1 break-words text-sm font-medium">
         {value}
       </div>
+
+      {secondary ? (
+        <div className="mt-1 text-xs text-muted-foreground">
+          {secondary}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -395,5 +423,17 @@ function formatUtc(value: string): string {
       timeStyle: "short",
       timeZone: "UTC",
     }).format(date) + " UTC"
+  );
+}
+
+function formatHelsinki(value: string): string {
+  const date = new Date(value);
+
+  return (
+    new Intl.DateTimeFormat("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Europe/Helsinki",
+    }).format(date) + " Helsinki"
   );
 }
