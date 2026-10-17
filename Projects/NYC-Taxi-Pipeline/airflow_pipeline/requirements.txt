@@ -21,3 +21,7 @@ requests==2.31.0
 # ==== Config / Utils ====
 python-dotenv==1.0.1
 PyYAML==6.0.1
+
+# ==== AWS SDK / S3 Ingestion ====
+boto3==1.43.113
+botocore[crt]==1.43.113
