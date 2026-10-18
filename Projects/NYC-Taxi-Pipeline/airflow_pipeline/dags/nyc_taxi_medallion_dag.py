@@ -27,6 +27,7 @@ from scripts.execution_contract import (
     build_current_execution_contract,
 )
 from scripts.pipeline_runner import submit_stage
+from scripts.airflow_raw_ingestion import run_raw_ingestion
 from scripts.run_lifecycle import (
     start_pipeline_run,
     mark_pipeline_success,
@@ -34,6 +35,7 @@ from scripts.run_lifecycle import (
 )
 
 from scripts import get_logger  # or scripts.logger, both ok
+
 logger = get_logger("nyc_taxi_medallion_dag")
 
 default_args = {
@@ -49,30 +51,18 @@ default_args = {
 def validate_execution_contract(**context):
     dag_run = context.get("dag_run")
 
-    dag_run_conf = (
-        dict(dag_run.conf or {})
-        if dag_run is not None
-        else {}
-    )
+    dag_run_conf = dict(dag_run.conf or {}) if dag_run is not None else {}
 
     contract = build_current_execution_contract(
         settings=project_config.SETTINGS,
         dag_run_conf=dag_run_conf,
     )
 
-    airflow_run_id = (
-        dag_run.run_id
-        if dag_run is not None
-        else "<no-dag-run>"
-    )
+    airflow_run_id = dag_run.run_id if dag_run is not None else "<no-dag-run>"
 
-    logger.info(
-        f"[CONTROL] airflow_run_id={airflow_run_id}"
-    )
+    logger.info(f"[CONTROL] airflow_run_id={airflow_run_id}")
 
-    logger.info(
-        f"[CONTROL] execution_contract={contract}"
-    )
+    logger.info(f"[CONTROL] execution_contract={contract}")
 
     start_pipeline_run(
         context,
@@ -87,41 +77,32 @@ def route_execution(
     **_,
 ):
     mode = execution_contract.get("mode")
-    write_scope = execution_contract.get(
-        "write_scope"
-    )
+    write_scope = execution_contract.get("write_scope")
 
     if mode == "CONFIGURED_FULL_REFRESH":
         if write_scope != "FULL_TABLE_OVERWRITE":
             raise ValueError(
-                "CONFIGURED_FULL_REFRESH requires "
-                "write_scope='FULL_TABLE_OVERWRITE'"
+                "CONFIGURED_FULL_REFRESH requires " "write_scope='FULL_TABLE_OVERWRITE'"
             )
 
-        return "bronze_ingest_delta"
+        return "ingest_raw_to_s3"
 
     if mode == "BACKFILL":
-        execution_scope = execution_contract.get(
-            "execution_scope"
-        )
+        execution_scope = execution_contract.get("execution_scope")
 
         if execution_scope != "GOLD_ONLY":
             raise ValueError(
-                "BACKFILL currently supports only "
-                "execution_scope='GOLD_ONLY'"
+                "BACKFILL currently supports only " "execution_scope='GOLD_ONLY'"
             )
 
         if write_scope != "WINDOW_REPLACE":
             raise ValueError(
-                "GOLD_ONLY backfill requires "
-                "write_scope='WINDOW_REPLACE'"
+                "GOLD_ONLY backfill requires " "write_scope='WINDOW_REPLACE'"
             )
 
         return "gold_backfill_delta"
 
-    raise ValueError(
-        f"Unsupported execution mode: {mode!r}"
-    )
+    raise ValueError(f"Unsupported execution mode: {mode!r}")
 
 
 def on_pipeline_success(context):
@@ -147,7 +128,7 @@ with DAG(
     on_failure_callback=on_pipeline_failure,
     default_args=default_args,
     description="NYC Yellow Taxi Medallion Pipeline with Delta Lake",
-    schedule_interval=None,   # manual trigger for now
+    schedule_interval=None,  # manual trigger for now
     catchup=False,
     max_active_runs=1,
     tags=["nyc_taxi", "delta", "medallion"],
@@ -162,10 +143,17 @@ with DAG(
         task_id="route_execution",
         python_callable=route_execution,
         op_kwargs={
-            "execution_contract":
-                execution_contract.output,
+            "execution_contract": execution_contract.output,
         },
         retries=0,
+    )
+
+    raw_ingestion = PythonOperator(
+        task_id="ingest_raw_to_s3",
+        python_callable=run_raw_ingestion,
+        op_kwargs={
+            "execution_contract": execution_contract.output,
+        },
     )
 
     gold_backfill = PythonOperator(
@@ -173,8 +161,7 @@ with DAG(
         python_callable=submit_stage,
         op_kwargs={
             "stage": "gold",
-            "execution_contract":
-                execution_contract.output,
+            "execution_contract": execution_contract.output,
         },
     )
 
@@ -184,6 +171,7 @@ with DAG(
         op_kwargs={
             "stage": "bronze",
             "execution_contract": execution_contract.output,
+            "raw_references": raw_ingestion.output,
         },
     )
 
@@ -204,7 +192,6 @@ with DAG(
             "execution_contract": execution_contract.output,
         },
     )
-
 
     quality_full_refresh = PythonOperator(
         task_id="quality_full_refresh",
@@ -236,7 +223,7 @@ with DAG(
     execution_contract >> route
 
     # Full Refresh
-    route >> bronze
+    route >> raw_ingestion >> bronze
     bronze >> silver >> gold
     gold >> quality_full_refresh >> export_bq
 

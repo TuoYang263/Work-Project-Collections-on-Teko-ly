@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import argparse
@@ -10,7 +9,6 @@ import sys
 
 from pathlib import Path
 from typing import Any, Mapping
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,6 +31,7 @@ def validate_stage(stage: str) -> None:
 def submit_stage(
     stage: str,
     execution_contract: Mapping[str, Any],
+    raw_references: list[dict] | None = None,
 ) -> None:
     """Airflow-facing entry point. No Spark imports here."""
     validate_stage(stage)
@@ -52,6 +51,21 @@ def submit_stage(
         contract_json,
     ]
 
+    if raw_references is not None:
+        if stage != "bronze":
+            raise ValueError("Raw references are supported only for Bronze")
+
+        command.extend(
+            [
+                "--raw-references-json",
+                json.dumps(
+                    raw_references,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            ]
+        )
+
     LOGGER.info(
         "Submitting pipeline stage=%s",
         stage,
@@ -67,28 +81,33 @@ def submit_stage(
 def execute_stage(
     stage: str,
     execution_contract: Mapping[str, Any],
+    raw_references: list[dict] | None = None,
 ) -> None:
     """Child-process entry point. Import compute code only here."""
     validate_stage(stage)
 
-    pipeline = importlib.import_module(
-        "scripts.delta_medallion_pipeline"
-    )
+    pipeline = importlib.import_module("scripts.delta_medallion_pipeline")
 
     task = getattr(
         pipeline,
         STAGE_FUNCTIONS[stage],
     )
 
-    task(
-        execution_contract=dict(execution_contract),
-    )
+    task_kwargs = {
+        "execution_contract": dict(execution_contract),
+    }
+
+    if raw_references is not None:
+        if stage != "bronze":
+            raise ValueError("Raw references are supported only for Bronze")
+
+        task_kwargs["raw_references"] = raw_references
+
+    task(**task_kwargs)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="NYC Taxi pipeline stage runner"
-    )
+    parser = argparse.ArgumentParser(description="NYC Taxi pipeline stage runner")
 
     parser.add_argument(
         "stage",
@@ -100,20 +119,37 @@ def main() -> None:
         required=True,
     )
 
-    args = parser.parse_args()
-
-    execution_contract = json.loads(
-        args.execution_contract_json
+    parser.add_argument(
+        "--raw-references-json",
+        default=None,
     )
 
+    args = parser.parse_args()
+
+    execution_contract = json.loads(args.execution_contract_json)
+
     if not isinstance(execution_contract, dict):
-        raise ValueError(
-            "Execution contract must be a JSON object"
-        )
+        raise ValueError("Execution contract must be a JSON object")
+
+    raw_references = None
+
+    if args.raw_references_json is not None:
+        raw_references = json.loads(args.raw_references_json)
+
+        if (
+            not isinstance(raw_references, list)
+            or not raw_references
+            or any(not isinstance(ref, dict) for ref in raw_references)
+        ):
+            raise ValueError("Raw references must be a non-empty list of objects")
+
+        if args.stage != "bronze":
+            raise ValueError("Raw references are supported only for Bronze")
 
     execute_stage(
         args.stage,
         execution_contract,
+        raw_references=raw_references,
     )
 
 

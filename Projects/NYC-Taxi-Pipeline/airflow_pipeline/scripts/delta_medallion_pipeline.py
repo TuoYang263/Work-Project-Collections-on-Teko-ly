@@ -74,8 +74,8 @@ TAXI_ZONE_LOOKUP = os.path.join(
     "taxi_zone_lookup.csv",
 )
 
-BRONZE_TRIPS = os.path.join(DELTA_BASE, "bronze", "trips")          # raw delta
-SILVER_TRIPS = os.path.join(DELTA_BASE, "silver", "trips_clean")    # cleaned
+BRONZE_TRIPS = os.path.join(DELTA_BASE, "bronze", "trips")  # raw delta
+SILVER_TRIPS = os.path.join(DELTA_BASE, "silver", "trips_clean")  # cleaned
 GOLD_SUMMARY_HOURLY = os.path.join(DELTA_BASE, "gold", "trip_summary_hourly")
 GOLD_ZONE_PICKUP_DAILY = os.path.join(DELTA_BASE, "gold", "zone_summary_pickup_daily")
 GOLD_ZONE_DROPOFF_DAILY = os.path.join(DELTA_BASE, "gold", "zone_summary_dropoff_daily")
@@ -124,6 +124,7 @@ for p in [
 # ---------- Spark ----------
 from pyspark.sql import SparkSession
 
+
 def get_spark(app_name: str = "NYC Medallion (Delta)") -> SparkSession:
     """
     Create or get a SparkSession with Delta Lake support enabled.
@@ -151,10 +152,12 @@ def get_spark(app_name: str = "NYC Medallion (Delta)") -> SparkSession:
 
     # 3) Build SparkSession with Delta configurations.
     builder = (
-        SparkSession.builder
-        .appName(app_name)
+        SparkSession.builder.appName(app_name)
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+        .config(
+            "spark.sql.catalog.spark_catalog",
+            "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+        )
         .config("spark.databricks.delta.schema.autoMerge.enabled", "true")
         .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.2.0")
     )
@@ -172,6 +175,7 @@ def get_spark(app_name: str = "NYC Medallion (Delta)") -> SparkSession:
         raise RuntimeError(f"Delta not enabled. current spark.sql.extensions={exts}")
 
     return spark
+
 
 # ---------- Spark baseline instrumentation ----------
 
@@ -214,15 +218,11 @@ def log_physical_plan(
     Print the formatted Spark physical plan without triggering
     an explicit DataFrame action.
     """
-    logger.info(
-        f"[BASELINE][{label}] formatted_physical_plan_start"
-    )
+    logger.info(f"[BASELINE][{label}] formatted_physical_plan_start")
 
     df.explain(mode="formatted")
 
-    logger.info(
-        f"[BASELINE][{label}] formatted_physical_plan_end"
-    )
+    logger.info(f"[BASELINE][{label}] formatted_physical_plan_end")
 
 
 def parse_raw_file_month(
@@ -234,20 +234,16 @@ def parse_raw_file_month(
         month = int(month_text)
     except (ValueError, AttributeError) as exc:
         raise ValueError(
-            f"Invalid raw file month: {raw_file_month!r}. "
-            "Expected YYYY-MM."
+            f"Invalid raw file month: {raw_file_month!r}. " "Expected YYYY-MM."
         ) from exc
 
     if raw_file_month != f"{year:04d}-{month:02d}":
         raise ValueError(
-            f"Invalid raw file month: {raw_file_month!r}. "
-            "Expected YYYY-MM."
+            f"Invalid raw file month: {raw_file_month!r}. " "Expected YYYY-MM."
         )
 
     if month < 1 or month > 12:
-        raise ValueError(
-            f"Invalid raw file month: {raw_file_month!r}"
-        )
+        raise ValueError(f"Invalid raw file month: {raw_file_month!r}")
 
     return year, month
 
@@ -256,16 +252,12 @@ def resolve_raw_file_paths(
     raw_file_months: List[str],
 ) -> List[str]:
     if not raw_file_months:
-        raise ValueError(
-            "read_scope.raw_file_months must not be empty"
-        )
+        raise ValueError("read_scope.raw_file_months must not be empty")
 
     local_paths = []
 
     for raw_file_month in raw_file_months:
-        year, month = parse_raw_file_month(
-            raw_file_month
-        )
+        year, month = parse_raw_file_month(raw_file_month)
 
         downloaded_paths = download_to_local(
             year,
@@ -274,38 +266,69 @@ def resolve_raw_file_paths(
 
         if len(downloaded_paths) != 1:
             raise RuntimeError(
-                "Required raw file month unavailable: "
-                f"{raw_file_month}"
+                "Required raw file month unavailable: " f"{raw_file_month}"
             )
 
-        local_paths.extend(
-            downloaded_paths
-        )
+        local_paths.extend(downloaded_paths)
 
     return local_paths
+
+
+def resolve_bronze_s3_paths(
+    raw_file_months: List[str],
+    raw_references: list[dict],
+) -> List[str]:
+    """Resolve validated S3 raw versions to local Bronze inputs."""
+
+    from scripts.s3_raw_ingestion import create_s3_client
+    from scripts.s3_raw_reader import resolve_versioned_raw_paths
+
+    if not raw_references:
+        raise ValueError("Bronze requires versioned S3 raw references")
+
+    s3_client = create_s3_client(
+        region=os.getenv("AWS_REGION", "eu-central-1"),
+        profile=os.getenv("AWS_PROFILE") or None,
+    )
+
+    output_dir = os.path.join(
+        config.TMP_PARQUET_PATH,
+        "bronze_versioned_raw",
+    )
+
+    return resolve_versioned_raw_paths(
+        s3_client=s3_client,
+        raw_file_months=raw_file_months,
+        raw_references=raw_references,
+        output_dir=output_dir,
+    )
 
 
 # ---------- Bronze ----------
 def write_bronze(
     raw_file_months: List[str],
+    raw_references: list[dict] | None = None,
 ) -> str:
     """
     Ingest raw monthly parquet files and persist as a single Delta table (Bronze).
     Adds _ingest_time and partitions by pickup_day (if pickup timestsamp exists).
     """
-    spark = get_spark("Bronze Ingest (Delta)")
-    logger.info(f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}")
-    logger.info(
-        "[Bronze] read_scope "
-        f"raw_file_months={raw_file_months}"
-    )
+    if not raw_references:
+        raise ValueError("Bronze requires versioned S3 raw references")
 
-    local_paths = resolve_raw_file_paths(
-        raw_file_months
+    spark = get_spark("Bronze Ingest (Delta)")
+    logger.info(
+        f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}"
+    )
+    logger.info("[Bronze] read_scope " f"raw_file_months={raw_file_months}")
+
+    local_paths = resolve_bronze_s3_paths(
+        raw_file_months=raw_file_months,
+        raw_references=raw_references,
     )
     if not local_paths:
         raise RuntimeError("No input files found for Bronze ingest.")
-    
+
     dfs = []
     for p in local_paths:
         uri = f"file:///{p.replace(os.sep, '/')}"
@@ -329,10 +352,11 @@ def write_bronze(
 
     if has_pickup and "tpep_pickup_datetime" in bronze_df.columns:
         bronze_df = bronze_df.withColumn(
-            "tpep_pickup_datetime",
-            F.col("tpep_pickup_datetime").cast(TimestampType())
+            "tpep_pickup_datetime", F.col("tpep_pickup_datetime").cast(TimestampType())
         )
-        bronze_df = bronze_df.withColumn("pickup_day", F.to_date(F.col("tpep_pickup_datetime")))
+        bronze_df = bronze_df.withColumn(
+            "pickup_day", F.to_date(F.col("tpep_pickup_datetime"))
+        )
         writer = (
             bronze_df.write.mode("overwrite")
             .format("delta")
@@ -345,6 +369,7 @@ def write_bronze(
     writer.save(BRONZE_TRIPS)
     return BRONZE_TRIPS
 
+
 # ---------- Silver ----------
 def write_silver() -> str:
     """
@@ -352,7 +377,9 @@ def write_silver() -> str:
     and persist Silver Delta.
     """
     spark = get_spark("Silver Clean (Delta)")
-    logger.info(f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}")
+    logger.info(
+        f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}"
+    )
 
     logger.info(f"[Silver] Loading Bronze from: {BRONZE_TRIPS}")
     bronze = spark.read.format("delta").load(BRONZE_TRIPS)
@@ -411,15 +438,8 @@ def filter_timestamp_window(
         window_start <= timestamp < window_end_exclusive
     """
     return df.filter(
-        (
-            F.col(timestamp_column)
-            >= F.lit(window_start).cast("timestamp")
-        )
-        &
-        (
-            F.col(timestamp_column)
-            < F.lit(window_end_exclusive).cast("timestamp")
-        )
+        (F.col(timestamp_column) >= F.lit(window_start).cast("timestamp"))
+        & (F.col(timestamp_column) < F.lit(window_end_exclusive).cast("timestamp"))
     )
 
 
@@ -437,50 +457,32 @@ def write_delta_table(
         FULL_TABLE_OVERWRITE
         WINDOW_REPLACE
     """
-    write_scope = execution_contract.get(
-        "write_scope"
-    )
+    write_scope = execution_contract.get("write_scope")
 
     if write_scope == "FULL_TABLE_OVERWRITE":
         logger.info(
-            f"[DeltaWrite][{label}] "
-            f"scope={write_scope}, "
-            f"target={target_path}"
+            f"[DeltaWrite][{label}] " f"scope={write_scope}, " f"target={target_path}"
         )
 
-        (
-            df.write
-            .mode("overwrite")
-            .format("delta")
-            .save(target_path)
-        )
+        (df.write.mode("overwrite").format("delta").save(target_path))
 
         return target_path
 
     if write_scope == "WINDOW_REPLACE":
         if not window_column:
-            raise ValueError(
-                "WINDOW_REPLACE requires window_column"
-            )
+            raise ValueError("WINDOW_REPLACE requires window_column")
 
-        logical_window = execution_contract.get(
-            "logical_window"
-        )
+        logical_window = execution_contract.get("logical_window")
 
         if not logical_window:
-            raise ValueError(
-                "WINDOW_REPLACE requires logical_window"
-            )
+            raise ValueError("WINDOW_REPLACE requires logical_window")
 
         window_start = logical_window.get("start")
-        window_end_exclusive = logical_window.get(
-            "end_exclusive"
-        )
+        window_end_exclusive = logical_window.get("end_exclusive")
 
         if not window_start or not window_end_exclusive:
             raise ValueError(
-                "WINDOW_REPLACE requires logical_window "
-                "start and end_exclusive"
+                "WINDOW_REPLACE requires logical_window " "start and end_exclusive"
             )
 
         predicate = (
@@ -498,8 +500,7 @@ def write_delta_table(
         )
 
         (
-            df.write
-            .mode("overwrite")
+            df.write.mode("overwrite")
             .format("delta")
             .option(
                 "replaceWhere",
@@ -510,10 +511,7 @@ def write_delta_table(
 
         return target_path
 
-    raise ValueError(
-        "Unsupported write_scope for Delta writer: "
-        f"{write_scope!r}"
-    )
+    raise ValueError("Unsupported write_scope for Delta writer: " f"{write_scope!r}")
 
 
 def write_gold(
@@ -531,7 +529,9 @@ def write_gold(
     - od_corridor_daily
     """
     spark = get_spark("Gold Aggregate (Delta)")
-    logger.info(f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}")
+    logger.info(
+        f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}"
+    )
 
     aqe_override = os.getenv("NYC_SPARK_AQE")
 
@@ -547,15 +547,13 @@ def write_gold(
         shuffle_partitions = int(shuffle_override)
 
         if shuffle_partitions <= 0:
-            raise ValueError(
-                "NYC_SPARK_SHUFFLE_PARTITIONS must be greater than 0"
-            )
+            raise ValueError("NYC_SPARK_SHUFFLE_PARTITIONS must be greater than 0")
 
         spark.conf.set(
             "spark.sql.shuffle.partitions",
             str(shuffle_partitions),
         )
-    
+
     df = spark.read.format("delta").load(SILVER_TRIPS)
 
     # Minimal additional DQ filters (already mostly done in transform)
@@ -569,10 +567,7 @@ def write_gold(
     # Time Range Filtering
     year = int(execution_contract["year"])
 
-    months = [
-        int(month)
-        for month in execution_contract["months"]
-    ]
+    months = [int(month) for month in execution_contract["months"]]
 
     logical_window = execution_contract["logical_window"]
 
@@ -610,9 +605,7 @@ def write_gold(
     )
 
     # Hourly summary
-    summary_hourly = build_hourly_summary(
-        pickup_window_df
-    )
+    summary_hourly = build_hourly_summary(pickup_window_df)
 
     log_spark_baseline(
         spark=spark,
@@ -635,16 +628,13 @@ def write_gold(
         target_path=hourly_target,
         execution_contract=execution_contract,
         label="trip_summary_hourly",
-        window_column=GOLD_WINDOW_COLUMNS[
-            "trip_summary_hourly"
-        ],
+        window_column=GOLD_WINDOW_COLUMNS["trip_summary_hourly"],
     )
 
     elapsed_seconds = time.perf_counter() - started_at
 
     logger.info(
-        f"[BASELINE][gold_hourly_summary] "
-        f"write_wall_seconds={elapsed_seconds:.3f}"
+        f"[BASELINE][gold_hourly_summary] " f"write_wall_seconds={elapsed_seconds:.3f}"
     )
 
     if hourly_only:
@@ -664,8 +654,7 @@ def write_gold(
     )
 
     logger.info(
-        f"[Gold] Writing flow imbalance daily to: "
-        f"{GOLD_FLOW_IMBALANCE_DAILY}"
+        f"[Gold] Writing flow imbalance daily to: " f"{GOLD_FLOW_IMBALANCE_DAILY}"
     )
 
     write_delta_table(
@@ -673,9 +662,7 @@ def write_gold(
         target_path=GOLD_FLOW_IMBALANCE_DAILY,
         execution_contract=execution_contract,
         label="flow_imbalance_daily",
-        window_column=GOLD_WINDOW_COLUMNS[
-            "flow_imbalance_daily"
-        ],
+        window_column=GOLD_WINDOW_COLUMNS["flow_imbalance_daily"],
     )
 
     # Airport economics
@@ -686,8 +673,7 @@ def write_gold(
     )
 
     logger.info(
-        f"[Gold] Writing airport economics daily to: "
-        f"{GOLD_AIRPORT_ECONOMICS_DAILY}"
+        f"[Gold] Writing airport economics daily to: " f"{GOLD_AIRPORT_ECONOMICS_DAILY}"
     )
 
     write_delta_table(
@@ -695,9 +681,7 @@ def write_gold(
         target_path=GOLD_AIRPORT_ECONOMICS_DAILY,
         execution_contract=execution_contract,
         label="airport_economics_daily",
-        window_column=GOLD_WINDOW_COLUMNS[
-            "airport_economics_daily"
-        ],
+        window_column=GOLD_WINDOW_COLUMNS["airport_economics_daily"],
     )
 
     # OD corridor intelligence
@@ -706,19 +690,14 @@ def write_gold(
         spark,
     )
 
-    logger.info(
-        f"[Gold] Writing OD corridor daily to: "
-        f"{GOLD_OD_CORRIDOR_DAILY}"
-    )
+    logger.info(f"[Gold] Writing OD corridor daily to: " f"{GOLD_OD_CORRIDOR_DAILY}")
 
     write_delta_table(
         od_corridor,
         target_path=GOLD_OD_CORRIDOR_DAILY,
         execution_contract=execution_contract,
         label="od_corridor_daily",
-        window_column=GOLD_WINDOW_COLUMNS[
-            "od_corridor_daily"
-        ],
+        window_column=GOLD_WINDOW_COLUMNS["od_corridor_daily"],
     )
 
     # Zone summaries (daily) for pickup & dropoff
@@ -729,20 +708,22 @@ def write_gold(
     ):
         # loc = 'pickup' | 'dropoff'
         time_col = F.to_date(F.col(f"tpep_{loc}_datetime")).alias(f"{loc}_day")
-        zone_col = F.col("pulocationid" if loc == "pickup" else "dolocationid").alias("zone_id")
+        zone_col = F.col("pulocationid" if loc == "pickup" else "dolocationid").alias(
+            "zone_id"
+        )
 
         zdf = (
             source_df.withColumn(f"{loc}_day", time_col)
-              .withColumn("zone_id", zone_col)
-              .groupBy(f"{loc}_day", "zone_id")
-              .agg(
-                  F.count("*").alias("trip_count"),
-                  F.round(F.avg("fare_amount"), 2).alias("avg_fare"),
-                  F.round(F.avg("tip_amount"), 2).alias("avg_tip"),
-                  F.sum("passenger_count").alias("total_passengers"),
-                  F.round(F.avg("trip_distance"), 2).alias("avg_distance"),
-              )
-              .orderBy(f"{loc}_day", "zone_id")
+            .withColumn("zone_id", zone_col)
+            .groupBy(f"{loc}_day", "zone_id")
+            .agg(
+                F.count("*").alias("trip_count"),
+                F.round(F.avg("fare_amount"), 2).alias("avg_fare"),
+                F.round(F.avg("tip_amount"), 2).alias("avg_tip"),
+                F.sum("passenger_count").alias("total_passengers"),
+                F.round(F.avg("trip_distance"), 2).alias("avg_distance"),
+            )
+            .orderBy(f"{loc}_day", "zone_id")
         )
         logger.info(f"[Gold] Writing zone summary ({loc}) to: {out_path}")
 
@@ -810,8 +791,7 @@ def build_zone_flow_imbalance(
     )
 
     return (
-        pickups
-        .join(
+        pickups.join(
             dropoffs,
             on=["service_day", "zone_id"],
             how="full",
@@ -827,12 +807,7 @@ def build_zone_flow_imbalance(
         .withColumn(
             "flow_imbalance",
             F.round(
-                (
-                    F.col("pickup_count") -
-                    F.col("dropoff_count")
-                )
-                /
-                F.col("total_flow"),
+                (F.col("pickup_count") - F.col("dropoff_count")) / F.col("total_flow"),
                 4,
             ),
         )
@@ -858,8 +833,7 @@ def build_airport_flow_daily(
     )
 
     return (
-        zone_flow_df
-        .filter(F.col("zone").isin(list(AIRPORT_ZONE_CODES.keys())))
+        zone_flow_df.filter(F.col("zone").isin(list(AIRPORT_ZONE_CODES.keys())))
         .withColumn("airport_code", airport_code)
         .withColumnRenamed("zone", "airport_name")
         .select(
@@ -889,15 +863,10 @@ def build_airport_economics_daily(
     """
 
     airport_lookup = (
-        spark.read
-        .option("header", True)
+        spark.read.option("header", True)
         .option("inferSchema", True)
         .csv(TAXI_ZONE_LOOKUP)
-        .filter(
-            F.col("Zone").isin(
-                list(AIRPORT_ZONE_CODES.keys())
-            )
-        )
+        .filter(F.col("Zone").isin(list(AIRPORT_ZONE_CODES.keys())))
         .select(
             F.col("LocationID").cast("long").alias("zone_id"),
             F.col("Zone").alias("airport_name"),
@@ -915,34 +884,25 @@ def build_airport_economics_daily(
             .when(
                 F.col("airport_name") == "Newark Airport",
                 F.lit("EWR"),
-            )
+            ),
         )
     )
 
     def add_trip_duration(
         source_df: DataFrame,
     ) -> DataFrame:
-        return (
-            source_df
-            .withColumn(
-                "trip_duration_minutes",
-                (
-                    F.col("tpep_dropoff_datetime").cast("long")
-                    - F.col("tpep_pickup_datetime").cast("long")
-                ) / 60.0,
+        return source_df.withColumn(
+            "trip_duration_minutes",
+            (
+                F.col("tpep_dropoff_datetime").cast("long")
+                - F.col("tpep_pickup_datetime").cast("long")
             )
-            .filter(
-                F.col("trip_duration_minutes") > 0
-            )
-        )
+            / 60.0,
+        ).filter(F.col("trip_duration_minutes") > 0)
 
-    departure_base = add_trip_duration(
-        pickup_df
-    )
+    departure_base = add_trip_duration(pickup_df)
 
-    arrival_base = add_trip_duration(
-        dropoff_df
-    )
+    arrival_base = add_trip_duration(dropoff_df)
 
     departures = (
         departure_base.join(
@@ -992,15 +952,11 @@ def build_airport_economics_daily(
     # at Newark Airport, and observed pickup records contain
     # substantial anomalous / non-representative trip patterns.
     airport_trips = airport_trips.filter(
-        ~(
-            (F.col("airport_code") == "EWR")
-            & (F.col("direction") == "DEPARTURE")
-        )
+        ~((F.col("airport_code") == "EWR") & (F.col("direction") == "DEPARTURE"))
     )
 
     return (
-        airport_trips
-        .groupBy(
+        airport_trips.groupBy(
             "service_day",
             "airport_code",
             "airport_name",
@@ -1017,9 +973,7 @@ def build_airport_economics_daily(
                 2,
             ).alias("avg_duration_minutes"),
             F.round(
-                F.sum("total_amount")
-                /
-                (F.sum("trip_duration_minutes") / 60.0),
+                F.sum("total_amount") / (F.sum("trip_duration_minutes") / 60.0),
                 2,
             ).alias("gross_amount_per_occupied_hour"),
         )
@@ -1049,8 +1003,7 @@ def build_od_corridor_daily(
     """
 
     base = (
-        df
-        .withColumn(
+        df.withColumn(
             "service_day",
             F.to_date("tpep_pickup_datetime"),
         )
@@ -1059,155 +1012,105 @@ def build_od_corridor_daily(
             (
                 F.col("tpep_dropoff_datetime").cast("long")
                 - F.col("tpep_pickup_datetime").cast("long")
-            ) / 60.0,
+            )
+            / 60.0,
         )
-        .filter(
-            (F.col("trip_duration_minutes") > 0)
-            & (F.col("trip_distance") > 0)
-        )
+        .filter((F.col("trip_duration_minutes") > 0) & (F.col("trip_distance") > 0))
         .withColumn(
             "trip_duration_per_mile",
-            F.col("trip_duration_minutes")
-            / F.col("trip_distance"),
+            F.col("trip_duration_minutes") / F.col("trip_distance"),
         )
     )
 
-    corridor = (
-        base
-        .groupBy(
-            "service_day",
-            F.col("pulocationid").alias("pickup_zone_id"),
-            F.col("dolocationid").alias("dropoff_zone_id"),
-        )
-        .agg(
-            F.count("*").alias("trip_count"),
-
-            F.round(
-                F.sum("total_amount"),
-                2,
-            ).alias("gross_amount"),
-
-            F.round(
-                F.avg("total_amount"),
-                2,
-            ).alias("avg_total_amount"),
-
-            F.round(
-                F.avg("fare_amount"),
-                2,
-            ).alias("avg_fare_amount"),
-
-            F.round(
-                F.avg("trip_distance"),
-                2,
-            ).alias("avg_trip_distance"),
-
-            F.round(
-                F.avg("trip_duration_minutes"),
-                2,
-            ).alias("avg_duration_minutes"),
-
-            F.round(
-                F.percentile_approx(
-                    "trip_duration_minutes",
-                    0.5,
-                    10000,
-                ),
-                2,
-            ).alias("median_duration_minutes"),
-
-            F.round(
-                F.percentile_approx(
-                    "trip_duration_minutes",
-                    0.9,
-                    10000,
-                ),
-                2,
-            ).alias("p90_duration_minutes"),
-
-            F.round(
-                F.sum("total_amount")
-                /
-                (
-                    F.sum("trip_duration_minutes")
-                    / 60.0
-                ),
-                2,
-            ).alias(
-                "gross_amount_per_occupied_hour"
+    corridor = base.groupBy(
+        "service_day",
+        F.col("pulocationid").alias("pickup_zone_id"),
+        F.col("dolocationid").alias("dropoff_zone_id"),
+    ).agg(
+        F.count("*").alias("trip_count"),
+        F.round(
+            F.sum("total_amount"),
+            2,
+        ).alias("gross_amount"),
+        F.round(
+            F.avg("total_amount"),
+            2,
+        ).alias("avg_total_amount"),
+        F.round(
+            F.avg("fare_amount"),
+            2,
+        ).alias("avg_fare_amount"),
+        F.round(
+            F.avg("trip_distance"),
+            2,
+        ).alias("avg_trip_distance"),
+        F.round(
+            F.avg("trip_duration_minutes"),
+            2,
+        ).alias("avg_duration_minutes"),
+        F.round(
+            F.percentile_approx(
+                "trip_duration_minutes",
+                0.5,
+                10000,
             ),
-
-            F.round(
-                F.percentile_approx(
-                    "trip_duration_per_mile",
-                    0.5,
-                    10000,
-                ),
-                2,
-            ).alias("median_duration_per_mile"),
-
-            F.round(
-                F.percentile_approx(
-                    "trip_duration_per_mile",
-                    0.9,
-                    10000,
-                ),
-                2,
-            ).alias("p90_duration_per_mile"),
-        )
+            2,
+        ).alias("median_duration_minutes"),
+        F.round(
+            F.percentile_approx(
+                "trip_duration_minutes",
+                0.9,
+                10000,
+            ),
+            2,
+        ).alias("p90_duration_minutes"),
+        F.round(
+            F.sum("total_amount") / (F.sum("trip_duration_minutes") / 60.0),
+            2,
+        ).alias("gross_amount_per_occupied_hour"),
+        F.round(
+            F.percentile_approx(
+                "trip_duration_per_mile",
+                0.5,
+                10000,
+            ),
+            2,
+        ).alias("median_duration_per_mile"),
+        F.round(
+            F.percentile_approx(
+                "trip_duration_per_mile",
+                0.9,
+                10000,
+            ),
+            2,
+        ).alias("p90_duration_per_mile"),
     )
 
     zone_lookup = (
-        spark.read
-        .option("header", True)
+        spark.read.option("header", True)
         .option("inferSchema", True)
         .csv(TAXI_ZONE_LOOKUP)
         .select(
-            F.col("LocationID")
-            .cast("long")
-            .alias("zone_id"),
-
-            F.col("Borough")
-            .alias("borough"),
-
-            F.col("Zone")
-            .alias("zone"),
+            F.col("LocationID").cast("long").alias("zone_id"),
+            F.col("Borough").alias("borough"),
+            F.col("Zone").alias("zone"),
         )
     )
 
-    pickup_lookup = (
-        zone_lookup
-        .select(
-            F.col("zone_id").alias(
-                "pickup_zone_id"
-            ),
-            F.col("borough").alias(
-                "pickup_borough"
-            ),
-            F.col("zone").alias(
-                "pickup_zone"
-            ),
-        )
+    pickup_lookup = zone_lookup.select(
+        F.col("zone_id").alias("pickup_zone_id"),
+        F.col("borough").alias("pickup_borough"),
+        F.col("zone").alias("pickup_zone"),
     )
 
-    dropoff_lookup = (
-        zone_lookup
-        .select(
-            F.col("zone_id").alias(
-                "dropoff_zone_id"
-            ),
-            F.col("borough").alias(
-                "dropoff_borough"
-            ),
-            F.col("zone").alias(
-                "dropoff_zone"
-            ),
-        )
+    dropoff_lookup = zone_lookup.select(
+        F.col("zone_id").alias("dropoff_zone_id"),
+        F.col("borough").alias("dropoff_borough"),
+        F.col("zone").alias("dropoff_zone"),
     )
 
     return (
-        corridor
-        .join(
+        corridor.join(
             F.broadcast(pickup_lookup),
             on="pickup_zone_id",
             how="left",
@@ -1258,8 +1161,7 @@ def enrich_with_taxi_zone(
     """
 
     zone_lookup = (
-        spark.read
-        .option("header", True)
+        spark.read.option("header", True)
         .option("inferSchema", True)
         .csv(TAXI_ZONE_LOOKUP)
         .select(
@@ -1290,12 +1192,15 @@ def enrich_with_taxi_zone(
         .orderBy("service_day", "zone_id")
     )
 
+
 # ---------- Export Gold → BigQuery (3 tables) ----------
 def _bq_table_ref(project_id: str, dataset_id: str, table_name: str) -> str:
     return f"{project_id}.{dataset_id}.{table_name}"
 
+
 def _export_delta_to_bq(delta_path: str, table_ref: str):
     from google.cloud import bigquery
+
     spark = get_spark("Export Delta -> BigQuery")
     df = spark.read.format("delta").load(delta_path)
     pdf = df.toPandas()
@@ -1310,6 +1215,7 @@ def _export_delta_to_bq(delta_path: str, table_ref: str):
     job.result()
     logger.info(f"[Export] Upload complete: {table_ref}")
 
+
 def export_gold_to_bigquery():
     """
     Backward-compatible: export ONLY hourly summary to BigQuery.
@@ -1320,11 +1226,14 @@ def export_gold_to_bigquery():
     table_name = getattr(config, "SUMMARY_TABLE_NAME", None)  # legacy key
 
     if not (project_id and dataset_id and table_name):
-        raise RuntimeError("PROJECT_ID/DATASET_ID/SUMMARY_TABLE_NAME must be set in config.py")
+        raise RuntimeError(
+            "PROJECT_ID/DATASET_ID/SUMMARY_TABLE_NAME must be set in config.py"
+        )
 
     table_ref = _bq_table_ref(project_id, dataset_id, table_name)
     _export_delta_to_bq(GOLD_SUMMARY_HOURLY, table_ref)
     return table_ref
+
 
 def export_all_gold_to_bigquery():
     """
@@ -1340,53 +1249,57 @@ def export_all_gold_to_bigquery():
         raise RuntimeError("PROJECT_ID and DATASET_ID must be set in config.py")
 
     # Get the table name (use names from config if it does have, otherwise by default)
-    hourly_tbl   = getattr(config, "SUMMARY_TABLE_NAME", "trip_summary_hourly")
-    pickup_tbl   = getattr(config, "ZONE_PICKUP_SUMMARY_TABLE_NAME", "zone_summary_pickup_daily")
-    dropoff_tbl  = getattr(config, "ZONE_DROPOFF_SUMMARY_TABLE_NAME", "zone_summary_dropoff_daily")
+    hourly_tbl = getattr(config, "SUMMARY_TABLE_NAME", "trip_summary_hourly")
+    pickup_tbl = getattr(
+        config, "ZONE_PICKUP_SUMMARY_TABLE_NAME", "zone_summary_pickup_daily"
+    )
+    dropoff_tbl = getattr(
+        config, "ZONE_DROPOFF_SUMMARY_TABLE_NAME", "zone_summary_dropoff_daily"
+    )
 
     # Delta → BQ
-    _export_delta_to_bq(GOLD_SUMMARY_HOURLY,      _bq_table_ref(project_id, dataset_id, hourly_tbl))
-    _export_delta_to_bq(GOLD_ZONE_PICKUP_DAILY,   _bq_table_ref(project_id, dataset_id, pickup_tbl))
-    _export_delta_to_bq(GOLD_ZONE_DROPOFF_DAILY,  _bq_table_ref(project_id, dataset_id, dropoff_tbl))
+    _export_delta_to_bq(
+        GOLD_SUMMARY_HOURLY, _bq_table_ref(project_id, dataset_id, hourly_tbl)
+    )
+    _export_delta_to_bq(
+        GOLD_ZONE_PICKUP_DAILY, _bq_table_ref(project_id, dataset_id, pickup_tbl)
+    )
+    _export_delta_to_bq(
+        GOLD_ZONE_DROPOFF_DAILY, _bq_table_ref(project_id, dataset_id, dropoff_tbl)
+    )
 
     return {
-        "hourly":  _bq_table_ref(project_id, dataset_id, hourly_tbl),
-        "pickup":  _bq_table_ref(project_id, dataset_id, pickup_tbl),
+        "hourly": _bq_table_ref(project_id, dataset_id, hourly_tbl),
+        "pickup": _bq_table_ref(project_id, dataset_id, pickup_tbl),
         "dropoff": _bq_table_ref(project_id, dataset_id, dropoff_tbl),
     }
 
+
 # ---------- Airflow-friendly callables ----------
+
+
 def bronze_task(
     execution_contract: dict,
+    raw_references: list[dict] | None = None,
     **_,
 ):
-    write_scope = execution_contract.get(
-        "write_scope"
-    )
+    """Run Bronze using versioned S3 raw references."""
+
+    write_scope = execution_contract.get("write_scope")
 
     if write_scope != "FULL_TABLE_OVERWRITE":
-        raise ValueError(
-            "Bronze does not support "
-            f"write_scope={write_scope!r} yet"
-        )
+        raise ValueError("Bronze does not support " f"write_scope={write_scope!r} yet")
 
-    raw_file_months = list(
-        execution_contract[
-            "read_scope"
-        ][
-            "raw_file_months"
-        ]
-    )
+    if not raw_references:
+        raise ValueError("Bronze requires versioned S3 raw references")
 
-    logger.info(
-        "[Bronze] execution_contract "
-        f"raw_file_months={raw_file_months}, "
-        f"boundary_policy="
-        f"{execution_contract['read_scope']['boundary_policy']}"
-    )
+    raw_file_months = list(execution_contract["read_scope"]["raw_file_months"])
+
+    logger.info("[Bronze] S3 versioned input " f"raw_file_months={raw_file_months}")
 
     return write_bronze(
         raw_file_months=raw_file_months,
+        raw_references=raw_references,
     )
 
 
@@ -1394,15 +1307,10 @@ def silver_task(
     execution_contract: dict,
     **_,
 ):
-    write_scope = execution_contract.get(
-        "write_scope"
-    )
+    write_scope = execution_contract.get("write_scope")
 
     if write_scope != "FULL_TABLE_OVERWRITE":
-        raise ValueError(
-            "Silver does not support "
-            f"write_scope={write_scope!r} yet"
-        )
+        raise ValueError("Silver does not support " f"write_scope={write_scope!r} yet")
 
     return write_silver()
 
@@ -1444,13 +1352,12 @@ def quality_task(
         execution_contract=execution_contract,
     )
 
-    logger.info(
-        "[QualityGate] All six Gold tables passed"
-    )
+    logger.info("[QualityGate] All six Gold tables passed")
 
 
 def export_bq_all_task(**_):
     return export_all_gold_to_bigquery()
+
 
 if __name__ == "__main__":
     contract = build_current_execution_contract(
@@ -1459,11 +1366,7 @@ if __name__ == "__main__":
     )
 
     write_bronze(
-        raw_file_months=contract[
-            "read_scope"
-        ][
-            "raw_file_months"
-        ],
+        raw_file_months=contract["read_scope"]["raw_file_months"],
     )
 
     write_silver()

@@ -1,4 +1,3 @@
-
 import subprocess
 import sys
 import json
@@ -7,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts import pipeline_runner as runner
+
 
 def _contract():
     return {
@@ -59,20 +59,14 @@ def test_submit_builds_correct_command(monkeypatch):
         "gold",
     ]
 
-    assert recorded["command"][4] == (
-        "--execution-contract-json"
-    )
+    assert recorded["command"][4] == ("--execution-contract-json")
 
-    passed_contract = json.loads(
-        recorded["command"][5]
-    )
+    passed_contract = json.loads(recorded["command"][5])
 
     assert passed_contract == _contract()
 
     assert recorded["kwargs"]["check"] is True
-    assert recorded["kwargs"]["cwd"] == str(
-        runner.PROJECT_ROOT
-    )
+    assert recorded["kwargs"]["cwd"] == str(runner.PROJECT_ROOT)
 
 
 def test_child_failure_propagates(monkeypatch):
@@ -96,9 +90,7 @@ def test_stage_dispatch(monkeypatch):
     called = []
 
     fake_pipeline = SimpleNamespace(
-        gold_task=lambda **kwargs: called.append(
-            kwargs["execution_contract"]
-        ),
+        gold_task=lambda **kwargs: called.append(kwargs["execution_contract"]),
     )
 
     monkeypatch.setattr(
@@ -123,14 +115,11 @@ def test_rejects_unknown_stage():
         )
 
 
-
 def test_quality_stage_dispatch(monkeypatch):
     called = []
 
     fake_pipeline = SimpleNamespace(
-        quality_task=lambda **kwargs: called.append(
-            kwargs["execution_contract"]
-        ),
+        quality_task=lambda **kwargs: called.append(kwargs["execution_contract"]),
     )
 
     monkeypatch.setattr(
@@ -149,10 +138,7 @@ def test_quality_stage_dispatch(monkeypatch):
 
 def test_quality_stage_failure_propagates(monkeypatch):
     def failing_quality_task(**kwargs):
-        raise ValueError(
-            "Gold Quality Gate FAILED: "
-            "rule=POSITIVE_COUNT"
-        )
+        raise ValueError("Gold Quality Gate FAILED: " "rule=POSITIVE_COUNT")
 
     fake_pipeline = SimpleNamespace(
         quality_task=failing_quality_task,
@@ -172,3 +158,111 @@ def test_quality_stage_failure_propagates(monkeypatch):
             "quality",
             _contract(),
         )
+
+
+def test_submit_bronze_forwards_raw_references(monkeypatch):
+    recorded = {}
+
+    def fake_run(command, **kwargs):
+        recorded["command"] = command
+        recorded["kwargs"] = kwargs
+
+    monkeypatch.setattr(
+        runner.subprocess,
+        "run",
+        fake_run,
+    )
+
+    references = [
+        {
+            "data_month": "2024-01",
+            "bucket": "test-bucket",
+            "raw_key": "raw/test.parquet",
+            "raw_version_id": "raw-v1",
+            "manifest_key": "raw/test.parquet.manifest.json",
+        }
+    ]
+
+    runner.submit_stage(
+        "bronze",
+        _contract(),
+        raw_references=references,
+    )
+
+    command = recorded["command"]
+
+    assert command[6] == "--raw-references-json"
+    assert json.loads(command[7]) == references
+    assert recorded["kwargs"]["check"] is True
+
+
+def test_cli_forwards_raw_references(monkeypatch):
+    recorded = {}
+
+    references = [
+        {
+            "data_month": "2024-01",
+            "bucket": "test-bucket",
+            "raw_key": "raw/test.parquet",
+            "raw_version_id": "raw-v1",
+        }
+    ]
+
+    def fake_execute(stage, execution_contract, raw_references=None):
+        recorded["stage"] = stage
+        recorded["contract"] = execution_contract
+        recorded["references"] = raw_references
+
+    monkeypatch.setattr(runner, "execute_stage", fake_execute)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pipeline_runner",
+            "bronze",
+            "--execution-contract-json",
+            json.dumps(_contract()),
+            "--raw-references-json",
+            json.dumps(references),
+        ],
+    )
+
+    runner.main()
+
+    assert recorded["stage"] == "bronze"
+    assert recorded["contract"] == _contract()
+    assert recorded["references"] == references
+
+
+def test_execute_bronze_receives_raw_references(monkeypatch):
+    recorded = {}
+
+    references = [
+        {
+            "data_month": "2024-01",
+            "raw_version_id": "raw-v1",
+        }
+    ]
+
+    def fake_bronze_task(**kwargs):
+        recorded.update(kwargs)
+
+    fake_pipeline = SimpleNamespace(
+        bronze_task=fake_bronze_task,
+    )
+
+    monkeypatch.setattr(
+        runner.importlib,
+        "import_module",
+        lambda name: fake_pipeline,
+    )
+
+    runner.execute_stage(
+        "bronze",
+        _contract(),
+        raw_references=references,
+    )
+
+    assert recorded["execution_contract"] == _contract()
+    assert recorded["raw_references"] == references
