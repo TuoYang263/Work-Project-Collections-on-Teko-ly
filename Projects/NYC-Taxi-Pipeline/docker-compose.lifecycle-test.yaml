@@ -13,6 +13,7 @@ x-lifecycle-airflow: &lifecycle-airflow
 
     AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
     AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://lifecycle:lifecycle@postgres:5432/lifecycle
+    AIRFLOW__CELERY__WORKER_CONCURRENCY: "2"
 
     PYTHONPATH: /opt/airflow
     PYTHONDONTWRITEBYTECODE: "1"
