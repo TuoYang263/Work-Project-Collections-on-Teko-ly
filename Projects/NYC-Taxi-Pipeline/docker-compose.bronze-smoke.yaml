@@ -1,0 +1,32 @@
+services:
+  worker:
+    environment:
+      AWS_CONFIG_FILE: /opt/nyc-v2-auth/config
+      AWS_LOGIN_CACHE_DIRECTORY: /opt/nyc-v2-auth/cache
+      AWS_SHARED_CREDENTIALS_FILE: /dev/null
+      AWS_PROFILE: nyc-v2-dev
+      AWS_REGION: eu-central-1
+      AWS_DEFAULT_REGION: eu-central-1
+      AWS_EC2_METADATA_DISABLED: "true"
+
+      NYC_V2_RAW_BUCKET: nyc-v2-raw-438336772967-eu-central-1-an
+
+      PYSPARK_SUBMIT_ARGS: >-
+        --master local[2]
+        --driver-memory 1g
+        --conf spark.sql.shuffle.partitions=8
+        pyspark-shell
+
+    volumes:
+      - type: bind
+        source: ${HOME}/.nyc-v2-worker-auth/config
+        target: /opt/nyc-v2-auth/config
+        read_only: true
+
+      - type: bind
+        source: ${HOME}/.nyc-v2-worker-auth/cache
+        target: /opt/nyc-v2-auth/cache
+
+      - type: bind
+        source: ${HOME}/.nyc-v2-bronze-smoke/delta
+        target: /opt/airflow/data/delta/bronze/trips
