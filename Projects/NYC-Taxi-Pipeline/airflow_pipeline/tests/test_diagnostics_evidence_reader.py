@@ -29,3 +29,52 @@ def test_get_run_evidence_delegates_to_v2_loader():
     )
 
     assert result == expected
+
+
+def test_wrong_dag_id_cannot_read_another_dag(tmp_path):
+    """A run must not be accessible through another DAG identity."""
+    from functools import partial
+
+    import pytest
+
+    from scripts.run_evidence import (
+        load_run_evidence,
+        start_run_evidence,
+    )
+
+    contract = {
+        "mode": "BACKFILL",
+        "logical_window": {
+            "start": "2024-01-01",
+            "end_exclusive": "2024-02-01",
+        },
+        "read_scope": {"raw_file_months": ["2024-01"]},
+        "write_scope": "WINDOW_REPLACE",
+        "rerun_semantics": "IDEMPOTENT",
+    }
+
+    start_run_evidence(
+        "test_run_001",
+        contract,
+        dag_id="nyc_lifecycle_probe",
+        directory=tmp_path,
+    )
+
+    with patch(
+        "scripts.diagnostics.evidence_reader.load_run_evidence",
+        new=partial(load_run_evidence, directory=tmp_path),
+    ):
+        correct = get_run_evidence(
+            "nyc_lifecycle_probe", "test_run_001"
+        )
+        assert correct["status"] == "RUNNING"
+
+        with pytest.raises(FileNotFoundError):
+            get_run_evidence(
+                "another_dag", "test_run_001"
+            )
+
+        with pytest.raises(FileNotFoundError):
+            get_run_evidence(
+                "nyc_lifecycle_probe", "nonexistent_run_002"
+            )
