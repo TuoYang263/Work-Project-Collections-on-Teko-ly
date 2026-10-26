@@ -195,3 +195,30 @@ def test_invalid_utf8_file_is_classified_as_invalid_evidence(tmp_path):
 
     assert exc_info.value.code == "INVALID_EVIDENCE"
     assert isinstance(exc_info.value.__cause__, UnicodeDecodeError)
+
+
+@pytest.mark.parametrize(
+    "status",
+    [None, "UNKNOWN", "SUCCESS"],
+)
+def test_invalid_evidence_status_is_rejected(status):
+    dag_id = "nyc_lifecycle_probe"
+    run_id = "test_invalid_status_001"
+
+    record = {
+        "schema_version": 2,
+        "dag_id": dag_id,
+        "run_id": run_id,
+    }
+
+    if status is not None:
+        record["status"] = status
+
+    with patch(
+        "scripts.diagnostics.evidence_reader.load_run_evidence",
+        return_value=record,
+    ):
+        with pytest.raises(EvidenceInvalidError) as exc_info:
+            get_run_evidence(dag_id=dag_id, run_id=run_id)
+
+    assert exc_info.value.code == "INVALID_EVIDENCE"

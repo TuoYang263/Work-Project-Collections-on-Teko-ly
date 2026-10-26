@@ -20,10 +20,19 @@ class EvidenceInvalidError(ValueError):
 def get_run_evidence(dag_id: str, run_id: str) -> dict[str, Any]:
     """Load existing Run Evidence V2 for a specific DAG run."""
     try:
-        return load_run_evidence(
+        record = load_run_evidence(
             run_id,
             dag_id=dag_id,
         )
+
+        valid_statuses = {"RUNNING", "SUCCEEDED", "FAILED"}
+
+        if record.get("status") not in valid_statuses:
+            raise EvidenceInvalidError(
+                "Run evidence has missing or invalid status"
+            )
+
+        return record
     except FileNotFoundError:
         raise EvidenceNotFoundError(
             "Run evidence not found"
