@@ -160,3 +160,38 @@ def test_corrupted_json_file_is_classified_as_invalid_evidence(tmp_path):
 
     assert exc_info.value.code == "INVALID_EVIDENCE"
     assert isinstance(exc_info.value.__cause__, JSONDecodeError)
+
+
+def test_invalid_utf8_file_is_classified_as_invalid_evidence(tmp_path):
+    dag_id = "nyc_lifecycle_probe"
+    run_id = "test_invalid_utf8_001"
+
+    contract = {
+        "mode": "incremental",
+        "logical_window": {},
+        "read_scope": {},
+        "write_scope": "window_replace",
+        "rerun_semantics": "idempotent",
+    }
+
+    start_run_evidence(
+        run_id,
+        contract,
+        dag_id=dag_id,
+        directory=tmp_path,
+    )
+
+    evidence_files = list((tmp_path / "v2").glob("*.json"))
+    assert len(evidence_files) == 1
+
+    evidence_files[0].write_bytes(b"\xff\xfe\xfa")
+
+    with patch(
+        "scripts.diagnostics.evidence_reader.load_run_evidence",
+        new=partial(load_run_evidence, directory=tmp_path),
+    ):
+        with pytest.raises(EvidenceInvalidError) as exc_info:
+            get_run_evidence(dag_id=dag_id, run_id=run_id)
+
+    assert exc_info.value.code == "INVALID_EVIDENCE"
+    assert isinstance(exc_info.value.__cause__, UnicodeDecodeError)

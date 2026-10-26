@@ -32,3 +32,7 @@ def get_run_evidence(dag_id: str, run_id: str) -> dict[str, Any]:
         raise EvidenceInvalidError(
             "Run evidence contains invalid JSON"
         ) from exc
+    except UnicodeDecodeError as exc:
+        raise EvidenceInvalidError(
+            "Run evidence contains UTF-8 encoding"
+        ) from exc
