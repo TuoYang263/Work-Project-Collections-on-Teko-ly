@@ -1,9 +1,14 @@
 """Tests for the read-only Diagnostics Evidence Reader."""
 
 import pytest
-from unittest.mock import patch
 
+from functools import partial
+from unittest.mock import patch
+from json import JSONDecodeError
+
+from scripts.run_evidence import load_run_evidence, start_run_evidence
 from scripts.diagnostics.evidence_reader import (
+    EvidenceInvalidError,
     EvidenceNotFoundError,
     get_run_evidence,
 )
@@ -97,3 +102,61 @@ def test_missing_evidence_is_classified_as_not_found():
 
     assert exc_info.value.code == "NOT_FOUND"
     assert isinstance(exc_info.value, FileNotFoundError)
+
+
+def test_invalid_json_is_classified_as_invalid_evidence():
+    invalid_json_error = JSONDecodeError(
+        "Expecting property name",
+        "{broken",
+        1,
+    )
+
+    with patch(
+        "scripts.diagnostics.evidence_reader.load_run_evidence",
+        side_effect=invalid_json_error,
+    ):
+        with pytest.raises(EvidenceInvalidError) as exc_info:
+            get_run_evidence(
+                dag_id="nyc_lifecycle_probe",
+                run_id="test_invalid_json_001",
+            )
+
+    assert exc_info.value.code == "INVALID_EVIDENCE"
+    assert isinstance(exc_info.value, ValueError)
+    assert exc_info.value.__cause__ is invalid_json_error
+
+
+
+def test_corrupted_json_file_is_classified_as_invalid_evidence(tmp_path):
+    dag_id = "nyc_lifecycle_probe"
+    run_id = "test_corrupted_json_001"
+
+    contract = {
+        "mode": "incremental",
+        "logical_window": {},
+        "read_scope": {},
+        "write_scope": "window_replace",
+        "rerun_semantics": "idempotent",
+    }
+
+    start_run_evidence(
+        run_id,
+        contract,
+        dag_id=dag_id,
+        directory=tmp_path,
+    )
+
+    evidence_files = list((tmp_path / "v2").glob("*.json"))
+    assert len(evidence_files) == 1
+
+    evidence_files[0].write_text("{broken", encoding="utf-8")
+
+    with patch(
+        "scripts.diagnostics.evidence_reader.load_run_evidence",
+        new=partial(load_run_evidence, directory=tmp_path),
+    ):
+        with pytest.raises(EvidenceInvalidError) as exc_info:
+            get_run_evidence(dag_id=dag_id, run_id=run_id)
+
+    assert exc_info.value.code == "INVALID_EVIDENCE"
+    assert isinstance(exc_info.value.__cause__, JSONDecodeError)
