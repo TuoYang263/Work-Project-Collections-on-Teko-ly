@@ -1,7 +1,7 @@
-# NYC V2 ADR v1.5 — Evidence-First Diagnostics, Governed AI Investigator & Verified Bronze Runtime
+# NYC V2 ADR v1.6 — Evidence-First Diagnostics, Replayable Incidents & Governed AI Investigator
 
-**Status:** **Accepted as an architecture direction**; deterministic Airflow/S3 work has delivered checkpoints, but **Streamlit Diagnostics, AI Investigator, RAG, AgentCore deployment and Kill Switch remain unimplemented**.
-**Original:** 2026-10-14 · **AgentCore:** 2026-10-15 · **Supervisor:** 2026-10-16 · **Safe shutdown:** 2026-10-17 · **Workshop:** 2026-10-20 · **Evidence checkpoint:** 2026-10-25
+**Status:** **Accepted as an architecture direction**; Airflow/S3 baseline and **Unit 1A Evidence Reader / Diagnostic Status View are implemented and related-tested** through `431d49d`. **Task Diagnostics, Incident Library, Replay UI, Fault Lab, AI Investigator, AgentCore, and Kill Switch remain unimplemented**.
+**Original:** 2026-10-14 · **AgentCore:** 2026-10-15 · **Supervisor:** 2026-10-16 · **Safe shutdown:** 2026-10-17 · **Workshop:** 2026-10-20 · **Evidence checkpoint:** 2026-10-25 · **Replay decision:** 2026-10-26
 **Working ADR location in repo:** `Projects/NYC-Taxi-Pipeline/airflow_pipeline/docs/nyc_v2_observability_ai_incident_investigator_ADR.md`
 **Scope:** Existing NYC V2 AWS data plane, Airflow control plane, diagnostic evidence, optional Bedrock inference/RAG/Guardrails, and future governed AgentCore deployment.
 **Change from v1:** Add a deliberately staged Amazon Bedrock AgentCore Runtime/Gateway/Identity/Policy/Observability/Evaluations target without changing current local-first development priorities.
@@ -9,8 +9,9 @@
 **Change from v1.2:** Make a deterministic Investigator Kill Switch mandatory for the local AI MVP: persistent `RUNNING`/`PAUSED`/`STOPPED` state, independent operator controls, policy checks at agent **and** MCP/target boundaries, bounded cancellation, audit and fault-injection tests. No new microservice, autonomous remediation, or mandatory multi-agent Supervisor.
 **Change from v1.3:** Integrate the supplied 2025 AWS Bedrock Workshop patterns (Knowledge Bases, prompt versioning, Flows, Guardrails, agent tools, Classic Supervisor example) into a **2026-compatible, evidence-first NYC V2 design**. Explicitly reject new Bedrock Agents Classic implementation, separate stable-document RAG from live evidence, and update the verified engineering checkpoint to `abfd63c`. No autonomous remediation or mandatory managed AI infrastructure is added.
 **Change from v1.4:** Update implementation truth through pushed commit `53ebc5f` (2026-10-25), verify isolated Airflow S3-to-Bronze smoke and LoginProvider cross-expiry access, correct Unit 3D.15 boundaries, and define the first deterministic evidence-reader delivery. No new AI features are claimed as implemented.
-**Decision evidence:** `Build Chatbots with Amazon Bedrock Knowledge Bases and Agents.zip` (39 PDF printouts / 103 pages), `NYC_V2_Bedrock_Workshop_Applicability_Review_2026-10-20.md` (research, not an ADR), ADR v1.4, actual Airflow/Delta/STS tests, and Git checkpoints through `53ebc5f`. Cloud service availability/pricing references were reviewed on 2026-10-20 and must be rechecked before deployment.
-**Supersedes:** A separate React/Next.js application as the default engineering-diagnostics UI. Existing Streamlit analytics remains. v1.5 updates the working ADR implementation checkpoint; earlier revision history is preserved in Git. No UI or managed agent is deployed by this document.
+**Change from v1.5 (2026-10-26):** Define LIVE / REPLAY / LAB modes, versioned provenance-labeled Incident Library, offline incident demonstrations and isolated optional fault tests. Confirm Unit 1A through `431d49d` (29 related tests). Replay, lab and AI remain unimplemented.
+**Decision evidence:** `Build Chatbots with Amazon Bedrock Knowledge Bases and Agents.zip` (39 PDF printouts / 103 pages), `NYC_V2_Bedrock_Workshop_Applicability_Review_2026-10-20.md` (research, not an ADR), ADR v1.4, actual Airflow/Delta/STS tests, and Git checkpoints through `431d49d`. Cloud service availability/pricing references were reviewed on 2026-10-20 and must be rechecked before deployment.
+**Supersedes:** A separate React/Next.js application as the default engineering-diagnostics UI. Existing Streamlit analytics remains. v1.6 extends the architecture and implementation checkpoint; earlier revision history is preserved in Git. No UI or managed agent is deployed by this document.
 
 ## 1. Problem and desired operator experience
 
@@ -18,9 +19,9 @@ NYC V2 has deterministic tests and quality contracts, but a healthy test suite c
 
 **Acceptance narrative:** Given a failed run, find its failing stage, error category, affected logical window/input versions, relevant evidence, and *safe next investigation or recovery action*. The UI should label missing evidence as **UNKNOWN**, rather than inventing an explanation. AI reasoning augments this workflow; it never acts as the source of truth for deterministic gates.
 
-## 2. Current baseline and implementation truth (updated 2026-10-25)
+## 2. Current baseline and implementation truth (updated 2026-10-26)
 
-This checkpoint is grounded in user-executed local tests, run evidence, and Git push confirmations through **`53ebc5f` on `feature/nyc-v2`**. It updates the 2026-10-20 record; it is not a claim of deployed cloud compute, full main-DAG execution, or implemented AI.
+This checkpoint is grounded in user-executed local tests, run evidence and Git pushes through **`431d49d` on `feature/nyc-v2`**. Unit 1A completed four related regression test groups (**29 passed**) on 2026-10-26; this is not proof of full main-DAG execution, Task Diagnostics, Replay UI, Fault Lab, or implemented AI.
 
 | Capability | Proven status and explicit limitation |
 | --- | --- |
@@ -31,9 +32,10 @@ This checkpoint is grounded in user-executed local tests, run evidence, and Git 
 | **Unit 3D.15 isolated Airflow S3 → Bronze smoke** | **ISOLATED_SCOPE_VERIFIED** on 2026-10-21. DAG `nyc_bronze_s3_smoke`, run `bronze_smoke_20261021_01`: `start_run_evidence` → `prepare_s3_reference` → `bronze_ingest_delta` → `verify_bronze_output`, all success; manifest validation, pinned versioned download, SHA-256/size/Parquet validation, Delta Bronze readback of **2,964,624 rows / 21 columns**; Run Evidence V2 `SUCCEEDED`. Output was intentionally redirected to an isolated WSL ext4 bind mount. **It reused an existing S3 raw object; it did not execute the full source-to-S3 upload path or the main medallion DAG.** |
 | AWS LoginProvider authentication / local cache lifecycle | **VERIFIED within tested scope** on 2026-10-25: independent Host UID 1000 and Worker UID 50000 cache files (`0600`); actual Celery Worker boto3 LoginProvider identity + STS pass without static keys; after previously recorded short-lived credentials expired at 13:33:44 UTC, a newly started boto3 process in the same Worker container authenticated and reported a new expiry at 13:52:18 UTC; Host login still worked. **Not yet a sustained single-process refresh test, full login-session expiry recovery, or cloud production identity solution.** Shared source login-session material may have server-side coupling even though local caches are separate. |
 | Reproducible local smoke configuration | **Committed and pushed** `docker-compose.bronze-smoke.yaml` plus Runtime Runbook. Compose merge validation and isolated Bronze write/read passed. User-provided private auth cache, ACL bootstrap and local data are intentionally not in Git; no full clean-machine setup/restart recovery claim. |
-| Git checkpoints | `abfd63c` lifecycle image/Compose; `ad58f4b` isolated smoke DAG; `b6dcf05` reproducible local smoke config/runbook; `53ebc5f` credential cache separation and post-expiry test documentation. All pushed to `feature/nyc-v2`. |
+| Git checkpoints | `abfd63c` lifecycle image/Compose; `ad58f4b` isolated smoke DAG; `b6dcf05` smoke runbook; `53ebc5f` credential-cache separation; `431d49d` Unit 1A diagnostic projection. All pushed to `feature/nyc-v2`. |
 | **Main** `nyc_taxi_medallion_delta` end-to-end execution | **NOT_VERIFIED**. Controlled full raw ingestion/XCom/medallion/quality/export run remains separate. Default config includes 2023-01..03 plus boundary month and legacy BigQuery export; **do not trigger blindly**. Existing smoke success cannot certify Silver, Gold, Quality or serving. |
-| Structured stage-event store / read-only diagnostics adapters / Streamlit operator UI | **DESIGNED_NOT_IMPLEMENTED**. Existing Airflow attempt logs and Run Evidence V2 are useful inputs; unified stage events, reconciliation/UNKNOWN handling, evidence APIs, and diagnostics UI remain planned. |
+| **Unit 1A — deterministic Evidence Reader / Status View** | **IMPLEMENTED / RELATED_TESTS_PASSED** through `431d49d`; 29 related tests. V2 identity isolation, missing/invalid/conflict classifications, status validation and `UNKNOWN` projection. No full schema, caller authorization or UI claim. |
+| **Unit 1B / stage events / Replay / Streamlit** | **DESIGNED_NOT_IMPLEMENTED**: Airflow task data exist, but normalized attempts, verified case snapshots, engineering UI and Fault Lab are not delivered. |
 | AI Investigator, RAG, Guardrails, mandatory Investigator Kill Switch | **DESIGNED_NOT_IMPLEMENTED**. Tool contracts, data boundaries, safety acceptance and evaluations are architectural requirements, not completed code. |
 | AgentCore / Supervisor | **OPTIONAL_FUTURE_NOT_DEPLOYED**; managed resources/model access/region/cost/target IAM not yet verified for a deployment. |
 
@@ -41,7 +43,7 @@ This checkpoint is grounded in user-executed local tests, run evidence, and Git 
 - `scripts/load_nyc_yellow_taxi_data.py`, `scripts/s3_raw_ingestion.py`, `scripts/airflow_raw_ingestion.py`: intake and S3 object/reference handling.
 - `scripts/delta_medallion_pipeline.py`, `scripts/execution_contract.py`, `scripts/pipeline_runner.py`: deterministic contracts, local PySpark/Delta stages, Airflow subprocess bridge.
 - `dags/nyc_taxi_medallion_dag.py`: **main DAG, not end-to-end validated**; `dags/nyc_lifecycle_probe_dag.py`: lifecycle fault evidence; `dags/nyc_bronze_s3_smoke_dag.py`: successful isolated staged S3-to-Bronze Airflow run.
-- `scripts/run_evidence.py`, `scripts/run_lifecycle.py`: existing lifecycle truth; `airflow_pipeline/docs/nyc_v2_bronze_smoke_runtime.md` and `docker-compose.bronze-smoke.yaml`: reproducibility artifacts.
+- `scripts/run_evidence.py`, `scripts/run_lifecycle.py`: existing lifecycle truth; `scripts/diagnostics/evidence_reader.py`, `scripts/diagnostics/status_view.py`: implemented Unit 1A; `airflow_pipeline/docs/nyc_v2_bronze_smoke_runtime.md` and `docker-compose.bronze-smoke.yaml`: reproducibility artifacts.
 - `streamlit_app/`: analytics UI only; new engineering diagnostics page **not implemented**.
 
 **Unit naming:** 3D.13 = S3→local Delta Bronze integration; 3D.14 = Airflow lifecycle runtime; **3D.15 = isolated live Airflow staged S3→Bronze smoke (verified within that scope), with remaining main-DAG integration tracked explicitly as unverified**. The new Observability Unit handles evidence APIs/events/UI and must not be mislabeled as completed 3D.13 work.
@@ -67,6 +69,8 @@ This checkpoint is grounded in user-executed local tests, run evidence, and Git 
 14. **Safety controls are layered and independent:** pre-model redaction, prompt-injection-resistant untrusted document handling, Bedrock Guardrails as an optional content filter, IAM/AgentCore Policy/target authorization as technical enforcement, and project-owned persistent Kill Switch as an operator override. A guardrail is not authorization.
 15. **Version prompts, tool schemas and evidence.** Each report links to exact tool responses, document versions, model/version, prompt hash/version, retrieval results, runtime state and redaction status. Git-managed prompt templates and fixtures come before optional paid Prompt Management.
 16. **Region/cost-aware feature adoption.** Runtime microVM availability in Frankfurt does **not** imply `platformVersion=V2` availability; verify feature-level support, model access, geography and billable resources before any live cloud deployment.
+17. **Three explicitly isolated modes:** LIVE reads current facts; REPLAY reads pinned historical snapshots; LAB runs only disposable test-scope faults. Never represent test incidents as operational outages.
+18. **Reproducible demo requirement:** a healthy pipeline must be sufficient to demonstrate incident replay and AI, without any failure injected into the real S3/Delta/Airflow data path.
 
 ### Non-goals for the initial release
 
@@ -98,6 +102,13 @@ flowchart TB
   EV --> INDEX
   INDEX --> UI[Streamlit Diagnostics - operator view]
   AF -. DAG logs/status .-> UI
+  AF -. approved historical capture .-> CAP[Redacted case snapshot packager - planned]
+  INDEX -. versioned evidence refs .-> CAP
+  CAP --> LIB[Incident Library - immutable provenance and hashes]
+  LIB --> REPLAY[Read-only recorded incident replay]
+  REPLAY --> UI
+  LAB[Isolated optional test fault lab] --> LABEV[Disposable test evidence]
+  LABEV --> CAP
   OP[Authenticated engineer] -->|Analyze Failure| UI
 
   subgraph LOC[Phase A - local development, no managed AgentCore requirement]
@@ -152,6 +163,18 @@ flowchart TB
 **Key separation:** Operational *facts* must be generated by programs/tools and remain queryable without AI. The AI is allowed to interpret observed evidence, **not rewrite facts**. Airflow DAG run state and existing lifecycle evidence must be reconciled deterministically; if inconsistent, mark `EVIDENCE_CONFLICT` and block any automated recovery suggestion that assumes a terminal state.
 
 **Workshop-driven refinement (v1.4):** The document retrieval source in the diagram is a *versioned knowledge plane*; it never edits live evidence. Before any LLM explanation, a deterministic triage branch classifies only what evidence proves. Output validation rejects invented citations and prohibited tool/recovery requests. Flow, Knowledge Bases and managed Guardrails remain **optional managed implementations** of these patterns, not deployed NYC V2 resources.
+
+### 4.1 Live / Incident Replay / Fault Lab — three explicit modes (v1.6)
+
+| Mode | Authoritative source | Allowed | Explicitly prohibited |
+| --- | --- | --- | --- |
+| `LIVE` | Current Airflow Metadata DB, Run Evidence V2, actual S3 manifests and quality outputs | Scoped read-only diagnostics; separately authorized on-demand AI analysis | Injecting failures; unbounded reads; automatic LLM polling or pipeline mutation |
+| `REPLAY` | Immutable, redacted and hash-verified *historical case revision* | Offline deterministic diagnosis and optional manual **Analyze Recorded Incident** | Triggering any DAG; silently consulting live data; replacing missing evidence with guesses |
+| `LAB` | Explicitly isolated, disposable test execution and its captured evidence | Operator-approved, allowlisted fault recipes; bounded execution, capture and cleanup | Touching the main medallion DAG, live S3 bucket/object versions, production-like Delta locations, serving exports, or using AI to launch tests |
+
+**Safety invariant:** The modes are separate source/permission contexts, not three labels over the same unrestricted adapter. Every tool response and report carries the source mode, case provenance, capture revision and known limitations. `LIVE` remains useful with AI switched off. `REPLAY` works with Airflow, AWS and model access unavailable if its verified snapshot contains the required evidence. `LAB` must refuse execution if isolation cannot be proved by a deterministic preflight.
+
+**Important distinction:** Replay is *reading and reinterpreting recorded evidence*, **not rerunning the original pipeline**. Historical lifecycle probe runs are observed *test* executions, never represented as operational outages. `LAB` injection is an optional later enhancement and **is not a prerequisite** for the first replay + AI demonstration.
 
 ## 5. Evidence contracts and data model
 
@@ -211,6 +234,56 @@ This is an **illustrative event**, not evidence that the specific Silver failure
 - Evidence `SUCCEEDED` for an individual stage must **not** overwrite a failed DAG run status or make Gold outputs safe to publish if the Quality Gate failed after writes.
 - Treat missing manifests, missing logs, contradictory Airflow/evidence states and inaccessible cloud metrics as first-class **diagnostic states**, not success.
 
+### 5.5 Incident Library — versioned and provenance-labeled evidence packages (DESIGNED)
+
+An Incident Library gives a stable, repeatable investigation corpus while the live pipeline is healthy. It does **not** replace live Airflow as the authority for current DAG status. Store approved private bundles outside Git, initially under `airflow_pipeline/data/diagnostics/cases/` (location and access policy to be finalized). Only sanitized **synthetic** fixtures, schemas and non-sensitive test definitions may enter Git.
+
+```text
+airflow_pipeline/data/diagnostics/cases/<case_id>/<revision>/
+  manifest.json                  # provenance, source identity, completeness, digests
+  run_evidence.json              # exact redacted captured run evidence, if available
+  task_attempts.json             # observed TaskInstance/attempt history; no guessing
+  logs/                          # bounded redacted log excerpts, only if approved
+  evidence_refs.json             # source and version references / missing markers
+```
+
+**Illustrative manifest (schema proposal; this is NOT a saved case):**
+
+```json
+{
+  "schema_version": 1,
+  "case_id": "probe_retry_20261020T182846Z",
+  "revision": 1,
+  "provenance": "OBSERVED_TEST_RUN",
+  "source_dag_id": "nyc_lifecycle_probe",
+  "source_run_id": "probe_retry_20261020T182846Z",
+  "capture_status": "POINTER_ONLY",
+  "captured_at_utc": null,
+  "source_commit": null,
+  "snapshot_sha256": null,
+  "attachments": [],
+  "limitations": ["Attempt logs and independent snapshot have not yet been captured"]
+}
+```
+
+- **Provenance values:** `OBSERVED_TEST_RUN`, `OBSERVED_OPERATIONAL_RUN`, `CONTROLLED_LAB_RUN`, `SYNTHETIC_FIXTURE`. Keep the source label visible in UI, screenshots, exports and AI reports. A synthetic failure is not a historical real incident.
+- **Capture completeness:** `POINTER_ONLY` means known original run identity but *not offline replay ready*. Promote to `SNAPSHOT_VERIFIED` only after an approved collector reads the actual data, checks exact identity and all required hashes/versions, redacts sensitive fields, and independently verifies that the bundle replays without live services.
+- **Immutability:** each `(case_id, revision)` resolves to fixed bytes and evidence fingerprint. Capture anew into a new revision; do not silently overwrite a previous case. Include event and capture UTC times, code/contract versions, missing-field flags and source references.
+- **Never invent retries:** `try_number` alone does not supply individual attempt outcomes or raw exception messages. Exact attempt records/log pointers must come from Airflow or another verified source; missing historical logs remain `UNKNOWN` / unavailable.
+- **Privacy:** exclude private credentials, login caches, bearer tokens, signed URLs, raw PII, unbounded log text and identifying AWS account information from any public artifact. Apply local access control, retention and deletion rules.
+- **Hidden evaluation answer key:** expected diagnosis, ground-truth incident labels and withheld assertions live in a separate evaluator-only store that the AI/MCP retrieval path cannot query. Do not give the model its benchmark answer in the prompt.
+
+**First candidate cases (observed runs; capture NOT yet verified):**
+
+| Run | Historical result | Demonstration purpose |
+| --- | --- | --- |
+| `probe_20261020T182304Z` | `SUCCEEDED` | Healthy baseline, no invented fault |
+| `probe_retry_20261020T182846Z` | `SUCCEEDED` after initial failed attempt | Retry-aware diagnosis; do not mislabel terminal failure |
+| `probe_failure_20261020T183606Z` | `FAILED`, `failure_stage=harmless_task` | Real observed test-DAG failure and attempt-level evidence |
+| `bronze_smoke_20261021_01` | SUCCEEDED, isolated S3→Bronze | Real staged-run success; not full main DAG proof |
+
+Before any case is labeled `SNAPSHOT_VERIFIED`, check whether its old Airflow DB records and task logs are **still available**. An existing `run_id` is not proof that an immutable offline case is ready.
+
 ## 6. Failure taxonomy and run triage
 
 The classification layer maps reliable tool results / exception types into typed categories. It must preserve raw error references and admit `UNKNOWN`; no universal regex that pretends every error is certain.
@@ -240,17 +313,27 @@ The classification layer maps reliable tool results / exception types into typed
 
 **Knowledge Context (optional later):** show retrieved runbook/ADR title, immutable version/commit, cited excerpt and retrieval timestamp separately from live incident logs. If a runbook conflicts with real `Run Evidence`, show the conflict rather than silently choosing the document.
 
+### 7.1 Streamlit incident demonstration UX (v1.6)
+
+1. **Mode selector:** persistent and unmistakable `LIVE` / `REPLAY` / `LAB` label on every page, report and screenshot. Mode selection constrains actual adapters, not only presentation.
+2. **Live:** current DAG/run picker, deterministic status and task attempts, missing-evidence flags, manifest / quality drilldown. Healthy status never causes a fault trigger.
+3. **Replay:** select `(case_id, revision)`, show evidence fingerprint, provenance and capture completeness, then render the recorded run, retry transitions, first *proven* failure boundary, sources and unknowns without requiring Airflow/AWS access.
+4. **AI button:** explicit **Analyze Recorded Incident** invokes a single read-only Investigator using **only that frozen snapshot**. AI output cites exact snapshots and declares unknowns, evidence gaps and hypotheses. A replay may show an observed healthy run for baseline evaluation; it is not a live alert.
+5. **Evaluation panel:** after an AI report is finalized, allow an operator to compare its cited claims with a separate evaluator. Never leak withheld expected answers into the model tools.
+6. **Lab:** an operator-only test recipe picker with displayed isolated scope, costs, timeout, cleanup plan and disabled execution if preflight fails. Not part of first UI MVP.
+7. **AI unavailable / STOPPED:** deterministic LIVE and REPLAY remain functional. No model inference, AWS spend or live fault injection is needed for an offline demonstration.
+
 **UI correctness:** a failure can be fully navigated without invoking AI. Do not show a fabricated confidence percentage or invented log URL. Authorize access at the data-source boundary, redact secrets before display, and prevent UI from exposing privileged diagnostics to public visitors.
 
 ## 8. AI Incident Investigator v1 — meaningful reasoning, bounded authority
 
 ### 8.1 Invocation and tools
 
-- **On demand only**, initiated by an authenticated engineer selecting a specific `dag_id + run_id`.
+- **On demand only**, initiated by an authenticated engineer selecting `dag_id + run_id` for LIVE or a verified pinned `(case_id, revision)` for REPLAY. LAB fault execution is never an AI/MCP tool. Carry mode and provenance to every read adapter.
 - Tool-facing interface (proposed): `get_run_evidence`, `get_task_attempts`, `get_stage_logs`, `get_raw_manifest`, `get_quality_results`, `compare_runs`, `compare_source_schemas`, `get_execution_contract`, `get_relevant_code_changes`, `get_runbook`.
 - Each tool is **read-only**, allows strict run/time/resource scoping, enforces limits on byte size and result count, records provenance and sanitizes secrets before model access. Raw source payloads are not retrieved by default.
 - The model is allowed to choose which available tools to call inside configured call/token/time budgets and to request **additional evidence** when hypotheses remain unresolved.
-- **No model call on a healthy run** by default. If credentials, a provider or an allowed tool are missing, the deterministic UI continues normally and AI reports `UNAVAILABLE`.
+- **No automatic model call on a healthy LIVE run**. An explicitly initiated REPLAY of an observed healthy or retry-success run is permitted for benchmarking, and remains labeled as historical/test. If AI is unavailable, deterministic LIVE and REPLAY still work.
 
 ### 8.2 Investigation output contract
 
@@ -541,10 +624,20 @@ Fixed, reproducible fixtures must be assembled from **actual observed faults** (
 
 **Required comparison:** deterministic-only diagnosis vs. single Investigator (and, only if justified, optional RAG and Supervisor). Record failure localization, evidence citation precision, unsupported assertions, refusal on missing evidence, unsafe proposal count, latency, token/tool usage, cost-per-investigation and controls honored. Do not claim AI improved diagnosis without a benchmark result. Test explicitly with model unavailable and Kill Switch STOPPED. AgentCore Evaluations is optional, not a prerequisite for these local metrics.
 
+### 8.17 Replay-first AI Investigator and evaluation contract (v1.6)
+
+- **Evidence binding:** `LIVE` queries current approved sources by `dag_id + run_id`; `REPLAY` queries only a selected verified `(case_id, revision, evidence_fingerprint)`. Tools are mode-scoped at the *data adapter* boundary, not trusted to obey a prompt instruction. LAB execution is outside the agent and not an MCP tool.
+- **Model access:** optional and operator-initiated only. Healthy LIVE runs never trigger LLM analysis automatically; manual REPLAY analysis of an observed healthy/retry-success case is allowed for benchmarking, with clear test/historical labeling.
+- **Output:** include `mode`, source provenance, capture revision/completeness, real evidence refs, `observed_facts[]`, separated `hypotheses[]`, `limitations[]`, `analysis_status`, and operator-reviewed safe checks. If evidence is absent or conflicting, say `UNKNOWN` / `INCONCLUSIVE` rather than constructing a confident explanation.
+- **Independent controls:** the previously mandated persistent Kill Switch remains required for the local agent MVP, including separate target-level authorization and pause/stop tests. Stopping AI never stops Airflow or deterministic replay.
+- **Blind benchmark:** run the exact same pinned cases with deterministic-only diagnosis and then the agent; expected outputs are withheld from the tools. Track localization precision, exact citation coverage, false assertions, handling of partial records, unsafe tool/action requests, latency and cost. No assertion of AI superiority without measurements.
+- **Negative gates:** reject cross-mode evidence contamination, invented attempt logs, answer-key retrieval, unauthorized S3/Delta writes, prompt-injected instructions in logs and unapproved lab requests. LAB-created incidents retain a permanent test label.
+- **Budget:** offline replay is free from model/AWS calls by default. Limit on-demand model invocations, token/tool/time budgets and cache by `(case_id, revision, fingerprint, prompt_version)`; Bedrock/AgentCore/Supervisor remain optional later deployment decisions.
+
 ## 9. Operating cost and deployment posture
 
 - V1 runs in existing local Docker/WSL and the existing Streamlit application; minimize always-on infrastructure. AgentCore is **optional** until the locally tested core is stable.
-- AI analysis requires a click; cache result by `(dag_id, run_id, evidence_fingerprint, prompt_version)` and invalidate on new evidence. Provider/model selection is configurable; do not assume an AWS-specific model.
+- AI analysis requires an explicit click; cache LIVE by `(dag_id, run_id, evidence_fingerprint, prompt_version)` and REPLAY by `(case_id, revision, snapshot_fingerprint, prompt_version)`. Deterministic offline replay incurs no model/API cost. Provider/model selection is configurable; do not assume an AWS-specific model.
 - The Kill Switch is a **small local module for v1**: no always-on microservice, dedicated deployment or paid monitoring requirement. Existing incident data pipeline and non-AI dashboards remain available with the AI stopped.
 - Enforce configurable per-investigation tool, token, latency and approximate cost ceilings in code. Display spend or usage separately where measurable. Default disabled until API provider/credentials and a low-cost test budget are configured.
 - Keep AWS S3 storage in Frankfurt (`eu-central-1`) as planned; avoid cross-region pulls for diagnostics. Budget alerts are not a hard stop and may not include third-party model invoices.
@@ -552,7 +645,7 @@ Fixed, reproducible fixtures must be assembled from **actual observed faults** (
 - **Bedrock/RAG cost gate (v1.4):** explicitly estimate per-investigation inference tokens, any embedding/reranking usage, Knowledge Base ingestion/storage, vector-store fixed charges, Guardrail calls and retrieved-result volume; label separate spend. Require an explicit budget and teardown decision before provisioning workshop templates. Prefer approved local Markdown retrieval while experimenting; do not create persistent OpenSearch/vector services casually.
 - Maintain a separate **AgentCore cost ledger**: Runtime invocations/duration, Gateway tool calls, CloudWatch ingest/retention, evaluator tokens, external model inference, optional Memory, and any target Lambda/API charges. Consult current AWS prices at deployment time. A $10/month AWS Budget is an alert, **not a cap**, and may be consumed quickly by evaluation/model calls. Set a manual proof-of-concept spend approval before provisioning.
 
-## 10. Implementation sequence and acceptance gates (active numbering, 2026-10-25)
+## 10. Implementation sequence and acceptance gates (active numbering, 2026-10-26)
 
 **Do not conflate historic roadmap labels from v1.3 with the active Unit IDs.** The checkpoints below are the tested project status and proposed next steps; AI-specific actions are future requirements.
 
@@ -562,8 +655,11 @@ Fixed, reproducible fixtures must be assembled from **actual observed faults** (
 | **Unit 3D.14 — Airflow Lifecycle Runtime** | **COMPLETE lifecycle scope** (`abfd63c` pushed). | Docker Java/Spark/Delta, AWS temporary identity and versioned `HeadObject` preflights; Scheduler/Celery/Redis/Postgres; DAG loaded; probe Success/Retry/Failure and Evidence V2 cross-checked. **Not full main-DAG ingest.** |
 | **Unit 3D.15 — Isolated Airflow S3 → Bronze** | **COMPLETE isolated smoke scope** (`ad58f4b`; runtime/docs `b6dcf05`, `53ebc5f`). | 4 real Celery/Airflow tasks, versioned 2024-01 input, manifest/hash/size checks, 2,964,624 rows / 21 cols, isolated Delta, Evidence V2, Worker STS + post-expiry authentication. **Main DAG end-to-end remains NOT_VERIFIED.** |
 | **Main DAG full-scope integration (separate backlog gate)** | **NOT_VERIFIED**. | Controlled source→S3 ingestion/XCom, main-DAG execution contract, Bronze→Silver→Gold→Quality→export; no unguarded multi-month refresh, original Bronze overwrite or legacy BigQuery export. |
-| **Observability 1 — deterministic event contract** | **DESIGNED**. | Versioned bounded stage events (`event_id`, `run_id`, `attempt`, UTC, source identity, error code), dedup, error taxonomy, `EVIDENCE_CONFLICT`, log pointers and consistency tests. Do not mutate existing lifecycle schema. |
-| **Observability 2 — Streamlit Diagnostics** | **DESIGNED**. | Runs/timeline/failing task/attempts/manifest/quality/contract, with real links and explicit UNKNOWN, fully usable with AI OFF. Keep operator data private. |
+| **Unit 1A — Evidence Reader + Status View** | **COMPLETE, scoped** (`431d49d`, 29 related tests). | V2 identity isolation, typed errors, `UNKNOWN` projection; no task attempts, UI or AI claim. |
+| **Unit 1B — read-only Task Diagnostics** | **NEXT / NOT_IMPLEMENTED**. | Airflow task state, retry/attempt metadata and bounded authorized log references. |
+| **Unit 1C — Incident Library and Streamlit Replay** | **DESIGNED_NOT_IMPLEMENTED**. | Verified immutable case packages with provenance, AI-OFF LIVE/REPLAY UI; offline replay when pipeline healthy. |
+| **Unit 1D — single AI Investigator replay MVP** | **DESIGNED_NOT_IMPLEMENTED**. | Read-only pinned-case tools, Kill Switch, hidden evaluator and grounded report; on-demand calls only. |
+| **Unit 1C-Lab — isolated Fault Lab** | **OPTIONAL_LATER / NOT_IMPLEMENTED**. | Disposable test-only faults and cleanup, no live resource writes; not a replay prerequisite. |
 | **AI Investigator Phase A — local single read-only agent** | **DESIGNED**. | Allowlisted evidence tools, strict schemas, redaction, prompt versioning, structured cited report, evaluation harness and persistent independent Kill Switch (§8.10), STOP tests. No autonomous actions. |
 | **AI Phase B — optional Bedrock inference and approved runbook retrieval** | **RESEARCHED only**. | Region/model/cost checks, approved small corpus; versioned citations, deterministic data precedence, prompt-injection fixtures, grounded output regression against baseline. Managed Knowledge Bases optional. |
 | **AI Phase C — optional AgentCore governance** | **RESEARCHED only**. | Verified Frankfurt feature/Runtime platform support, least-privilege roles, bounded Gateway read-only targets, target-side authorization, Kill Switch persistence, tracing and cost; local agent remains functional independently. |
@@ -571,15 +667,15 @@ Fixed, reproducible fixtures must be assembled from **actual observed faults** (
 
 ### 10.1 Next engineering gate — Observability 1, with the main DAG kept separate
 
-**Starting checkpoint:** `53ebc5f` pushed to `feature/nyc-v2` on 2026-10-25. The isolated Bronze smoke proof is available; the main `nyc_taxi_medallion_delta` remains unverified and must not be unpaused for diagnostics development.
+**Starting checkpoint:** `431d49d` pushed on 2026-10-26; Unit 1A delivered with 29 related passing tests. Unit 1B task reader and case packaging remain pending. The isolated Bronze smoke proof is available; the main `nyc_taxi_medallion_delta` remains unverified and must not be unpaused for diagnostics development.
 
-1. Implement **read-only** `get_run_evidence(dag_id, run_id)` and `get_task_attempts(dag_id, run_id, task_id?)` adapters over the already existing local Run Evidence V2 and Airflow task attempt sources. Scope all lookups to validated DAG/run identifiers; reject traversal/unbounded log reads and redact secrets.
+1. **Delivered:** `get_run_evidence(dag_id, run_id)` and `get_run_status_view(dag_id, run_id)`. **Next:** implement read-only `get_task_attempts(dag_id, run_id, task_id?)` over Airflow task attempt sources. Scope all lookups to validated DAG/run identifiers; reject traversal/unbounded log reads and redact secrets.
 2. First fixtures: `probe_20261020T182304Z` (success); `probe_retry_20261020T182846Z` (first attempt failed, ultimately succeeded); `probe_failure_20261020T183606Z` (terminal failure); `bronze_smoke_20261021_01` (real successful S3→Bronze). Preserve which facts come from Airflow versus lifecycle file and exact attempt/log refs. Do not copy private raw logs or auth caches into Git.
 3. Emit typed outcomes including `FOUND`, `NOT_FOUND`/`EVIDENCE_MISSING`, `UNAVAILABLE`, and `EVIDENCE_CONFLICT`; do not infer terminal truth from a single stale source. Start with small read-only normalized Python records and test contract/failure handling **before** adding optional append-only per-stage event telemetry.
-4. Add a minimal, **AI-OFF** Streamlit Diagnostics view only after adapter tests pass: run picker, timeline/stage/attempt view, evidence link, explicit unknown/error state. The LLM must not be required for identifying the first provable failure.
+4. After task reader tests and verified case packaging, add an **AI-OFF** Streamlit LIVE/REPLAY picker, frozen case provenance/hashes, stage/attempt and missing-evidence view. Do not block on an optional Fault Lab. The LLM must not be required for identifying the first provable failure.
 5. Keep the separate main-DAG gate visible: source-to-S3 upload, controlled XCom and full medallion/quality/export remain unverified and must be tested in a different, safety-scoped phase.
 
-**Observability 1 acceptance:** exact run identity and status from real evidence; retry attempt history preserved; conflicting/missing states clearly surfaced; no model calls or writes; deterministic tests (including malformed/out-of-scope identifiers), secret redaction, and no Docker/AWS secret material checked into Git. Prefer small, reviewable commits over an end-to-end agent implementation in one step.
+**Observability 1B/1C acceptance:** exact run identity and status from real evidence; retry attempt history preserved; conflicting/missing states clearly surfaced; no model calls or writes; deterministic tests (including malformed/out-of-scope identifiers), secret redaction, and no Docker/AWS secret material checked into Git. Prefer small, reviewable commits over an end-to-end agent implementation in one step.
 
 ### 10.2 Deterministic evidence and UI before AI
 
@@ -599,6 +695,21 @@ Fixed, reproducible fixtures must be assembled from **actual observed faults** (
 - Broader Silver temporal anomaly checks (old years, negative or implausible durations, legitimate cross-month trips) are a tracked **separate backlog**, not an excuse to delay Unit 3D.15.
 - CloudWatch/Spark health metrics, advanced lineage, richer incident indexing and Supervisor orchestration are incremental only after evidence, safety and cost need are demonstrated.
 
+### 10.5 Replay delivery sequence and acceptance gates (v1.6)
+
+| Gate | Deliverable | Acceptance / evidence |
+| --- | --- | --- |
+| **Unit 1A — COMPLETE** | `get_run_evidence`, error classification, `get_run_status_view` | Pushed `431d49d`; 29 related tests passed. No UI or task-attempt history claim. |
+| **Unit 1B — NEXT** | Read-only Airflow TaskInstance/attempt reader, bounded log references | Identity-scoped queries; retry-success vs terminal failure; skipped-branch correctness; no writes. Reuse patterns from `scripts/reconciliation_airflow.py`, **not** its apply/repair functions. |
+| **Unit 1C — first demo** | Capture/verify at least a baseline, a retry-success and a failed case; minimal private Streamlit LIVE/REPLAY page | Replay complete case while pipeline healthy; pinned hashes; provenance; no Airflow/AWS/model requirement; partial captures show limitations. |
+| **Unit 1D — AI MVP** | One read-only Investigator using the same case tools, plus Kill Switch | Manual replay investigation with evidence citations, hidden answer-key benchmark, rejection of unsafe actions, bounded inference cost. |
+| **Unit 1C-Lab — optional later** | One disposable fault recipe, isolated execution and capture | Strict preflight/deny paths, separate test credentials/volumes, bounded time/cleanup, zero modification to live main DAG/S3/Delta. |
+| **AgentCore / Supervisor** | Optional managed Runtime/Gateway or evaluation-gated multi-agent extension | Only after isolated local agent evaluation, official region/IAM/cost check and demonstrable benefit. |
+
+**First demo acceptance:** With the current real pipeline healthy, an operator chooses a previously recorded **verified** failing test case and inspects its original status/attempt evidence. The pipeline is not restarted. If the AI is disabled, deterministic findings remain readable. If an agent is enabled, one manual call investigates exactly that same immutable snapshot and cites evidence without being shown the hidden answer. Case type and any missing evidence are unmistakably disclosed.
+
+**Scope discipline:** Do not expand the Evidence Reader endlessly or require the Fault Lab before showing Replay. Verify the full main `nyc_taxi_medallion_delta` DAG in a **separate** controlled integration gate; no replay demo is evidence of main-DAG end-to-end success.
+
 ## 11. Explicit open decisions
 
 1. Final paid compute platform (Databricks or AWS-native) before deploying cloud Spark; diagnostics keeps adapter interfaces generic.
@@ -617,6 +728,8 @@ Fixed, reproducible fixtures must be assembled from **actual observed faults** (
 14. Approved inference/data processing geography and CloudWatch/KB retention, especially if V2 would otherwise force cross-region routing.
 15. Bedrock Guardrails configuration (content, sensitive information, optional compatible contextual grounding), moderation false-positive tolerances and independent evaluation against target-side IAM/Policy enforcement.
 16. Actual Worker authentication and expiry/refresh strategy for Unit 3D.15, and stage-scoped main DAG trigger/testing design that cannot accidentally export to legacy BigQuery.
+17. Case snapshot retention/privacy and which 2026-10-20 attempt logs are still available to capture; immutable revision and hidden evaluation-answer policy.
+18. Optional test-only LAB credentials, allowlisted recipes, isolated paths and cleanup gates.
 
 ## 12. Project evidence and maintenance rules
 
@@ -660,7 +773,7 @@ Original sections 1–12 derive from NYC V2 ADR v1 (2026-10-14), existing GitHub
 
 **Evidence precedence:** user-observed commands/tests for local engineering status; versioned project data/contracts for system truth; AWS official service docs for current product capabilities; workshop lab screenshots for patterns/examples only. Recheck volatile AWS feature availability, models, prices and quotas **at deployment time**. If those sources contradict each other, preserve the uncertainty and do not silently reinterpret it as success.
 
-## 14. Revision history and v1.5 decision record
+## 14. Revision history and v1.6 decision record
 
 | Version | Date | Architectural decision |
 | --- | --- | --- |
@@ -670,7 +783,8 @@ Original sections 1–12 derive from NYC V2 ADR v1 (2026-10-14), existing GitHub
 | v1.3 | 2026-10-17 | Mandatory independent single-agent Kill Switch with target-side enforcement. |
 | **v1.4** | **2026-10-20** | Integrate supplied Bedrock Workshop with 2026 product reality; no new Classic Agents; explicitly separate live evidence from stable RAG, deterministic Flow-inspired branch, layered Guardrails/IAM/Policy/Kill Switch, prompt provenance, updated feature-region/cost gates and then-current 3D.13/3D.14 checkpoints. |
 | **v1.5** | **2026-10-25** | Reconcile implemented Airflow S3→Bronze smoke, separated AWS LoginProvider caches and verified post-expiry access through `53ebc5f`; retain main-DAG NOT_VERIFIED; freeze the initial read-only evidence-adapter delivery without changing AI deployment decisions. |
+| **v1.6** | **2026-10-26** | Unit 1A validated through `431d49d`; explicit LIVE / REPLAY / LAB operating modes, provenance-labeled frozen Incident Library, replay-first AI demonstration and optional isolated Fault Lab. |
 
-**Compatibility:** v1.5 preserves v1.4 and v1.3 Kill Switch requirements, operator-control semantics, zero-agent-write posture, deferred Supervisor decision, stable-RAG/live-evidence separation and local-first cost posture. It does **not** require managed Knowledge Bases, Flows, Guardrails, AgentCore or paid LLM inference on the healthy NYC data path.
+**Compatibility:** v1.6 preserves v1.5/v1.4 and v1.3 Kill Switch requirements, operator-control semantics, zero-agent-write posture, deferred Supervisor decision, stable-RAG/live-evidence separation and local-first cost posture. It does **not** require managed Knowledge Bases, Flows, Guardrails, AgentCore or paid LLM inference on the healthy NYC data path.
 
-**Implementation truth at approval:** This v1.5 documentation revision does not itself alter NYC V2 source code, AWS infrastructure, IAM, Airflow DAGs or AI deployment. The verified live Bronze integration belongs to the independent 3D.15 smoke DAG; **main medallion DAG and AI Diagnostics/Investigator remain unimplemented or unverified at their respective scopes**. The immediate next new implementation is **Observability 1: deterministic read-only run and task-attempt evidence adapters**.
+**Implementation truth at approval:** This v1.6 ADR change does not alter pipeline executable code, AWS infrastructure, IAM, Airflow DAGs or deployed AI. **Unit 1A is implemented and related-tested**; **Unit 1B, Incident Library, Replay UI, Fault Lab, Investigator and Kill Switch remain unimplemented**. Main medallion DAG remains NOT_END_TO_END_VERIFIED. Candidate historical run IDs are not verified offline snapshots. Next implementation gate: **read-only Unit 1B Task Diagnostics**.
