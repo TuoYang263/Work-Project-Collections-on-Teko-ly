@@ -5,9 +5,19 @@ from typing import Any
 from scripts.run_evidence import load_run_evidence
 
 
+class EvidenceNotFoundError(FileNotFoundError):
+    """Requested Run Evidence does not exist"""
+
+    code = "NOT_FOUND"
+
 def get_run_evidence(dag_id: str, run_id: str) -> dict[str, Any]:
     """Load existing Run Evidence V2 for a specific DAG run."""
-    return load_run_evidence(
-        run_id,
-        dag_id=dag_id,
-    )
+    try:
+        return load_run_evidence(
+            run_id,
+            dag_id=dag_id,
+        )
+    except FileNotFoundError:
+        raise EvidenceNotFoundError(
+            "Run evidence not found"
+        ) from None

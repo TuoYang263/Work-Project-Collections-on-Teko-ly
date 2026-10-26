@@ -1,8 +1,12 @@
 """Tests for the read-only Diagnostics Evidence Reader."""
 
+import pytest
 from unittest.mock import patch
 
-from scripts.diagnostics.evidence_reader import get_run_evidence
+from scripts.diagnostics.evidence_reader import (
+    EvidenceNotFoundError,
+    get_run_evidence,
+)
 
 
 def test_get_run_evidence_delegates_to_v2_loader():
@@ -78,3 +82,18 @@ def test_wrong_dag_id_cannot_read_another_dag(tmp_path):
             get_run_evidence(
                 "nyc_lifecycle_probe", "nonexistent_run_002"
             )
+
+
+def test_missing_evidence_is_classified_as_not_found():
+    with patch(
+        "scripts.diagnostics.evidence_reader.load_run_evidence",
+        side_effect=FileNotFoundError,
+    ):
+        with pytest.raises(EvidenceNotFoundError) as exc_info:
+            get_run_evidence(
+                dag_id="nyc_lifecycle_probe",
+                run_id="nonexistent_run_003",
+            )
+
+    assert exc_info.value.code == "NOT_FOUND"
+    assert isinstance(exc_info.value, FileNotFoundError)
