@@ -1,6 +1,7 @@
 """Tests for the read-only Diagnostics Evidence Reader."""
 
 import pytest
+import json
 
 from functools import partial
 from unittest.mock import patch
@@ -10,6 +11,7 @@ from scripts.run_evidence import load_run_evidence, start_run_evidence
 from scripts.diagnostics.evidence_reader import (
     EvidenceInvalidError,
     EvidenceNotFoundError,
+    EvidenceConflictError,
     get_run_evidence,
 )
 
@@ -222,3 +224,42 @@ def test_invalid_evidence_status_is_rejected(status):
             get_run_evidence(dag_id=dag_id, run_id=run_id)
 
     assert exc_info.value.code == "INVALID_EVIDENCE"
+
+
+def test_identity_mismatch_is_classified_as_evidence_conflict(tmp_path):
+    dag_id = "nyc_lifecycle_probe"
+    run_id = "test_conflict_001"
+
+    contract = {
+        "mode": "incremental",
+        "logical_window": {},
+        "read_scope": {},
+        "write_scope": "window_replace",
+        "rerun_semantics": "idempotent",
+    }
+
+    start_run_evidence(
+        run_id,
+        contract,
+        dag_id=dag_id,
+        directory=tmp_path,
+    )
+
+    evidence_files = list((tmp_path / "v2").glob("*.json"))
+    assert len(evidence_files) == 1
+
+    evidence_file = evidence_files[0]
+    record = json.loads(evidence_file.read_text(encoding="utf-8"))
+    record["run_id"] = "different_run_001"
+    evidence_file.write_text(json.dumps(record), encoding="utf-8")
+
+    with patch(
+        "scripts.diagnostics.evidence_reader.load_run_evidence",
+        new=partial(load_run_evidence, directory=tmp_path),
+    ):
+        with pytest.raises(EvidenceConflictError) as exc_info:
+            get_run_evidence(dag_id=dag_id, run_id=run_id)
+
+    assert exc_info.value.code == "EVIDENCE_CONFLICT"
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert str(exc_info.value.__cause__) == "Run evidence identity mismatch"

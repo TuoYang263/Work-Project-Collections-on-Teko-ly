@@ -17,6 +17,11 @@ class EvidenceInvalidError(ValueError):
     code = "INVALID_EVIDENCE"
 
 
+class EvidenceConflictError(RuntimeError):
+    """Run Evidence identity or version does not match."""
+
+    code = "EVIDENCE_CONFLICT"
+
 def get_run_evidence(dag_id: str, run_id: str) -> dict[str, Any]:
     """Load existing Run Evidence V2 for a specific DAG run."""
     try:
@@ -44,4 +49,11 @@ def get_run_evidence(dag_id: str, run_id: str) -> dict[str, Any]:
     except UnicodeDecodeError as exc:
         raise EvidenceInvalidError(
             "Run evidence contains UTF-8 encoding"
+        ) from exc
+    except RuntimeError as exc:
+        if str(exc) != "Run evidence identity mismatch":
+            raise
+
+        raise EvidenceConflictError(
+            "Run evidence identity mismatch"
         ) from exc
