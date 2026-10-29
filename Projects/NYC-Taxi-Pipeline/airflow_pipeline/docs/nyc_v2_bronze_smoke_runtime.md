@@ -64,12 +64,12 @@ existing Delta table in the isolated smoke target.
 Do not delete the original Bronze table or blindly
 clear the smoke directory to rerun the DAG.
 
-## Remaining validation
+## Remaining validation (after the 2026-10-25 credential checkpoint)
 
-- Confirm credential renewal across token expiration.
-- Check cache file ACLs after credential refresh.
-- Validate recovery after restarting Docker and WSL.
-- Extend integration validation to Silver, Gold and Quality.
+- **Verified:** short-lived credential expiry followed by a successful **new Python process** LoginProvider/STS authentication in the same Worker container; see the measured checkpoint below.
+- **Still pending:** sustained authentication/refresh in a single long-running Worker process, and full login-session expiry recovery.
+- **Still pending:** automatic/operational cache ACL validation after future refreshes and reproducible Docker/WSL restart recovery.
+- **Separate main-DAG gate:** controlled Silver, Gold, Quality and serving integration remain unverified.
 - Keep AI Incident Investigator read-only initially.
 
 ## Credential lifecycle validation
@@ -107,3 +107,11 @@ server-side session state.
 
 Never commit credential caches or print session material.
 Production AWS deployments should use IAM roles instead.
+
+## Agent evaluation relationship (design note — 2026-10-29)
+
+The successful isolated `bronze_smoke_20261021_01` is a **candidate healthy baseline** for the future Incident Library / Agent Evaluation Harness (see `nyc_v2_agent_evaluation_learning_by_building_ADR.md`). It is **not** a failed incident, an AI demonstration, a verified immutable offline snapshot or evidence of main-DAG Silver/Gold/Quality completion.
+
+If an evaluation case is later captured from this run, preserve the original DAG/run identity, the verified input version, the 2,964,624-row / 21-column Bronze result and the exact stored evidence fingerprint. Only mark the case `SNAPSHOT_VERIFIED` after a redacted, hash-verified independent snapshot successfully replays without contacting live AWS/Airflow. Synthetic faults must use explicitly isolated fixtures or LAB resources and never modify the protected original Bronze table, Worker authentication caches or main medallion DAG.
+
+**Documentation note (2026-10-29):** This update reconciles the pending-validation list with the previously recorded 2026-10-25 credential evidence. It does not change runtime, credential ownership, protected Delta output, or the local recovery procedure. Unit 1B `f13890e` is a separate task-diagnostics delivery; this smoke remains only a candidate for Unit 1C capture.
