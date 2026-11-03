@@ -1,347 +1,122 @@
 # NYC Yellow Taxi Data Pipeline
 
-> This project focuses on demonstrating core batch pipeline patterns, while the telemetry project reflects a more production-oriented design with clearer trade-offs.
+This repository contains two related generations of a NYC Yellow Taxi data pipeline:
 
-This project implements a production-style data pipeline for NYC Yellow Taxi trip data.
+- **Legacy pipeline and dashboard:** Airflow, PySpark, Delta Lake, BigQuery and Streamlit. The original dashboard and supporting jobs remain in the repository.
+- **NYC V2 (in progress):** an AWS-first batch data platform using versioned S3 raw inputs, Airflow, PySpark/Delta Bronze–Silver–Gold processing, quality gates and read-only operational diagnostics. Redshift serving and an AI-assisted incident investigator are planned work, not deployed features.
 
-It ingests raw trip records, transforms them using PySpark, stores analytics-ready tables in BigQuery, and exposes key metrics through a Streamlit dashboard.
+The two tracks share code but do not have the same verification status. In particular, passing isolated tests does not establish that the full AWS V2 DAG has run successfully end to end.
 
-The system is fully containerized and orchestrated with Airflow.  
-Data processing, orchestration, and visualization are intentionally separated so that each layer can evolve or be migrated independently.
+## Verified milestones and current limits
 
-The pipeline follows a Medallion architecture **(Bronze → Silver → Gold)**.
+| Area | Evidence to date | Limit |
+| --- | --- | --- |
+| Versioned S3 raw ingestion | Object-version references, manifests, integrity checks and isolated tests | Does not imply a completed V2 production pipeline |
+| S3 to Delta Bronze | An isolated Airflow smoke run processed January 2024 NYC Yellow Taxi data: **2,964,624 rows**, **21 columns** | Local Spark compute and isolated Delta output; not an end-to-end main DAG run |
+| Bronze / Silver / Gold transformations | Transformation and quality-gate code with focused tests | Full V2 orchestration, Silver, Gold and serving integration remain unverified |
+| Run Evidence | Per-run V2 lifecycle records and read-only evidence/status adapters | Run-level status does not describe all task retries |
+| Task diagnostics | Read-only TaskInstance, TaskFail and attempt-log reference APIs; verified against a copied PostgreSQL 13 database | TaskInstance is a current snapshot, not a complete attempt history |
+| Incident Library (Unit 1C) | Pointer manifests, metadata hashes, private staging and scoped capture for three historical lifecycle-test runs | No published, independently verified or restorable incident snapshot yet |
+| Redshift | Intended V2 serving target | Not implemented or validated |
+| AI investigator, agents, Bedrock | Design and evaluation plan | Not implemented or validated |
 
-Raw data is ingested into a Bronze layer, cleaned and standardized in Silver, and aggregated into analytics-ready Gold tables.
+The isolated Bronze test and its limits are documented in [`airflow_pipeline/docs/nyc_v2_bronze_smoke_runtime.md`](airflow_pipeline/docs/nyc_v2_bronze_smoke_runtime.md). Incident preservation and agent evaluation are described in the Observability ADR and Agent Evaluation ADR under `airflow_pipeline/docs/`. Those documents distinguish proposed controls from implemented behavior.
 
-This structure makes the pipeline easier to reason about, extend, and migrate to managed platforms if needed.
-
----
-
-### Tech Stack
-
-- **Docker** – Isolates Airflow and Streamlit as independent services
-- **Airflow** – Orchestrates the end-to-end pipeline  
-- **PySpark** – Handles data cleaning and transformation beyond notebook scale  
-- **Delta Lake** – Supports Bronze / Silver / Gold layering and schema evolution  
-- **Google BigQuery** – Serves as the analytics warehouse
-- **Streamlit** – Provides a lightweight dashboard for key metrics
-
----
-
-### What Is Implemented
-
-- End-to-end ELT pipeline from raw data to analytics tables
-- Medallion architecture with Bronze, Silver, and Gold layers
-- Airflow DAGs for orchestration and scheduling
-- BigQuery tables for aggregated analytics
-- Streamlit dashboard for trend analysis and zone-level insights
-
----
-
-### System Architecture
-
-The pipeline is designed as a set of loosely coupled layers.  
-Each layer has a clear responsibility, which simplifies debugging, testing, and future migration.
-
-1. **Raw Data Ingestion**  
-   Monthly NYC Yellow Taxi trip data is downloaded as Parquet files.  
-   The ingestion step is parameterized by year and month.
-
-2. **Transformation with PySpark**  
-   Data is cleaned and standardized using PySpark, including filtering invalid records and deriving time-based features.
-
-3. **Analytics Storage in BigQuery**  
-   Cleaned and aggregated datasets are written to BigQuery for downstream analytics.
-
-4. **Orchestration with Airflow**  
-   The full pipeline is orchestrated using Airflow DAGs, with each step running as an isolated task.
-
-5. **Visualization with Streamlit**  
-   A Streamlit dashboard queries BigQuery directly to visualize trends and zone-level activity.
-
----
-
-### Live Demo (Streamlit Cloud)
-
-The Streamlit dashboard is deployed on Streamlit Cloud and connects directly to BigQuery. The dashboard is backed by preprocessed summary tables rather than raw trip-level data to keep queries fast and costs predictable.
-
-Live demo:
-https://nyc-taxi-dashboard-render.onrender.com
-
-The deployment uses a read-only service account configured via Streamlit Secrets.  
-No local credentials or Docker setup are required to access the dashboard.
-
-This project is primarily intended as a portfolio and demo system.
-The live dashboard represents the main entry point for reviewers.
-
----
-
-### Operational note – Render free instance cold start
-
-This dashboard is hosted on Render using a free instance.
-
-Free instances may spin down after a period of inactivity. When this happens, the next incoming request can take longer while the container starts again.
-
-To reduce cold-start delays during demos or reviews, a lightweight keep-alive mechanism is configured:
-
-- a scheduled GitHub Actions workflow periodically sends an HTTP request to the public URL
-- an external uptime monitor performs additional periodic checks
-
-These requests do not modify application state. They simply ensure the container is started in advance of interactive use.
-
-Typical behavior:
-
-- if the service is already running, requests return immediately
-- if the service has spun down, the request triggers container startup
-- once started, normal response times resume
-
-This setup is intentionally minimal and intended to improve responsiveness for demonstration purposes. Availability characteristics ultimately depend on the hosting platform.
-
----
-
-### Local Setup
-
-This project was developed and tested on **Windows 11 using WSL2 (Ubuntu)**, which provides a Linux-compatible environment inside Windows.  
-If you're using **macOS** or **Linux**, you can skip WSL and run everything directly in your terminal.
-
-All components—Airflow, PySpark, and Streamlit—are containerized using Docker Compose, so you don’t need to install them manually.
-
----
-
-#### Prerequisites
-
-Make sure the following are installed:
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)  
-- [Python 3.10+](https://www.python.org/) (only if running any standalone scripts)
-- [Google Cloud SDK](https://cloud.google.com/sdk) (`gcloud` CLI)
-- A Google Cloud project with BigQuery enabled
-- A BigQuery dataset (create manually or let the script handle it)
-
----
-
-#### Setup Steps
-
-1. **Clone the repository**
-
-   ```bash
-   git clone https://github.com/your-username/nyc-taxi-pipeline.git
-   cd nyc-taxi-pipeline
-   ```
-
-2. **Copy and configure environment files**
-
-   Create your own `.env` file:
-   ```bash
-   cp .env.example .env
-   ```
-
-   Then set your local user ID (optional, improves file permissions in WSL/Linux):
-   ```bash
-   export AIRFLOW_UID=$(id -u)
-   ```
-
-   Copy your GCP service account key (downloaded from Google Cloud Console):
-   ```bash
-   cp creds/gcp_example_account.example.json creds/gcp_service_account.json
-   ```
-
-3. **Start the application stack**
-   Build and run all services with Docker Compose:
-   ```bash
-   docker compose up --build
-   ```
-
-4. **Access the local services**
-   - **Airflow UI**: [http://localhost:18080](http://localhost:18080)
-     *(username/password: `airflow` / `airflow`)
-   - **Streamlit Dashboard**: [http://localhost:8700](http://localhost:8700)
-
----
-
-### Configuration Overview
-
-The project separates configuration into two layers:
-
-- **Environment variables**  
-  Used for secrets and runtime-specific values (e.g. GCP credentials).
-
-- **YAML configuration files**  
-  Used for pipeline parameters such as time range, Spark settings, and target tables.
-
-This separation keeps sensitive values out of source control while allowing the pipeline behavior to be adjusted without code changes.
-
----
-
-### Containerization and CI
-
-Docker is used to ensure local reproducibility of the pipeline components.  
-Airflow and Streamlit run as isolated services via Docker Compose during development.
-
-Optional CI workflows are included to support image builds, but containerization is primarily used as a development and testing tool.
-
----
-
-### Local Run (Optional Quick Start Without Docker)
-
-If you want to run parts of the pipeline locally without Docker (for quick testing or debugging), here’s how:
-
-#### Run Airflow DAG Components
-
-You can run and debug individual DAG steps directly using:
-
-```bash
-python airflow_pipeline/scripts/main_debug.py
-```
-
-Make sure you have:
-- Installed all dependencies from `airflow_pipeline/requirements.txt`
-- Set up `.env` and `settings.yaml` in the `airflow_pipeline/config/ directory`
-
-#### Run Streamlit Dashboard
-To launch the Streamlit dashboard independently:
-
-```bash
-cd streamlit_app
-streamlit run app.py
-```
-
-Make sure:
-- Your `.env` file contains the correct BigQuery credentials
-- The summary table already exists in BigQuery
-- You’ve installed all dependencies from `streamlit_app/requirements.txt`
-
-This is a lightweight way to test the core features without spinning up Docker.
-
----
-
-### Deployment Pitfalls and Design Decisions
-
-Several design decisions were made during development to reduce operational risk and simplify deployment:
-
-- **Credential handling**  
-  A single `GOOGLE_APPLICATION_CREDENTIALS` convention is used across Airflow and Streamlit to avoid container-specific path issues.
-
-- **Configuration strategy**  
-  Non-sensitive settings (such as dataset location) are defined in YAML files instead of environment variables to reduce runtime ambiguity.
-
-- **Local vs cloud execution**  
-  The pipeline runs fully in Docker for local reproducibility, while the Streamlit Cloud deployment relies on managed secrets and direct BigQuery access.
-
----
-
-### Project Structure
-
-The repository is organized to reflect a modular and production-like data engineering pipeline. Here's a quick overview of the main components:
+## Architecture
 
 ```text
-Project Structure
+NYC TLC monthly Parquet
+         |
+         v
+S3 raw object + VersionId + manifest
+         |
+         v
+Airflow-controlled ingestion -> Delta Bronze -> Silver -> Gold
+                                                |
+                                                v
+                                         Gold quality checks
+                                                |
+                                   planned Redshift serving
 
-.github/workflows/                # CI setup for GitHub Actions (optional)
-├── docker.yml                    # Auto-build Docker image and push on commit
-├── wake_streamlit.yml            # Scheduled lightweight ping to reduce Streamlit Cloud cold-start delay
-
-.streamlit/                       # Streamlit UI configuration
-├── config.toml                   # Custom theme and layout settings
-
-airflow_pipeline/                 # Main directory for the Airflow ETL pipeline
-├── config/                       # Pipeline configuration files
-│   ├── airflow.cfg               # Airflow runtime settings
-│   └── settings.yaml             # Pipeline parameters (e.g., year/month)
-├── dags/                         # DAG definitions for Airflow
-│   ├── nyc_taxi_etl_dag.py       # Main DAG for NYC Yellow Taxi data pipeline
-│   └── nyc_taxi_medallion_dag.py # DAG: Bronze → Silver → Gold → Export
-│   
-├── data/                        # Local data storage
-│   ├── processed/               # Cleaned CSV outputs
-│   ├── raw/                     # Original monthly Parquet files
-│   └── tmp/                     # Intermediate temp files (optional)
-├── logs/                        # Logs generated during Airflow runs
-├── scripts/                     # Python helper modules used in DAG
-│   ├── delta_medallion_pipeline.py     # Medallion pipeline (Delta Lake)
-│   ├── config.py                # Loads .env and settings.yaml
-│   ├── get_bigquery_client.py   # Auth wrapper for BigQuery
-│   ├── load_nyc_yellow_taxi_data.py  # Downloads and saves monthly data
-│   ├── logger.py                # Custom logging utility
-│   ├── main_debug.py            # Local dev entry point for pipeline testing
-│   ├── sql_utils.py             # Run SQL queries (BigQuery)
-│   ├── transform_trip_data_spark.py  # Cleans data using PySpark
-│   └── upload_to_big_query.py   # Uploads results to BigQuery
-├── sql/                         # SQL scripts used in the pipeline
-│   ├── bq/
-│   │   └── create_trip_summary_hourly.sql  # Creates hourly summary table in BigQuery
-│   └── raw/
-│       └── trip_summary_hourly.sql         # DuckDB-based SQL for local test
-
-creds/                           # Local-only folder for GCP credentials
-└── gcp_service_account.example.json  # Example for service account key
-
-notebooks/                       # Jupyter notebooks for exploration
-├── 01_explore_raw_data.ipynb    # Schema, volume, and column analysis
-├── 02_transform_trip_summary.ipynb  # Local test of data cleaning logic
-└── 03_visualize_summary.ipynb   # Plots and KPIs (merged from previous 04)
-
-streamlit_app/                   # Interactive dashboard built with Streamlit
-├── external/                    # External resources (e.g. GeoJSON files)
-│   └── taxi_zones.geojson       # NYC taxi zones for map rendering
-├── pages/                       # Modular pages for dashboard
-│   ├── Trend_Viewer.py          # Plots hourly trends over time
-│   └── Zone_Heatmap.py          # Visualizes pickup/dropoff heatmap by zone
-├── utils/                       # Reusable functions for Streamlit app
-│   ├── config.py                # Loads config.yaml and env vars
-│   ├── get_bigquery_client.py   # BigQuery access for dashboard
-│   ├── logger.py                # Logger for diagnostics
-│   └── sql_utils.py             # Shared SQL execution tools
-├── config.yaml                  # Dashboard config (e.g., date range, metrics)
-├── app.py                       # Main app entry point (use: `streamlit run app.py`)
-├── .dockerignore                # Prevents cache and temp files in image
-├── Dockerfile                   # Dockerfile for dashboard deployment
-└── requirements.txt             # Required Python packages for dashboard
-
-.env.example                     # Template for environment variables
-.gitignore                       # Git exclusions
-docker-compose.yaml              # Main Docker orchestration file
-docker-compose.override.yaml     # Local override (ports, mounts, etc.)
-Makefile                         # CLI shortcuts (optional)
-pyproject.toml                   # Python project metadata
-README.md                        # This documentation
+Airflow Run Evidence ------+
+TaskInstance / TaskFail ---+--> read-only diagnostics
+Attempt log references ---+             |
+                                        v
+                            incident capture (in progress)
+                                        |
+                            verified snapshot + offline replay
+                                  (not yet delivered)
+                                        |
+                             read-only AI investigator
+                                  (not yet delivered)
 ```
 
----
- 
-### Possible Extensions
+The data plane is authoritative. A future AI investigator may explain evidence but must not change pipeline state, execute a recovery action, or override deterministic quality decisions.
 
-- Incremental loading using partitioned BigQuery tables
-- Migration of transformation logic to Databricks
-- Managed orchestration with Cloud Composer
+## Project layout
 
-The current structure was designed to support these extensions without major refactoring.
+```text
+Projects/NYC-Taxi-Pipeline/
+  airflow_pipeline/
+    dags/                     Airflow DAGs; includes isolated test DAGs
+    scripts/                  Ingestion, transformations, control and diagnostics
+    scripts/diagnostics/      Read-only evidence and incident modules
+    tests/                    Unit and targeted integration tests
+    docs/                     Design decisions and verification notes
+    config/                   Local runtime configuration
+    data/                     Local outputs; mostly excluded from Git
+  streamlit_app/              Legacy BigQuery-backed dashboard
+  docker-compose*.yaml        Local Airflow and isolated test environments
+  (repository root)/.github/workflows/  Active GitHub Actions for this monorepo
+```
 
----
+GitHub Actions must be created at the **monorepo root** `.github/workflows/`, not under this project folder. Historical workflow files under `Projects/NYC-Taxi-Pipeline/.github/workflows/` are not active GitHub Actions workflows.
 
-### Key Takeaways
+The large `delta_medallion_pipeline.py` remains the existing compute implementation. Its eventual split should follow verified interfaces rather than precede the remaining end-to-end checks.
 
-- Separating orchestration from transformation logic improves maintainability
-- Medallion architecture simplifies data quality control and extensibility
-- Local containerized development and cloud deployments require different assumptions
+## Local development and verification
 
----
+Developed on Windows with WSL Ubuntu, Python 3.11 and Docker. The Airflow runtime uses a container image with Airflow 2.8.1 and PostgreSQL 13 in the verified lifecycle-test environment. Your local WSL Python environment does not need to install Airflow for the focused incident tests.
 
-### Acknowledgements
+Clone the monorepo and change into the project directory:
 
-Special thanks to:
+```bash
+git clone https://github.com/TuoYang263/Work-Project-Collections-on-Teko-ly.git
+cd Work-Project-Collections-on-Teko-ly/Projects/NYC-Taxi-Pipeline
+```
 
-- NYC TLC for making the yellow taxi dataset publicly available  
-- Google Cloud’s generous free tier (BigQuery & Storage)  
-- Airflow & Streamlit communities for excellent documentation  
-- [DataTribe](https://github.com/datatribe-collective-labs/data-engineering-learnings/tree/main) for inspiring the capstone structure and workflow
+The following checks require only Python and `pytest`; they do not start a DAG or contact AWS:
 
----
+```bash
+PYTHONPATH=airflow_pipeline python -m pytest -q \
+  airflow_pipeline/tests/test_incident_manifest.py \
+  airflow_pipeline/tests/test_incident_capture.py \
+  airflow_pipeline/tests/test_incident_staging.py \
+  airflow_pipeline/tests/test_incident_db_capture.py \
+  airflow_pipeline/tests/test_incident_log_capture.py
+```
 
-### Contact
+Tests involving real S3, Spark/Delta or Airflow/PostgreSQL runtime have separate prerequisites and may have operational costs. Read their test/runbook instructions before execution. Do not start the main medallion DAG as part of a documentation or code review.
 
-Feel free to connect or share feedback:
+## Local runtime and credentials
 
-- **GitHub**: [tuo-yang](https://github.com/TuoYang263)  
-- **LinkedIn**: [tuo-yang-linkedin-profile](https://www.linkedin.com/in/tuo-yang-6b772b207/)
-- **Email**: yangtuomailbox@gmail.com
+The Docker Compose files are **development configurations**, not a production security baseline. Review bound ports, default passwords, session keys, mounted directories and active services before exposing anything beyond localhost.
+
+Never commit AWS login caches, cloud keys, `.env` files, private incident snapshots or original Airflow logs. In a deployed environment, replace local test credentials with managed identities and appropriately scoped roles. The current S3 and Delta smoke run has its own protected test storage and restart guidance in the runbook.
+
+## Legacy dashboard
+
+The original BigQuery-backed Streamlit dashboard remains in `streamlit_app/`. Its historical deployment URL, recorded in the older README, was:
+
+https://nyc-taxi-dashboard-render.onrender.com
+
+The link's present availability has not been verified as part of the NYC V2 architecture review. This dashboard is not evidence that Redshift serving or the AWS V2 main DAG has been deployed.
+
+## Before presenting the project
+
+- Distinguish **implemented and tested** components from planned architecture.
+- State whether a result came from a unit test, an isolated runtime check or a complete DAG run.
+- Describe the incident log artifacts as **bounded excerpts**, not full preserved logs.
+- Do not mark a historical incident `SNAPSHOT_VERIFIED` until publication, integrity verification, backup/restore and offline replay meet their acceptance checks.
+
+NYC Yellow Taxi data is published by the NYC Taxi & Limousine Commission (TLC).
