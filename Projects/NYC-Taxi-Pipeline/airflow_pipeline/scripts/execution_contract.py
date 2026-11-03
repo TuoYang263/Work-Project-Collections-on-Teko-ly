@@ -134,7 +134,7 @@ def build_current_execution_contract(
     dag_run_conf: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     conf = dict(dag_run_conf or {})
-    
+
     unsupported_overrides = sorted(
         WINDOW_OVERRIDE_KEYS.intersection(conf.keys())
     )
@@ -147,11 +147,14 @@ def build_current_execution_contract(
             f"{unsupported_overrides}"
         )
 
-    backfill_config = conf.get(
-        "backfill"
-    )
+    unknown_keys = sorted(set(conf) - {"backfill"})
+    if unknown_keys:
+        raise ValueError(
+            f"Unsupported DAG run configuration keys: {unknown_keys}"
+        )
 
-    if backfill_config is not None:
+    if "backfill" in conf:
+        backfill_config = conf["backfill"]
         if not isinstance(
             backfill_config,
             Mapping,
