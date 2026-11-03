@@ -1,5 +1,7 @@
-# nyc_taxi_medallion_dag.py
-# Airflow DAG: Medallion Pipeline with Delta Lake → export Gold summary to BigQuery
+"""NYC V2 medallion DAG: S3 raw input through validated Delta Gold.
+
+Serving is not part of this DAG yet. The legacy GCP pipeline remains separate.
+"""
 
 import os
 import sys
@@ -127,7 +129,7 @@ with DAG(
     on_success_callback=on_pipeline_success,
     on_failure_callback=on_pipeline_failure,
     default_args=default_args,
-    description="NYC Yellow Taxi Medallion Pipeline with Delta Lake",
+    description="NYC V2 S3-to-Delta Medallion; serving pending",
     schedule_interval=None,  # manual trigger for now
     catchup=False,
     max_active_runs=1,
@@ -211,21 +213,12 @@ with DAG(
         },
     )
 
-    export_bq = PythonOperator(
-        task_id="export_gold_to_bigquery",
-        python_callable=submit_stage,
-        op_kwargs={
-            "stage": "export",
-            "execution_contract": execution_contract.output,
-        },
-    )
-
     execution_contract >> route
 
-    # Full Refresh
+    # Full Refresh: quality is the terminal task until AWS serving exists.
     route >> raw_ingestion >> bronze
     bronze >> silver >> gold
-    gold >> quality_full_refresh >> export_bq
+    gold >> quality_full_refresh
 
     # Gold-only Backfill
     route >> gold_backfill
