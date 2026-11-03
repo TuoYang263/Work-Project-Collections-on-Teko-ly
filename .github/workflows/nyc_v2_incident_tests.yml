@@ -6,12 +6,12 @@ on:
     paths:
       - 'Projects/NYC-Taxi-Pipeline/airflow_pipeline/scripts/diagnostics/**'
       - 'Projects/NYC-Taxi-Pipeline/airflow_pipeline/tests/test_incident_*.py'
-      - 'Projects/NYC-Taxi-Pipeline/.github/workflows/nyc_v2_incident_tests.yml'
+      - '.github/workflows/nyc_v2_incident_tests.yml'
   pull_request:
     paths:
       - 'Projects/NYC-Taxi-Pipeline/airflow_pipeline/scripts/diagnostics/**'
       - 'Projects/NYC-Taxi-Pipeline/airflow_pipeline/tests/test_incident_*.py'
-      - 'Projects/NYC-Taxi-Pipeline/.github/workflows/nyc_v2_incident_tests.yml'
+      - '.github/workflows/nyc_v2_incident_tests.yml'
   workflow_dispatch:
 
 permissions:
