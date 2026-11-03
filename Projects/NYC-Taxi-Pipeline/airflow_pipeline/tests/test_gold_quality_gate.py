@@ -1,6 +1,7 @@
 
 from datetime import datetime
 from types import SimpleNamespace
+from scripts import delta_medallion_pipeline as pipeline
 
 import pytest
 
@@ -138,15 +139,10 @@ def test_remaining_gold_table_schemas(
     assert missing_key in str(exc_info.value)
 
 
-
 @pytest.fixture(scope="module")
 def spark():
-    session = (
-        SparkSession.builder
-        .master("local[2]")
-        .appName("GoldBusinessKeyTest")
-        .config("spark.ui.enabled", "false")
-        .getOrCreate()
+    session = pipeline.get_spark(
+        "GoldBusinessKeyTest"
     )
 
     yield session
