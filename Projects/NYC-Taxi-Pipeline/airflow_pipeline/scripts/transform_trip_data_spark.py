@@ -9,7 +9,7 @@ This script:
 - Normalizes column names and types (especially for integer vs. double mismatches)
 - Drops empty or duplicated columns (like duplicated Airport_fee)
 - Converts datetime columns
-- Filters out invalid rows (e.g., fare_amount <= 0)
+- Filters out invalid rows (e.g. fare_amount <= 0)
 - Returns a cleaned Spark DataFrame (or optionally save to local parquet)
 """
 
@@ -43,14 +43,42 @@ EXPECTED_FIELDS = [
     'total_amount', 'congestion_surcharge', 'airport_fee'
 ]
 
+# Fields consumed by the NYC V2 Gold aggregations.
+# Other TLC columns may vary across source months.
+REQUIRED_GOLD_INPUT_COLUMNS = frozenset({
+    'tpep_pickup_datetime',
+    'tpep_dropoff_datetime',
+    'pulocationid',
+    'dolocationid',
+    'passenger_count',
+    'trip_distance',
+    'fare_amount',
+    'tip_amount',
+    'total_amount',
+})
+
+
+def require_gold_input_columns(df: DataFrame) -> None:
+    missing = sorted(REQUIRED_GOLD_INPUT_COLUMNS - set(df.columns))
+    if missing:
+        raise ValueError(f"Silver is missing Gold input columns: {missing}")
+
+
+def require_nonempty_silver(df: DataFrame) -> None:
+    if df.limit(1).count() == 0:
+        raise ValueError("Silver cleaning produced no rows; refusing overwrite")
+
+
 def validate_schema(df: DataFrame, expected_fields: List[str]) -> None:
     """
     Print warning if excepted schema fields are missing or if extra fields are
     present. This does NOT stop execution; it's for debugging / data quality awareness.
     """
-    actual_fields = df.columns
-    missing = [col for col in expected_fields if col not in actual_fields]
-    extra = [col for col in actual_fields if col not in expected_fields]
+    normalize = lambda name: name.strip().lower().replace(" ", "_")
+    actual_fields = {normalize(name) for name in df.columns}
+    expected = {normalize(name) for name in expected_fields}
+    missing = sorted(expected - actual_fields)
+    extra = sorted(actual_fields - expected)
 
     if missing:
         logger.warning(f"Missing columns: {missing}")
@@ -155,15 +183,16 @@ def filter_invalid_rows(df: DataFrame) -> DataFrame:
     return df
 
 def transform_trip_data(df: DataFrame) -> DataFrame:
-    """
-    Full transformation pipeline
-    """
-    validate_schema(df, EXPECTED_FIELDS)  # Schema validation check
+    """Clean trips and reject data that cannot populate the Gold tables."""
+    validate_schema(df, EXPECTED_FIELDS)  # informational for optional TLC fields
 
     df = clean_column_names(df)
+    require_gold_input_columns(df)
     df = cast_column_types(df)
     df = drop_useless_columns(df)
+    require_gold_input_columns(df)
     df = filter_invalid_rows(df)
+    require_nonempty_silver(df)
     return df
 
 # ---------- Main Function ----------
@@ -216,4 +245,3 @@ def run_spark_transform_job(year, months):
 # ---------------------- Run Main ----------------------
 if __name__ == "__main__":
     run_spark_transform_job(2023, [1, 2, 3])
-    
