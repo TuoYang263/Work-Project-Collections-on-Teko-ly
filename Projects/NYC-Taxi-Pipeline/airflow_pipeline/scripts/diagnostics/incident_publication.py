@@ -476,6 +476,7 @@ def verify_published_snapshot(
     dag_id: str,
     run_id: str,
     revision: int,
+    include_verified_contents: bool = False,
 ) -> dict[str, Any]:
     """Verify a local archive against trusted external digests."""
 
@@ -646,8 +647,8 @@ def verify_published_snapshot(
             "Manifest identity or status mismatch"
         )
 
-    # 8. Return the local verification result.
-    return {
+    # 8. Reuse the very same validated bytes for offline replay.
+    result = {
         "archive_path": str(path),
         "case_id": run_id,
         "revision": revision,
@@ -656,3 +657,9 @@ def verify_published_snapshot(
         "snapshot_sha256": snapshot_digest,
         "manifest_sha256": manifest_digest,
     }
+    if include_verified_contents:
+        result["verified_contents"] = {
+            **contents,
+            "manifest.json": manifest_bytes,
+        }
+    return result
