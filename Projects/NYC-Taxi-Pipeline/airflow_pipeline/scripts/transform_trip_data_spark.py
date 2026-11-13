@@ -93,11 +93,38 @@ def validate_schema(df: DataFrame, expected_fields: List[str]) -> None:
 
 def clean_column_names(df: DataFrame) -> DataFrame:
     """
-    Standardize column names: lowercase, strip spaces, replace with underscores
+    Normalize column names and reject collisions
+    before renaming any columns.
     """
-    for col_name in df.columns:
-        new_name = col_name.strip().lower().replace(" ", "_")
-        df = df.withColumnRenamed(col_name, new_name)
+    normalized_columns = []
+    seen = {}
+
+    for original_name in df.columns:
+        normalized_name = (
+            original_name.strip()
+            .lower()
+            .replace(" ", "_")
+        )
+
+        if normalized_name in seen:
+            raise ValueError(
+                "Silver column normalization collision: "
+                f"{seen[normalized_name]!r} and "
+                f"{original_name!r} both normalize to "
+                f"{normalized_name!r}"
+            )
+
+        seen[normalized_name] = original_name
+        normalized_columns.append(
+            (original_name, normalized_name)
+        )
+
+    for original_name, normalized_name in normalized_columns:
+        df = df.withColumnRenamed(
+            original_name,
+            normalized_name,
+        )
+
     return df
 
 def cast_column_types(df: DataFrame) -> DataFrame:
