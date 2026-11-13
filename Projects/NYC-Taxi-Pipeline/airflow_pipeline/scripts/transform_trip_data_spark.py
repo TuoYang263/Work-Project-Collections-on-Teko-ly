@@ -170,17 +170,39 @@ def drop_useless_columns(df: DataFrame) -> DataFrame:
 
 def filter_invalid_rows(df: DataFrame) -> DataFrame:
     """
-    Filter out clearly invalid records (e.g. negative fare or distance)
+    Filter out invalid trip records:
+    - Non-positive fare, distance, passenger count or total
+    - Missing pickup/dropoff timestamps
+    - Dropoff not later than pickup
     """
     if 'fare_amount' in df.columns:
         df = df.filter(col('fare_amount') > 0)
+
     if 'trip_distance' in df.columns:
         df = df.filter(col('trip_distance') > 0)
+
     if 'passenger_count' in df.columns:
         df = df.filter(col('passenger_count') > 0)
+
     if 'total_amount' in df.columns:
         df = df.filter(col('total_amount') > 0)
+
+    # Validate trip timestamps
+    if (
+        'tpep_pickup_datetime' in df.columns
+        and 'tpep_dropoff_datetime' in df.columns
+    ):
+        df = df.filter(
+            col('tpep_pickup_datetime').isNotNull()
+            & col('tpep_dropoff_datetime').isNotNull()
+            & (
+                col('tpep_dropoff_datetime')
+                > col('tpep_pickup_datetime')
+            )
+        )
+
     return df
+
 
 def transform_trip_data(df: DataFrame) -> DataFrame:
     """Clean trips and reject data that cannot populate the Gold tables."""
