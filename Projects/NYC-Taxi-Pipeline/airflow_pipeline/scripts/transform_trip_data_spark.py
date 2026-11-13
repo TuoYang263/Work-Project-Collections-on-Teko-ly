@@ -200,6 +200,14 @@ def filter_invalid_rows(df: DataFrame) -> DataFrame:
                 > col('tpep_pickup_datetime')
             )
         )
+    
+    # Validate pickup and dropoff location IDs
+    for zone_col in ('pulocationid', 'dolocationid'):
+        if zone_col in df.columns:
+            df = df.filter(
+                col(zone_col).isNotNull()
+                & (col(zone_col) > 0)
+            )
 
     return df
 
