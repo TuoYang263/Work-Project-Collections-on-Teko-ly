@@ -341,11 +341,11 @@ def run_gold_quality_gate(
         validate_gold_airport_direction(df)
 
 
-
 def validate_all_gold_tables(
     spark: SparkSession,
     table_paths: dict[str, str],
     execution_contract: dict,
+    table_versions: dict[str, int] | None = None,
 ) -> None:
     """
     Validate all six Gold Delta tables.
@@ -363,6 +363,21 @@ def validate_all_gold_tables(
             f"unexpected={sorted(actual - expected)}"
         )
 
+    if table_versions is not None:
+        if not isinstance(table_versions, dict):
+            raise ValueError("Invalid Gold table_versions")
+
+        if set(table_versions) != expected:
+            raise ValueError(
+                "Gold table version mapping mismatch"
+            )
+
+        for name, version in table_versions.items():
+            if type(version) is not int or version < 0:
+                raise ValueError(
+                    f"Invalid Delta version for {name}: {version}"
+                )
+
     logical_window = execution_contract["logical_window"]
     write_scope = execution_contract["write_scope"]
 
@@ -375,11 +390,15 @@ def validate_all_gold_tables(
         )
 
     for table_name in GOLD_TABLE_CONTRACTS:
-        df = (
-            spark.read
-            .format("delta")
-            .load(table_paths[table_name])
-        )
+        reader = spark.read.format("delta")
+
+        if table_versions is not None:
+            reader = reader.option(
+                "versionAsOf",
+                table_versions[table_name],
+            )
+
+        df = reader.load(table_paths[table_name])
 
         validate_gold_schema(df, table_name)
 
