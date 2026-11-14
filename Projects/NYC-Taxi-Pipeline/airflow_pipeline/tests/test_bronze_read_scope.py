@@ -249,3 +249,59 @@ def test_bronze_reads_s3_resolved_parquet(tmp_path, monkeypatch):
     assert bronze.count() == 1
     assert "pickup_day" in bronze.columns
     assert bronze.select("PULocationID").first()[0] == 100
+
+    from pyspark.sql import functions as F
+    from pyspark.sql.types import TimestampNTZType
+
+    # Both TLC business-time columns must remain timezone-naive.
+    for name in (
+        "tpep_pickup_datetime",
+        "tpep_dropoff_datetime",
+    ):
+        assert isinstance(
+            bronze.schema[name].dataType,
+            TimestampNTZType,
+        ), f"{name} must use TIMESTAMP_NTZ"
+
+    # Business clock time must be independent of session timezone.
+    original_tz = spark.conf.get(
+        "spark.sql.session.timeZone"
+    )
+
+    observed = {}
+
+    try:
+        for timezone in ("UTC", "America/New_York"):
+            spark.conf.set(
+                "spark.sql.session.timeZone",
+                timezone,
+            )
+
+            row = bronze.select(
+                F.date_format(
+                    "tpep_pickup_datetime",
+                    "yyyy-MM-dd HH:mm:ss",
+                ).alias("pickup"),
+                F.date_format(
+                    "tpep_dropoff_datetime",
+                    "yyyy-MM-dd HH:mm:ss",
+                ).alias("dropoff"),
+            ).first()
+
+            observed[timezone] = (
+                row["pickup"],
+                row["dropoff"],
+            )
+    finally:
+        spark.conf.set(
+            "spark.sql.session.timeZone",
+            original_tz,
+        )
+
+    expected = (
+        "2024-01-15 10:00:00",
+        "2024-01-15 10:20:00",
+    )
+
+    assert observed["UTC"] == expected
+    assert observed["America/New_York"] == expected

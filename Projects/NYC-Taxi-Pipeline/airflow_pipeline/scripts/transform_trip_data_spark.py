@@ -131,9 +131,31 @@ def cast_column_types(df: DataFrame) -> DataFrame:
     for col_name in LONG_COLUMNS:
         if col_name in df.columns:
             df = df.withColumn(col_name, col(col_name).cast(LongType()))
+
     for col_name in TIMPSTAMP_COLUMNS:
-        if col_name in df.columns:
-            df = df.withColumn(col_name, col(col_name).cast(TimestampType()))
+        if col_name not in df.columns:
+            continue
+
+        data_type = df.schema[col_name].dataType
+
+        # Preserve NYC local business time.
+        if isinstance(data_type, TimestampNTZType):
+            continue
+
+        # Support string inputs used by existing tests.
+        if isinstance(data_type, StringType):
+            df = df.withColumn(
+                col_name,
+                col(col_name).cast("timestamp_ntz"),
+            )
+            continue
+
+        # Do not silently reinterpret legacy TIMESTAMP data.
+        raise ValueError(
+            f"Silver requires TIMESTAMP_NTZ or string: "
+            f"{col_name}, got {data_type.simpleString()}"
+        )
+
     return df
 
 

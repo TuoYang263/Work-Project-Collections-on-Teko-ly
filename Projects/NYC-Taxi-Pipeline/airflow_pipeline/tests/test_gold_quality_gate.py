@@ -811,3 +811,58 @@ def test_full_refresh_accepts_all_six_tables(spark):
 
     assert set(reader.loaded) == set(paths.values())
     assert len(reader.loaded) == 6
+
+
+def test_hourly_ntz_logical_window_across_timezones(spark):
+    window = {
+        "start": "2023-03-12",
+        "end_exclusive": "2023-03-13",
+    }
+
+    valid = spark.sql("""
+        SELECT
+            CAST(
+                '2023-03-12 02:30:00' AS TIMESTAMP_NTZ
+            ) AS pickup_hour,
+            1L AS trip_count
+    """)
+
+    invalid = spark.sql("""
+        SELECT
+            CAST(
+                '2023-03-13 00:00:00' AS TIMESTAMP_NTZ
+            ) AS pickup_hour,
+            1L AS trip_count
+    """)
+
+    original_tz = spark.conf.get(
+        "spark.sql.session.timeZone"
+    )
+
+    try:
+        for timezone in ("UTC", "America/New_York"):
+            spark.conf.set(
+                "spark.sql.session.timeZone",
+                timezone,
+            )
+
+            validate_gold_logical_window(
+                valid,
+                "trip_summary_hourly",
+                window,
+            )
+
+            with pytest.raises(
+                ValueError,
+                match="rule=LOGICAL_WINDOW",
+            ):
+                validate_gold_logical_window(
+                    invalid,
+                    "trip_summary_hourly",
+                    window,
+                )
+    finally:
+        spark.conf.set(
+            "spark.sql.session.timeZone",
+            original_tz,
+        )

@@ -270,7 +270,7 @@ def validate_gold_logical_window(
     # Hourly summaries use timestamps.
     # Daily summaries use dates.
     column_type = (
-        "timestamp"
+        "timestamp_ntz"
         if table_name == "trip_summary_hourly"
         else "date"
     )
@@ -408,7 +408,7 @@ def validate_all_gold_tables(
             )
 
             column_type = (
-                "timestamp"
+                "timestamp_ntz"
                 if table_name == "trip_summary_hourly"
                 else "date"
             )

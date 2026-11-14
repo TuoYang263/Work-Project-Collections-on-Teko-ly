@@ -13,7 +13,7 @@ from typing import List
 
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import TimestampType
+from pyspark.sql.types import TimestampNTZType
 
 # --- Make parent (project root) importable ---
 CURRENT_DIR = os.path.dirname(__file__)
@@ -351,12 +351,30 @@ def write_bronze(
     )
 
     if has_pickup and "tpep_pickup_datetime" in bronze_df.columns:
+        # TLC business timestamps must preserve local clock time.
+        for name in (
+            "tpep_pickup_datetime",
+            "tpep_dropoff_datetime",
+        ):
+            if name not in bronze_df.columns:
+                raise ValueError(
+                    f"Missing required Bronze timestamp: {name}"
+                )
+
+            if not isinstance(
+                bronze_df.schema[name].dataType,
+                TimestampNTZType,
+            ):
+                raise ValueError(
+                    f"Bronze requires TIMESTAMP_NTZ: {name}"
+                )
+
+        # Keep original NTZ values; derive the local business date.
         bronze_df = bronze_df.withColumn(
-            "tpep_pickup_datetime", F.col("tpep_pickup_datetime").cast(TimestampType())
+            "pickup_day",
+            F.to_date(F.col("tpep_pickup_datetime")),
         )
-        bronze_df = bronze_df.withColumn(
-            "pickup_day", F.to_date(F.col("tpep_pickup_datetime"))
-        )
+
         writer = (
             bronze_df.write.mode("overwrite")
             .format("delta")
@@ -399,20 +417,23 @@ def write_silver() -> str:
 
 def build_hourly_summary(df: DataFrame) -> DataFrame:
     """
-    Build the Gold hourly trip summary from an already-filtered
-    Silver trip DataFrame.
+    Build hourly Gold summary using NYC local business time.
 
-    Grain:
-        One row per pickup_hour.
+    pickup_hour remains TIMESTAMP_NTZ.
     """
+    pickup = F.col("tpep_pickup_datetime")
+
+    hour_start = F.make_timestamp_ntz(
+        F.year(pickup),
+        F.month(pickup),
+        F.dayofmonth(pickup),
+        F.hour(pickup),
+        F.lit(0),
+        F.lit(0),
+    )
+
     return (
-        df.withColumn(
-            "pickup_hour",
-            F.date_trunc(
-                "hour",
-                F.col("tpep_pickup_datetime"),
-            ),
-        )
+        df.withColumn("pickup_hour", hour_start)
         .groupBy("pickup_hour")
         .agg(
             F.count("*").alias("trip_count"),
@@ -433,13 +454,15 @@ def filter_timestamp_window(
     window_end_exclusive: str,
 ) -> DataFrame:
     """
-    Filter rows using half-open window semantics:
-
-        window_start <= timestamp < window_end_exclusive
+    Filter NYC local business time using
+    half-open [start, end) NTZ boundaries.
     """
+    start = F.lit(window_start).cast("timestamp_ntz")
+    end = F.lit(window_end_exclusive).cast("timestamp_ntz")
+
     return df.filter(
-        (F.col(timestamp_column) >= F.lit(window_start).cast("timestamp"))
-        & (F.col(timestamp_column) < F.lit(window_end_exclusive).cast("timestamp"))
+        (F.col(timestamp_column) >= start)
+        & (F.col(timestamp_column) < end)
     )
 
 
@@ -850,6 +873,26 @@ def build_airport_flow_daily(
     )
 
 
+def local_trip_duration_minutes():
+    """
+    Calculate wall-clock duration from NYC local timestamps.
+
+    This is not guaranteed to equal actual elapsed time
+    across daylight-saving transitions.
+    """
+    duration = (
+        F.col("tpep_dropoff_datetime")
+        - F.col("tpep_pickup_datetime")
+    )
+
+    return (
+        F.extract(F.lit("DAY"), duration) * 1440.0
+        + F.extract(F.lit("HOUR"), duration) * 60.0
+        + F.extract(F.lit("MINUTE"), duration)
+        + F.extract(F.lit("SECOND"), duration) / 60.0
+    )
+
+
 def build_airport_economics_daily(
     pickup_df: DataFrame,
     dropoff_df: DataFrame,
@@ -891,14 +934,14 @@ def build_airport_economics_daily(
     def add_trip_duration(
         source_df: DataFrame,
     ) -> DataFrame:
-        return source_df.withColumn(
-            "trip_duration_minutes",
-            (
-                F.col("tpep_dropoff_datetime").cast("long")
-                - F.col("tpep_pickup_datetime").cast("long")
+        return (
+            source_df
+            .withColumn(
+                "trip_duration_minutes",
+                local_trip_duration_minutes(),
             )
-            / 60.0,
-        ).filter(F.col("trip_duration_minutes") > 0)
+            .filter(F.col("trip_duration_minutes") > 0)
+        )
 
     departure_base = add_trip_duration(pickup_df)
 
@@ -1009,11 +1052,7 @@ def build_od_corridor_daily(
         )
         .withColumn(
             "trip_duration_minutes",
-            (
-                F.col("tpep_dropoff_datetime").cast("long")
-                - F.col("tpep_pickup_datetime").cast("long")
-            )
-            / 60.0,
+            local_trip_duration_minutes(),
         )
         .filter((F.col("trip_duration_minutes") > 0) & (F.col("trip_distance") > 0))
         .withColumn(

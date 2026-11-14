@@ -1,12 +1,14 @@
 import pytest
 
 from pyspark.sql import functions as F
+from pyspark.sql.types import TimestampNTZType
 
 from scripts import delta_medallion_pipeline as pipeline
 
 from scripts.delta_medallion_pipeline import (
     build_zone_flow_imbalance,
     filter_timestamp_window,
+    build_hourly_summary,
 )
 
 
@@ -325,3 +327,169 @@ def test_airport_economics_uses_direction_specific_windows(
             "DEPARTURE",
         ): 1,
     }
+
+
+def test_gold_hourly_preserves_ntz_across_timezones(spark):
+    rows = [
+        ("before_dst_jump", "2023-03-12 01:30:00"),
+        ("after_dst_jump", "2023-03-12 03:30:00"),
+        ("outside_window", "2023-04-01 00:00:00"),
+    ]
+
+    raw = spark.createDataFrame(
+        rows,
+        ["case_id", "pickup_raw"],
+    )
+
+    df = (
+        raw
+        .withColumn(
+            "tpep_pickup_datetime",
+            F.col("pickup_raw").cast("timestamp_ntz"),
+        )
+        .withColumn("fare_amount", F.lit(10.0))
+        .withColumn("tip_amount", F.lit(2.0))
+        .withColumn("passenger_count", F.lit(1))
+        .withColumn("trip_distance", F.lit(3.0))
+    )
+
+    original_tz = spark.conf.get(
+        "spark.sql.session.timeZone"
+    )
+
+    expected = {
+        ("2023-03-12 01:00:00", 1),
+        ("2023-03-12 03:00:00", 1),
+    }
+
+    try:
+        for timezone in ("UTC", "America/New_York"):
+            spark.conf.set(
+                "spark.sql.session.timeZone",
+                timezone,
+            )
+
+            filtered = filter_timestamp_window(
+                df,
+                timestamp_column="tpep_pickup_datetime",
+                window_start=WINDOW_START,
+                window_end_exclusive=WINDOW_END_EXCLUSIVE,
+            )
+
+            hourly = build_hourly_summary(filtered)
+
+            assert isinstance(
+                hourly.schema["pickup_hour"].dataType,
+                TimestampNTZType,
+            ), f"Gold pickup_hour must remain NTZ: {timezone}"
+
+            actual = {
+                (row["hour"], row["trip_count"])
+                for row in hourly.select(
+                    F.date_format(
+                        "pickup_hour",
+                        "yyyy-MM-dd HH:mm:ss",
+                    ).alias("hour"),
+                    "trip_count",
+                ).collect()
+            }
+
+            assert actual == expected
+
+    finally:
+        spark.conf.set(
+            "spark.sql.session.timeZone",
+            original_tz,
+        )
+
+
+def test_ntz_window_is_timezone_invariant_at_dst_gap(spark):
+    raw = spark.createDataFrame(
+        [
+            ("before", "2023-03-12 01:59:59"),
+            ("inside", "2023-03-12 02:30:00"),
+            ("end", "2023-03-12 03:00:00"),
+        ],
+        ["case_id", "event_raw"],
+    )
+
+    df = raw.withColumn(
+        "event_time",
+        F.col("event_raw").cast("timestamp_ntz"),
+    )
+
+    original_tz = spark.conf.get(
+        "spark.sql.session.timeZone"
+    )
+
+    try:
+        for timezone in ("UTC", "America/New_York"):
+            spark.conf.set(
+                "spark.sql.session.timeZone",
+                timezone,
+            )
+
+            filtered = filter_timestamp_window(
+                df,
+                timestamp_column="event_time",
+                window_start="2023-03-12 02:00:00",
+                window_end_exclusive="2023-03-12 03:00:00",
+            )
+
+            actual = {
+                row["case_id"]
+                for row in filtered.select("case_id").collect()
+            }
+
+            assert actual == {"inside"}, (
+                f"NTZ window changed under {timezone}: {actual}"
+            )
+
+    finally:
+        spark.conf.set(
+            "spark.sql.session.timeZone",
+            original_tz,
+        )
+
+
+@pytest.mark.parametrize(
+    "pickup, dropoff, expected",
+    [
+        (
+            "2023-02-16 10:00:00",
+            "2023-02-16 10:20:00",
+            20.0,
+        ),
+        (
+            "2023-03-31 23:50:00",
+            "2023-04-01 00:10:00",
+            20.0,
+        ),
+        (
+            "2023-03-12 01:30:00",
+            "2023-03-12 03:30:00",
+            120.0,
+        ),
+    ],
+)
+def test_local_trip_duration_minutes(
+    spark, pickup, dropoff, expected
+):
+    df = spark.range(1).select(
+        F.lit(pickup)
+        .cast("timestamp_ntz")
+        .alias("tpep_pickup_datetime"),
+        F.lit(dropoff)
+        .cast("timestamp_ntz")
+        .alias("tpep_dropoff_datetime"),
+    )
+
+    result = df.select(
+        pipeline.local_trip_duration_minutes().alias(
+            "duration_minutes"
+        )
+    ).first()
+
+    assert abs(
+        float(result["duration_minutes"]) - expected
+    ) < 0.000001
