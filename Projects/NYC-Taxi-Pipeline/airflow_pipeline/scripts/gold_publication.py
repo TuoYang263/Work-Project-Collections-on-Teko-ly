@@ -74,6 +74,7 @@ def activate_gold_release(
         spark=spark,
         table_paths=table_paths,
         execution_contract=execution_contract,
+        table_versions=versions_before,
     )
 
     # Detect candidate changes during validation.

@@ -74,6 +74,9 @@ def test_valid_candidate_activates_manifest(tmp_path, monkeypatch):
     current = json.loads(active.read_text())
 
     assert len(calls) == 1
+    assert calls[0]["table_versions"] == {
+        name: 0 for name in GOLD_TABLE_CONTRACTS
+    }
     assert set(calls[0]["table_paths"]) == set(GOLD_TABLE_CONTRACTS)
     assert calls[0]["execution_contract"] == CONTRACT
     assert current == result
