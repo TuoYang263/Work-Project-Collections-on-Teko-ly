@@ -10,6 +10,7 @@ import sys
 import time
 from functools import reduce
 from typing import List
+from pathlib import Path
 
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
@@ -102,6 +103,55 @@ GOLD_WINDOW_COLUMNS = {
     "airport_economics_daily": "service_day",
     "od_corridor_daily": "service_day",
 }
+
+
+DEFAULT_GOLD_PATHS = {
+    "trip_summary_hourly": GOLD_SUMMARY_HOURLY,
+    "zone_summary_pickup_daily": GOLD_ZONE_PICKUP_DAILY,
+    "zone_summary_dropoff_daily": GOLD_ZONE_DROPOFF_DAILY,
+    "flow_imbalance_daily": GOLD_FLOW_IMBALANCE_DAILY,
+    "airport_economics_daily": GOLD_AIRPORT_ECONOMICS_DAILY,
+    "od_corridor_daily": GOLD_OD_CORRIDOR_DAILY,
+}
+
+
+def resolve_gold_output_paths(
+    execution_contract: dict,
+    *,
+    candidate_root: str | None = None,
+) -> dict[str, str]:
+    """Resolve Gold write paths without writing any data."""
+
+    if candidate_root is None:
+        return dict(DEFAULT_GOLD_PATHS)
+
+    if execution_contract.get("write_scope") != "FULL_TABLE_OVERWRITE":
+        raise ValueError("Gold candidates require FULL_TABLE_OVERWRITE")
+
+    if not isinstance(candidate_root, str) or not candidate_root.strip():
+        raise ValueError("candidate_root must be a non-empty path")
+
+    root = Path(candidate_root).expanduser().resolve()
+
+    candidate_paths = {name: str(root / name) for name in DEFAULT_GOLD_PATHS}
+
+    for name, raw_path in candidate_paths.items():
+        target = Path(raw_path)
+
+        for legacy_path in DEFAULT_GOLD_PATHS.values():
+            legacy = Path(legacy_path).resolve()
+
+            if target == legacy or target in legacy.parents or legacy in target.parents:
+                raise ValueError(f"Candidate path overlaps legacy Gold data: {name}")
+
+        if target.exists():
+            raise ValueError(f"Candidate output already exists: {name}")
+
+    if root.exists():
+        raise ValueError(f"Candidate root already exists: {root}")
+
+    return candidate_paths
+
 
 AIRPORT_ZONE_CODES = {
     "JFK Airport": "JFK",
@@ -357,17 +407,13 @@ def write_bronze(
             "tpep_dropoff_datetime",
         ):
             if name not in bronze_df.columns:
-                raise ValueError(
-                    f"Missing required Bronze timestamp: {name}"
-                )
+                raise ValueError(f"Missing required Bronze timestamp: {name}")
 
             if not isinstance(
                 bronze_df.schema[name].dataType,
                 TimestampNTZType,
             ):
-                raise ValueError(
-                    f"Bronze requires TIMESTAMP_NTZ: {name}"
-                )
+                raise ValueError(f"Bronze requires TIMESTAMP_NTZ: {name}")
 
         # Keep original NTZ values; derive the local business date.
         bronze_df = bronze_df.withColumn(
@@ -461,8 +507,7 @@ def filter_timestamp_window(
     end = F.lit(window_end_exclusive).cast("timestamp_ntz")
 
     return df.filter(
-        (F.col(timestamp_column) >= start)
-        & (F.col(timestamp_column) < end)
+        (F.col(timestamp_column) >= start) & (F.col(timestamp_column) < end)
     )
 
 
@@ -541,6 +586,7 @@ def write_gold(
     execution_contract: dict,
     hourly_only: bool = False,
     hourly_output_path: str | None = None,
+    candidate_root: str | None = None,
 ) -> dict:
     """
     Build Gold Delta tables:
@@ -551,6 +597,20 @@ def write_gold(
     - airport_economics_daily
     - od_corridor_daily
     """
+    if candidate_root is not None and hourly_only:
+        raise ValueError("Candidate releases require all six Gold tables")
+
+    if candidate_root is not None and hourly_output_path is not None:
+        raise ValueError("hourly_output_path cannot be used with candidate_root")
+
+    output_paths = resolve_gold_output_paths(
+        execution_contract,
+        candidate_root=candidate_root,
+    )
+
+    if hourly_output_path is not None:
+        output_paths["trip_summary_hourly"] = hourly_output_path
+
     spark = get_spark("Gold Aggregate (Delta)")
     logger.info(
         f"[DEBUG] spark.sql.extensions = {spark.conf.get('spark.sql.extensions')}"
@@ -640,7 +700,7 @@ def write_gold(
         label="gold_hourly_summary",
     )
 
-    hourly_target = hourly_output_path or GOLD_SUMMARY_HOURLY
+    hourly_target = output_paths["trip_summary_hourly"]
 
     logger.info(f"[Gold] Writing hourly summary to: {hourly_target}")
 
@@ -677,12 +737,12 @@ def write_gold(
     )
 
     logger.info(
-        f"[Gold] Writing flow imbalance daily to: " f"{GOLD_FLOW_IMBALANCE_DAILY}"
+        f"[Gold] Writing flow imbalance daily to: {output_paths['flow_imbalance_daily']}"
     )
 
     write_delta_table(
         flow_imbalance,
-        target_path=GOLD_FLOW_IMBALANCE_DAILY,
+        target_path=output_paths["flow_imbalance_daily"],
         execution_contract=execution_contract,
         label="flow_imbalance_daily",
         window_column=GOLD_WINDOW_COLUMNS["flow_imbalance_daily"],
@@ -696,12 +756,12 @@ def write_gold(
     )
 
     logger.info(
-        f"[Gold] Writing airport economics daily to: " f"{GOLD_AIRPORT_ECONOMICS_DAILY}"
+        f"[Gold] Writing airport economics daily to: {output_paths['airport_economics_daily']}"
     )
 
     write_delta_table(
         airport_economics,
-        target_path=GOLD_AIRPORT_ECONOMICS_DAILY,
+        target_path=output_paths["airport_economics_daily"],
         execution_contract=execution_contract,
         label="airport_economics_daily",
         window_column=GOLD_WINDOW_COLUMNS["airport_economics_daily"],
@@ -713,11 +773,13 @@ def write_gold(
         spark,
     )
 
-    logger.info(f"[Gold] Writing OD corridor daily to: " f"{GOLD_OD_CORRIDOR_DAILY}")
+    logger.info(
+        f"[Gold] Writing OD corridor daily to: {output_paths['od_corridor_daily']}"
+    )
 
     write_delta_table(
         od_corridor,
-        target_path=GOLD_OD_CORRIDOR_DAILY,
+        target_path=output_paths["od_corridor_daily"],
         execution_contract=execution_contract,
         label="od_corridor_daily",
         window_column=GOLD_WINDOW_COLUMNS["od_corridor_daily"],
@@ -762,22 +824,22 @@ def write_gold(
 
     write_zone_summary(
         "pickup",
-        GOLD_ZONE_PICKUP_DAILY,
+        output_paths["zone_summary_pickup_daily"],
         pickup_window_df,
     )
     write_zone_summary(
         "dropoff",
-        GOLD_ZONE_DROPOFF_DAILY,
+        output_paths["zone_summary_dropoff_daily"],
         dropoff_window_df,
     )
 
     return {
         "hourly_summary": hourly_target,
-        "zone_pickup_daily": GOLD_ZONE_PICKUP_DAILY,
-        "zone_dropoff_daily": GOLD_ZONE_DROPOFF_DAILY,
-        "flow_imbalance_daily": GOLD_FLOW_IMBALANCE_DAILY,
-        "airport_economics_daily": GOLD_AIRPORT_ECONOMICS_DAILY,
-        "od_corridor_daily": GOLD_OD_CORRIDOR_DAILY,
+        "zone_pickup_daily": output_paths["zone_summary_pickup_daily"],
+        "zone_dropoff_daily": output_paths["zone_summary_dropoff_daily"],
+        "flow_imbalance_daily": output_paths["flow_imbalance_daily"],
+        "airport_economics_daily": output_paths["airport_economics_daily"],
+        "od_corridor_daily": output_paths["od_corridor_daily"],
     }
 
 
@@ -880,10 +942,7 @@ def local_trip_duration_minutes():
     This is not guaranteed to equal actual elapsed time
     across daylight-saving transitions.
     """
-    duration = (
-        F.col("tpep_dropoff_datetime")
-        - F.col("tpep_pickup_datetime")
-    )
+    duration = F.col("tpep_dropoff_datetime") - F.col("tpep_pickup_datetime")
 
     return (
         F.extract(F.lit("DAY"), duration) * 1440.0
@@ -934,14 +993,10 @@ def build_airport_economics_daily(
     def add_trip_duration(
         source_df: DataFrame,
     ) -> DataFrame:
-        return (
-            source_df
-            .withColumn(
-                "trip_duration_minutes",
-                local_trip_duration_minutes(),
-            )
-            .filter(F.col("trip_duration_minutes") > 0)
-        )
+        return source_df.withColumn(
+            "trip_duration_minutes",
+            local_trip_duration_minutes(),
+        ).filter(F.col("trip_duration_minutes") > 0)
 
     departure_base = add_trip_duration(pickup_df)
 
