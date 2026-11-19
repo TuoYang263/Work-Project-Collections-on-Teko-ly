@@ -35,6 +35,7 @@ from scripts.run_lifecycle import (
     mark_pipeline_success,
     mark_pipeline_failure,
 )
+from scripts.gold_release_plan import build_gold_release_spec
 
 from scripts import get_logger  # or scripts.logger, both ok
 
@@ -105,6 +106,19 @@ def route_execution(
         return "gold_backfill_delta"
 
     raise ValueError(f"Unsupported execution mode: {mode!r}")
+
+
+def prepare_gold_release(**context):
+    dag_run = context.get("dag_run")
+
+    if dag_run is None:
+        raise ValueError("Gold release requires an Airflow DAG run")
+
+    return build_gold_release_spec(
+        dag_id=dag_run.dag_id,
+        run_id=dag_run.run_id,
+        base_dir=project_config.BASE_DIR,
+    )
 
 
 def on_pipeline_success(context):
@@ -186,22 +200,32 @@ with DAG(
         },
     )
 
+    release_spec = PythonOperator(
+        task_id="prepare_gold_release",
+        python_callable=prepare_gold_release,
+        retries=0,
+    )
+
     gold = PythonOperator(
         task_id="gold_aggregate_delta",
         python_callable=submit_stage,
         op_kwargs={
             "stage": "gold",
             "execution_contract": execution_contract.output,
+            "release_spec": release_spec.output,
         },
+        retries=0,
     )
 
-    quality_full_refresh = PythonOperator(
-        task_id="quality_full_refresh",
+    publish_full_refresh = PythonOperator(
+        task_id="publish_full_refresh",
         python_callable=submit_stage,
         op_kwargs={
-            "stage": "quality",
+            "stage": "publish",
             "execution_contract": execution_contract.output,
+            "release_spec": release_spec.output,
         },
+        retries=0,
     )
 
     quality_backfill = PythonOperator(
@@ -217,8 +241,8 @@ with DAG(
 
     # Full Refresh: quality is the terminal task until AWS serving exists.
     route >> raw_ingestion >> bronze
-    bronze >> silver >> gold
-    gold >> quality_full_refresh
+    bronze >> silver >> release_spec >> gold
+    gold >> publish_full_refresh
 
     # Gold-only Backfill
     route >> gold_backfill

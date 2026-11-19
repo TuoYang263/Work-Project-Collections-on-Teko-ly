@@ -1411,9 +1411,51 @@ def silver_task(
 
 def gold_task(
     execution_contract: dict,
+    release_spec: dict | None = None,
     **_,
 ):
+    candidate_root = None
+
+    if release_spec is not None:
+        if execution_contract.get("mode") != "CONFIGURED_FULL_REFRESH":
+            raise ValueError("Candidate routing supports configured full refresh only")
+
+        if not isinstance(release_spec, dict):
+            raise ValueError("release_spec must be a dictionary")
+
+        candidate_root = release_spec["candidate_root"]
+
     return write_gold(
+        execution_contract=execution_contract,
+        candidate_root=candidate_root,
+    )
+
+
+def publish_gold_task(
+    execution_contract: dict,
+    release_spec: dict,
+    **_,
+):
+    """Validate the six candidate tables, then activate the manifest."""
+
+    if (
+        execution_contract.get("mode") != "CONFIGURED_FULL_REFRESH"
+        or execution_contract.get("write_scope") != "FULL_TABLE_OVERWRITE"
+    ):
+        raise ValueError("Gold publication requires configured full refresh")
+
+    if not isinstance(release_spec, dict):
+        raise ValueError("Missing Gold release specification")
+
+    from scripts.gold_publication import activate_gold_release
+
+    spark = get_spark("NYC Gold Candidate Publication")
+
+    return activate_gold_release(
+        spark,
+        release_id=release_spec["release_id"],
+        candidate_root=release_spec["candidate_root"],
+        active_manifest=release_spec["active_manifest"],
         execution_contract=execution_contract,
     )
 

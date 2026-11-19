@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, Mapping
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
 LOGGER = logging.getLogger(__name__)
 
 STAGE_FUNCTIONS = {
@@ -19,6 +18,7 @@ STAGE_FUNCTIONS = {
     "silver": "silver_task",
     "gold": "gold_task",
     "quality": "quality_task",
+    "publish": "publish_gold_task",
     "export": "export_bq_all_task",
 }
 
@@ -28,19 +28,43 @@ def validate_stage(stage: str) -> None:
         raise ValueError(f"Unsupported pipeline stage: {stage}")
 
 
+def validate_release_spec(
+    stage: str,
+    release_spec: Mapping[str, Any] | None,
+) -> None:
+    if release_spec is not None:
+        if stage not in {"gold", "publish"}:
+            raise ValueError("Release specification supports gold/publish only")
+
+        if not isinstance(release_spec, Mapping):
+            raise ValueError("release_spec must be an object")
+
+        required = {
+            "release_id",
+            "candidate_root",
+            "active_manifest",
+        }
+
+        if set(release_spec) != required or any(
+            not isinstance(release_spec[key], str) or not release_spec[key].strip()
+            for key in required
+        ):
+            raise ValueError("Invalid release specification")
+
+    if stage == "publish" and release_spec is None:
+        raise ValueError("publish requires release_spec")
+
+
 def submit_stage(
     stage: str,
     execution_contract: Mapping[str, Any],
     raw_references: list[dict] | None = None,
+    release_spec: Mapping[str, Any] | None = None,
 ) -> None:
-    """Airflow-facing entry point. No Spark imports here."""
-    validate_stage(stage)
+    """Airflow entry point; Spark runs in a child process."""
 
-    contract_json = json.dumps(
-        dict(execution_contract),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
+    validate_stage(stage)
+    validate_release_spec(stage, release_spec)
 
     command = [
         sys.executable,
@@ -48,7 +72,11 @@ def submit_stage(
         "scripts.pipeline_runner",
         stage,
         "--execution-contract-json",
-        contract_json,
+        json.dumps(
+            dict(execution_contract),
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
     ]
 
     if raw_references is not None:
@@ -66,10 +94,19 @@ def submit_stage(
             ]
         )
 
-    LOGGER.info(
-        "Submitting pipeline stage=%s",
-        stage,
-    )
+    if release_spec is not None:
+        command.extend(
+            [
+                "--release-spec-json",
+                json.dumps(
+                    dict(release_spec),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            ]
+        )
+
+    LOGGER.info("Submitting pipeline stage=%s", stage)
 
     subprocess.run(
         command,
@@ -82,9 +119,12 @@ def execute_stage(
     stage: str,
     execution_contract: Mapping[str, Any],
     raw_references: list[dict] | None = None,
+    release_spec: Mapping[str, Any] | None = None,
 ) -> None:
-    """Child-process entry point. Import compute code only here."""
+    """Child process: import compute code only here."""
+
     validate_stage(stage)
+    validate_release_spec(stage, release_spec)
 
     pipeline = importlib.import_module("scripts.delta_medallion_pipeline")
 
@@ -100,8 +140,10 @@ def execute_stage(
     if raw_references is not None:
         if stage != "bronze":
             raise ValueError("Raw references are supported only for Bronze")
-
         task_kwargs["raw_references"] = raw_references
+
+    if release_spec is not None:
+        task_kwargs["release_spec"] = dict(release_spec)
 
     task(**task_kwargs)
 
@@ -113,14 +155,16 @@ def main() -> None:
         "stage",
         choices=tuple(STAGE_FUNCTIONS),
     )
-
     parser.add_argument(
         "--execution-contract-json",
         required=True,
     )
-
     parser.add_argument(
         "--raw-references-json",
+        default=None,
+    )
+    parser.add_argument(
+        "--release-spec-json",
         default=None,
     )
 
@@ -131,7 +175,7 @@ def main() -> None:
     if not isinstance(execution_contract, dict):
         raise ValueError("Execution contract must be a JSON object")
 
-    raw_references = None
+    kwargs = {}
 
     if args.raw_references_json is not None:
         raw_references = json.loads(args.raw_references_json)
@@ -143,13 +187,21 @@ def main() -> None:
         ):
             raise ValueError("Raw references must be a non-empty list of objects")
 
-        if args.stage != "bronze":
-            raise ValueError("Raw references are supported only for Bronze")
+        kwargs["raw_references"] = raw_references
+
+    if args.release_spec_json is not None:
+        release_spec = json.loads(args.release_spec_json)
+
+        validate_release_spec(
+            args.stage,
+            release_spec,
+        )
+        kwargs["release_spec"] = release_spec
 
     execute_stage(
         args.stage,
         execution_contract,
-        raw_references=raw_references,
+        **kwargs,
     )
 
 
