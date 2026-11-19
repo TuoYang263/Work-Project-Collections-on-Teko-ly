@@ -582,6 +582,30 @@ def write_delta_table(
     raise ValueError("Unsupported write_scope for Delta writer: " f"{write_scope!r}")
 
 
+def require_nyc_local_timestamps(
+    df: DataFrame,
+    *,
+    layer: str,
+) -> None:
+    """Reject data that does not preserve NYC local clock time."""
+
+    for name in (
+        "tpep_pickup_datetime",
+        "tpep_dropoff_datetime",
+    ):
+        if name not in df.columns:
+            raise ValueError(f"{layer} missing required timestamp column: {name}")
+
+        actual_type = df.schema[name].dataType
+
+        if not isinstance(actual_type, TimestampNTZType):
+            raise ValueError(
+                f"{layer} requires TIMESTAMP_NTZ for {name}; "
+                f"found {actual_type.simpleString()}. "
+                "Rebuild from verified source data."
+            )
+
+
 def write_gold(
     execution_contract: dict,
     hourly_only: bool = False,
@@ -638,6 +662,11 @@ def write_gold(
         )
 
     df = spark.read.format("delta").load(SILVER_TRIPS)
+
+    require_nyc_local_timestamps(
+        df,
+        layer="Silver",
+    )
 
     # Minimal additional DQ filters (already mostly done in transform)
     filters = []

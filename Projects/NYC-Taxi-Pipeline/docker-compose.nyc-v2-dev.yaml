@@ -1,0 +1,39 @@
+
+services:
+  airflow-worker:
+    environment:
+      PYTHONPATH: "/opt/airflow"
+      AIRFLOW__CELERY__WORKER_CONCURRENCY: "1"
+
+      PYSPARK_SUBMIT_ARGS: >-
+        --master local[2]
+        --driver-memory 2g
+        --conf spark.sql.shuffle.partitions=8
+        pyspark-shell
+
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?Required}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?Required}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:?Required}
+      AWS_REGION: ${AWS_REGION:-eu-central-1}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-eu-central-1}
+      NYC_V2_RAW_BUCKET: ${NYC_V2_RAW_BUCKET:?Required}
+      AWS_EC2_METADATA_DISABLED: "true"
+
+    volumes:
+      - nyc-v2-delta:/opt/airflow/data/delta
+
+  airflow-scheduler:
+    volumes:
+      - nyc-v2-delta:/opt/airflow/data/delta
+
+  airflow-dag-processor:
+    volumes:
+      - nyc-v2-delta:/opt/airflow/data/delta
+
+  airflow-cli:
+    volumes:
+      - nyc-v2-delta:/opt/airflow/data/delta
+
+volumes:
+  nyc-v2-delta:
+    name: nyc-v2-delta
