@@ -1,9 +1,11 @@
 # NYC V2 — Cost-Aware Workload Routing (ADR CW-01)
 
 **Date:** 2026-11-04  
-**Status:** Architecture direction accepted for planning; **NOT IMPLEMENTED**  
+**Status:** Accepted historical architecture; offline Router V1 implemented, cloud execution/Serving still pending
 **Target branch:** `feature/nyc-v2`  
 **Scope:** AWS-first NYC Yellow Taxi V2 data plane, serving freshness, compute selection, and cost controls.
+
+**2026-11-20 checkpoint:** S3 Raw -> Bronze -> Silver -> six Gold -> certified Active Manifest completed a real Full Refresh. `scripts/workload_router.py` (`cw-v1.0`) now implements an offline fail-closed decision layer (`NO_COMPUTE`, `LOCAL_SPARK`, `BLOCKED_REVIEW`) with `auto_launch=False`. **Redshift Serving, Databricks execution, and live/static Dashboard modes remain to be implemented.** See [ADR SRV-01](nyc_v2_serving_and_cost_control_ADR.md) for the updated unified Compute/Serving Routing, public cache, warehouse publication and Terraform cost-control design.
 
 ## 1. Context and problem
 
