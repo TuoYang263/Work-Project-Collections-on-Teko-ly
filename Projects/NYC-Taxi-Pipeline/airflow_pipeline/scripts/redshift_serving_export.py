@@ -26,6 +26,7 @@ from pyspark.sql.types import (
 
 from scripts import config
 from scripts.delta_medallion_pipeline import get_spark
+from scripts.serving_snapshot_integrity import publish_seal
 from scripts.gold_quality_gate import (
     GOLD_TABLE_CONTRACTS,
     validate_gold_schema,
@@ -199,6 +200,10 @@ def export_gold_snapshot(
         exported = spark.read.parquet(str(output_path))
         row_count = exported.count()
 
+        # Count the pinned source as well; a partial Spark write must not pass.
+        if df.count() != row_count:
+            raise ValueError(f"Gold/export row count mismatch: {name}")
+
         if row_count == 0:
             raise ValueError(f"Empty serving snapshot: {name}")
 
@@ -216,10 +221,12 @@ def export_gold_snapshot(
     if manifest_path.read_bytes() != original:
         raise RuntimeError("Active Gold Manifest changed during export")
 
-    (destination / "export_plan.json").write_text(
-        json.dumps(plan, indent=2),
-        encoding="utf-8",
-    )
+    temp_plan = destination / ".export_plan.json.tmp"
+    temp_plan.write_text(json.dumps(plan, indent=2), encoding="utf-8")
+    temp_plan.replace(destination / "export_plan.json")
+
+    # Exact file inventory is the final local publication marker.
+    publish_seal(destination)
 
     return plan
 
