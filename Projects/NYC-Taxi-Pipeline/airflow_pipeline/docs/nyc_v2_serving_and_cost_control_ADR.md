@@ -1,21 +1,26 @@
 # NYC V2 — Published Serving and Unified Cost Control (ADR SRV-01)
 
 **Date:** 2026-11-20
-**Status:** Accepted design; implementation is phased and **not yet complete**
+**Revision:** 2026-11-23 — scale-aware serving and cost-routing clarification
+**Status:** Accepted design; R1/R2 verified, R3 configured locally but not deployed, later Serving/Routing phases not implemented
 **Branch:** `feature/nyc-v2`
 **Related:** [ADR CW-01 — Cost-Aware Workload Routing](nyc_v2_cost_aware_workload_routing_ADR.md)
 
 ## 1. Context and current implementation checkpoint
 
-NYC V2 is an AWS-first, portfolio-scale data platform intended to demonstrate production-style engineering without leaving expensive cloud compute running without a business requirement.
+NYC V2 is an AWS-first, scale-oriented data platform. The three-month NYC TLC window is a **correctness and reproducibility baseline**, not the platform's intended data-volume ceiling.
 
-Verified at Git commit `5943086`:
+**Confirmed project evidence (as of 2026-11-23):**
 
-- A real Airflow Full Refresh completed: versioned S3 Raw -> local Spark Delta Bronze -> Silver -> six Gold tables -> Quality Gate -> published Active Gold Manifest.
-- NYC taxi business timestamps were verified as Spark `TIMESTAMP_NTZ` in Bronze/Silver and Gold hourly `pickup_hour`.
-- Gold tables are currently stored in the shared **Docker Linux volume**, not in a cloud-shared Delta Lake. This is not yet a Databricks-accessible data plane.
-- `scripts/workload_router.py` (`cw-v1.0`) is a **pure offline decision function**. It chooses `NO_COMPUTE`, `LOCAL_SPARK`, or `BLOCKED_REVIEW` for the supported intents and always returns `auto_launch=False`. It does not launch Airflow or cloud jobs.
-- Redshift COPY/publication, long-lived cached Dashboard, live Redshift SQL, and Databricks execution are **not yet verified implementations**. The existing Streamlit frontend still has legacy BigQuery-facing content.
+- The real Airflow Full Refresh succeeded for `[2023-01-01, 2023-04-01)`: versioned S3 Raw -> local Spark Delta Bronze -> Silver -> six Gold tables -> Quality Gate -> published Active Gold Manifest. The active release is `airflow-a521894129ca813bd8977d28`.
+- The isolated Silver full-scale validation reported 9,384,487 Bronze rows -> 8,807,293 Silver rows, 577,194 filtered and zero invalid output rows. These are historical observed results, not guaranteed outcomes for future windows.
+- **R1/R2 completed and pushed** at `56cf821` (2026-11-21): six verified Gold tables, 7 Parquet files (about 13.39 MiB), 6 Redshift COPY manifests, 1 release manifest, 14/14 S3 objects independently confirmed. The release is version-bound and immutable.
+- Gold Delta remains on the local Docker Linux volume. It is **not** yet a cloud-shared Delta Lake accessible to future distributed-compute backends.
+- `scripts/workload_router.py` (`cw-v1.0`) remains a **pure offline compute decision function**: `NO_COMPUTE`, `LOCAL_SPARK`, `BLOCKED_REVIEW`, always `auto_launch=False`. It is not wired to paid compute execution or Redshift Serving.
+- R3 Terraform network/IAM/Redshift declarations have passed **local** `fmt`/`validate` checks; S3 Remote Backend initialization succeeded. These are preparation steps, **not** Redshift provisioning. No `terraform apply`, Redshift COPY, live SQL, or Serving publication has been performed.
+- Redshift SQL Serving, published cached Dashboard, real Serving Router and Databricks execution remain planned. Do not describe them as operational.
+
+**Scale intent:** first demonstrate the complete, safe Serving path on the already-certified baseline; then run evidence-based 12-month and (if justified) multi-year scale experiments without discarding the baseline or bypassing release validation.
 
 ## 2. Architecture decision
 
@@ -74,6 +79,21 @@ Unified Router policy:
 
 The diagram describes the **target**. The S3 Serving, Redshift and public cached branches are planned work, not claims of deployed infrastructure.
 
+### Scale-aware capacity target (clarification, not an executed benchmark)
+
+The end-state is a platform capable of **multi-year batch ingestion, reliable transformation and cost-governed SQL Serving**. Scale the data and infrastructure based on measurements, not on a calendar or a fixed byte-count threshold.
+
+| Validation stage | Scope | Evidence to capture | Deployment status |
+|---|---|---|---|
+| **Baseline — complete** | Three months: 2023-01 to 2023-03 | Correctness, Airflow full refresh, pinned versions, Gold quality, immutable S3 export | R1/R2 verified |
+| **Scale 1 — candidate** | Twelve months of NYC TLC history | End-to-end runtime, raw and Gold sizes, rows, shuffle, retries/backfills, cost, capacity headroom | Not executed/approved |
+| **Scale 2 — conditional** | Three to five years, only if Scale 1 justifies it | Sustained capacity, scheduling, recovery, workload routing, price/performance | Not executed/approved |
+| **Serving benchmark — conditional** | Same certified Gold release, representative queries | Latency, concurrency, SQL flexibility, bytes transferred, total cost across cache/local SQL/Redshift | Not executed/approved |
+
+**Processing scale is not Serving scale.** Millions of raw trips can collapse into comparatively small Gold aggregates. A large Bronze input alone does not justify Redshift: decide from the **actual Gold size, query shape, concurrency, SLO and cost**. Benchmark candidate engines using the same release and equivalent SQL semantics. Athena/DuckDB are comparison candidates, not implemented NYC V2 routes or approved deployments.
+
+Preserve the current 3-month release as a reproducible regression baseline. Do not trigger another full refresh solely to exercise a new Serving backend.
+
 ## 4. Storage and public availability
 
 | Data product | Intended location | Lifecycle and purpose |
@@ -108,6 +128,22 @@ The existing `cw-v1.0` remains the verified baseline. Future extensions must bui
 **`NO_COMPUTE` means no new Gold calculation; it does not mean that every SQL query is free.** `CACHE_READ` and `REDSHIFT_QUERY` belong to the separate Serving decision.
 
 A future route decision records `policy_version`, product/window, input versions, Gold/Serving release IDs, freshness evidence, estimated cost, permission and approval state, reason codes and actual outcome. `DRY_RUN` never launches infrastructure. The current `publication_verified`, `freshness_verified` and related flags are **caller-provided assertions**, not automatic proof until real evidence verifiers exist.
+
+### Serving-route eligibility and cost evidence (target contract; not implemented in cw-v1.0)
+
+The router should separate *need to recompute Gold* from *need to serve an already certified result*. The existence of a Redshift Workgroup must never imply that queries should run on it.
+
+| Request / evidence | Proposed Serving decision | Rationale |
+|---|---|---|
+| Published, revision-matched chart result already available | `CACHE_READ` | No live warehouse compute or new Gold job |
+| Development or bounded local query experiment | Local SQL evaluation (candidate, not a formal V1 route) | Compare whether paid SQL adds measurable value |
+| Dynamic SQL, validated release, approved spend, warehouse available | `REDSHIFT_QUERY` | Use authorized, bounded interactive analytics when warranted |
+| New certified Gold release needs warehouse publication | `SERVING_REFRESH` with approval | COPY to separate release tables, validate before activation |
+| Missing quality/lineage/freshness/cost evidence, unsupported scope or failed approval | `BLOCKED_REVIEW` | Fail closed; never auto-provision paid resources |
+
+Record input release, query template and parameters, estimated/actual RPU-hours, cost assumptions, latency, concurrency, approval state and decision reason. Require representative measurements before declaring Redshift cheaper/faster than alternatives. A Dashboard page load must never auto-run Terraform, Spark, COPY or paid live SQL.
+
+**Stable fallback is not automatic rollback:** retaining the current `serving_release_id` Terraform default provides a known-good configuration input; it does not restore Redshift tables or change the active Serving pointer. Rollback requires existing validated release tables and tested publication/activation logic.
 
 ## 6. Serving publication contract
 
@@ -153,6 +189,14 @@ No fixed price or free-tier claim authorizes deployment. Before each paid AWS ex
 
 Terraform teardown must consider workgroup, namespace, snapshots, related networking and retained S3 objects; check the real billing state afterward. Destroying Redshift disables live SQL while the independently hosted public cache stays available. Do not issue `terraform apply/destroy` for every data request.
 
+### On-demand Redshift lifecycle (cost policy, not yet automated)
+
+Treat Redshift Serverless as a **real but optional Serving backend**. Infrastructure is declared through reviewed Terraform; requests are routed separately. Do not run `terraform apply`/`destroy` for each query or simply because a Dashboard is opened. An idle Workgroup normally does not bill active compute, but managed storage, secrets and other retained resources can still cost money; open transactions or repeated health checks can trigger compute billing.
+
+The initial R3 Terraform defaults currently target 4 base RPUs, 4 maximum RPUs, a daily 2 RPU-hour compute usage limit and `deactivate` on breach. **These are local declarations, not active AWS guardrails or a fixed monetary ceiling**. A first deployment requires separate account-specific Frankfurt pricing confirmation, explicit spend approval, reviewed `plan`, verified IAM/network, and an emergency teardown/checklist. Keep AWS Budgets and usage alerts as defense-in-depth, not a hard stop.
+
+Retain or destroy the Workgroup only after considering projected real usage, the cost of keeping validated warehouse tables, reinstatement time, and alternatives. Deleting the Namespace is a data-lifecycle decision with rollback consequences; it must never be silently triggered by Cost Routing.
+
 ## 8. Delivery order and acceptance evidence
 
 | Phase | Goal | Acceptance |
@@ -163,6 +207,8 @@ Terraform teardown must consider workgroup, namespace, snapshots, related networ
 | **R4** | Six-table COPY, SQL verification, approved publication | Failure/rollback tests, source release parity, query evidence |
 | **R5** | Working SQL prototype + small public cached Dashboard | Static mode survives Redshift shutdown; live SQL works only when enabled |
 | **R6** | Extend Router to Serving decisions | Tested evidence, approvals and no dashboard-triggered paid jobs |
+| **Scale validation (after R4 baseline)** | Expand to 12 months, then conditionally multi-year history | Correctness parity, elapsed time, recovery, query requirements and measured spend; no speculative scaling |
+| **Serving benchmark** | Compare cache/local query candidates with approved Redshift SQL | Equivalent-release query results, latency/concurrency and true cost evidence |
 | **Optional later** | Databricks heavy-compute routing | Shared durable lake storage, equivalent results, measured need and approved spend |
 
 No cloud provisioning is approved by this ADR. Keep existing YAML files until Redshift end-to-end verification, then perform repository cleanup with path/reference review.
@@ -175,6 +221,8 @@ No cloud provisioning is approved by this ADR. Keep existing YAML files until Re
 - No early React/other frontend rewrite before serving metrics are clear.
 - No extra orchestration microservice, multi-agent supervisor or RAG as a prerequisite.
 - No pretending a static cache is current for arbitrary ad hoc queries.
+- No claim that multi-year scale or Redshift price/performance has been validated before real benchmarks.
+- No production Redshift SQL use based solely on raw row count; Serving decisions require query and cost evidence.
 
 ## References
 
