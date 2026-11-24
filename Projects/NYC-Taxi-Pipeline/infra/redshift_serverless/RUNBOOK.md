@@ -192,7 +192,148 @@ Keep AWS credentials, Secrets Manager values, sensitive Terraform State and save
 4. **Networking details**: the Security Group has no ingress, HTTPS egress is S3-only, and first-created subnets temporarily inherit the main VPC route table before association. Validate actual routing after apply.
 5. **Full teardown untested**: clean removal, snapshots, administrator secret and billing are not yet verified. Do not claim zero ongoing cost until AWS inventory and delayed billing evidence support it.
 
-## 10. Reference docs
+## 10. Deployment Readiness Evidence — 2026-11-24
+
+### 10.1 Verified baseline
+
+| Verification Item | Result |
+|---|---|
+| Terraform CLI | v1.17.2 |
+| AWS Provider | v6.73.0 |
+| Minimum Terraform version | >= 1.11.0, < 2.0.0 |
+| Native S3 state locking compatibility | PASS |
+| Terraform formatting | PASS |
+| Terraform configuration validation | PASS |
+| Historical Terraform Plan | 15 add, 0 change, 0 destroy |
+| Deployment Role identity | PASS |
+| Default Network ACL review | PASS |
+| Main VPC route table review | PASS |
+| IAM lifecycle policy static review | PASS |
+| IAM lifecycle policy attachments | 4/4 verified |
+| COPY Role permissions boundary review | PASS |
+| Unexpected inline policies | None |
+| Redshift Service-linked Role | Created and verified |
+| Existing Redshift snapshots | None |
+
+### 10.2 IAM lifecycle verification
+
+The following customer-managed policies were inspected
+and confirmed attached to `NYCV2TerraformDeployRole`:
+
+- `NYCV2TerraformRedshiftLifecycle`
+- `NYCV2TerraformNetworkLifecycle`
+- `NYCV2TerraformCopyRoleLifecycle`
+- `NYCV2TerraformAdminSecretLifecycle`
+
+The following permissions boundary was also inspected:
+
+- `NYCV2RedshiftCopyBoundary`
+
+No unexpected inline policies were found on the
+deployment role.
+
+Static policy verification does not guarantee successful
+runtime authorization for all AWS API operations.
+
+### 10.3 Account-level service dependency
+
+The Redshift Service-linked Role was successfully
+bootstrapped and verified on 2026-11-24.
+
+- Role: `AWSServiceRoleForRedshift`
+- Trusted service: `redshift.amazonaws.com`
+- Managed policy: `AmazonRedshiftServiceLinkedRolePolicy`
+- Creation timestamp: `2026-11-24T18:41:43Z`
+
+This role is an account-level AWS service dependency.
+
+It is not managed by the temporary NYC V2 Terraform
+stack and must not be included in routine stack teardown.
+
+No additional permissions were granted to the Terraform
+Deployment Role during this bootstrap operation.
+
+### 10.4 Network verification
+
+The existing VPC main route table and default Network ACL
+were inspected.
+
+- Default Network ACL permits IPv4 inbound and outbound
+  traffic.
+- Existing main route table contains an Internet Gateway
+  route.
+- Dedicated private route table will be created by Terraform.
+- No NAT Gateway is planned.
+- Redshift public access remains disabled.
+- Enhanced VPC Routing remains enabled.
+- Security Group is designed for S3 HTTPS egress only.
+
+Actual routing, Security Group rules and S3 COPY
+connectivity must be verified after deployment.
+
+### 10.5 Budget and cost governance
+
+Budget status observed on 2026-11-24:
+
+| Metric | Value |
+|---|---:|
+| Monthly AWS Budget | USD 10.00 |
+| Observed actual spend | USD 0.002 |
+| Observed forecast spend | USD 0.002 |
+| Remaining reported budget | USD 9.998 |
+| Proposed first experiment budget | USD 2.00 |
+| Redshift base capacity | 4 RPU |
+| Redshift maximum capacity | 4 RPU |
+| Daily compute usage limit | 2 RPU-hours |
+| Usage limit breach action | deactivate |
+
+The proposed experiment budget requires explicit operator
+approval before deployment.
+
+AWS Budget notifications and Redshift usage limits are
+cost governance mechanisms, not absolute billing ceilings.
+
+Compute, managed storage, Secrets Manager, taxes and
+potential residual resource charges must be considered
+separately.
+
+Billing information may be delayed.
+
+### 10.6 Remaining runtime risks
+
+The following items remain unverified until controlled
+deployment and runtime acceptance:
+
+- Actual IAM create, update and delete authorization.
+- Actual private networking and S3 COPY connectivity.
+- COPY Role assumption and trust policy compatibility.
+- Usage limit creation and enforcement.
+- Managed administrator secret lifecycle.
+- Redshift Data API authentication and database permissions.
+- Partial deployment failure and recovery.
+- Complete resource teardown.
+- Residual resource and billing reconciliation.
+
+### 10.7 Deployment authorization status
+
+**Status: PRE-DEPLOYMENT / NOT APPROVED TO APPLY**
+
+- Infrastructure as Code: verified.
+- Static security and IAM review: completed.
+- Account-level service dependency: verified.
+- Budget headroom: verified against reported billing data.
+- Runtime deployment: not executed.
+- SQL and COPY execution: not executed.
+- Teardown validation: not executed.
+
+The successful completion of pre-deployment checks does
+not constitute authorization to create paid AWS resources.
+
+Explicit operator approval remains mandatory before
+running `terraform apply`, SQL/COPY operations or
+destructive infrastructure operations.
+
+## 11. Reference docs
 
 - [AWS: Redshift Serverless billing](https://docs.aws.amazon.com/redshift/latest/mgmt/serverless-billing.html)
 - [AWS: Redshift Serverless usage limits](https://docs.aws.amazon.com/redshift/latest/mgmt/serverless-workgroup-max-rpu.html)
