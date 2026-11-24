@@ -1,0 +1,29 @@
+# Terraform local cache
+.terraform/
+
+# Terraform State and backups
+*.tfstate
+*.tfstate.*
+
+# Private variable files
+*.tfvars
+*.tfvars.json
+
+# Plan files
+*.tfplan
+*.plan
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Local overrides
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Temporary lock information
+.terraform.tfstate.lock.info
+
+r3-safe-preflight.log
