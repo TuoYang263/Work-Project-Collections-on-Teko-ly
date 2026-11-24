@@ -1,7 +1,7 @@
 # NYC V2 — R3 Redshift Serverless Deployment & Teardown Runbook
 
 **Date:** 2026-11-24
-**Status:** PRE-DEPLOYMENT / **NOT APPROVED TO APPLY**
+**Status:** R3 LIFECYCLE VERIFIED / STACK DESTROYED / NO ACTIVE DEPLOYMENT
 **Scope:** `Projects/NYC-Taxi-Pipeline/infra/redshift_serverless/`
 **Branch:** `feature/nyc-v2`
 **Related ADR:** `airflow_pipeline/docs/nyc_v2_serving_and_cost_control_ADR.md` (SRV-01)
@@ -25,7 +25,7 @@ Evidence as of 2026-11-24:
 | EC2 dry runs | CreateSubnet, CreateSecurityGroup, CreateRouteTable, CreateVpcEndpoint: PASS |
 | AWS inventory | No Redshift namespaces, workgroups, usage limits, or VPC endpoints reported in the last preflight |
 | AWS Budget | $10 USD monthly, notifications >$5 / >$8 / >$10, 1 verified recipient, no service filter |
-| Live Redshift / R4 SQL | **Not created or tested** |
+| Live Redshift / R4 SQL | R3 infrastructure deployed and destroyed; R4 SQL/COPY not tested |
 
 ### Planned resources (15)
 
@@ -184,7 +184,7 @@ Review actual charges in AWS Cost Explorer/Billing after billing data updates. I
 
 Keep AWS credentials, Secrets Manager values, sensitive Terraform State and saved plan bytes **out of Git and public logs**. Never share `.terraform/`, `.tfstate`, `terraform.tfvars` or private credentials as review artifacts.
 
-## 9. Known open risks — blocking unconditional deployment approval
+## 9. Historical pre-deployment risks
 
 1. **IAM lifecycle authorization remains partly unverified**: EC2 route associations, egress-rule API, Redshift create/delete, IAM Role lifecycle and Secrets Manager integration have not been exercised against real resources.
 2. **Usage Limit timing gap**: the Workgroup may exist before limit creation; post-apply gate is mandatory.
@@ -192,7 +192,7 @@ Keep AWS credentials, Secrets Manager values, sensitive Terraform State and save
 4. **Networking details**: the Security Group has no ingress, HTTPS egress is S3-only, and first-created subnets temporarily inherit the main VPC route table before association. Validate actual routing after apply.
 5. **Full teardown untested**: clean removal, snapshots, administrator secret and billing are not yet verified. Do not claim zero ongoing cost until AWS inventory and delayed billing evidence support it.
 
-## 10. Deployment Readiness Evidence — 2026-11-24
+## 10. Historical Deployment Readiness Evidence — 2026-11-24
 
 ### 10.1 Verified baseline
 
@@ -342,3 +342,158 @@ destructive infrastructure operations.
 - [AWS: Redshift-managed Secrets Manager administrator passwords](https://docs.aws.amazon.com/redshift/latest/mgmt/redshift-secrets-manager-integration.html)
 - [AWS: Terraform S3 state backend practices](https://docs.aws.amazon.com/prescriptive-guidance/latest/terraform-aws-provider-best-practices/backend.html)
 - [AWS: Redshift enhanced VPC routing](https://docs.aws.amazon.com/redshift/latest/mgmt/enhanced-vpc-enabling-cluster.html)
+
+
+## 12. R3 Runtime Lifecycle Acceptance — 2026-11-24
+
+**Status: PASS — infrastructure lifecycle completed.**
+
+The historical pre-deployment evidence in Sections 9 and 10
+is superseded by the runtime observations below.
+No live R3 stack remains. Future deployments require fresh
+operator approval.
+
+### 12.1 Deployment and recovery evidence
+
+- Tested Git revision: `66efea0`.
+- Terraform CLI: v1.17.2.
+- AWS Provider: v6.73.0.
+- Initial saved plan: 15 add, 0 change, 0 destroy.
+- Initial apply: 13 resources successfully created.
+- Workgroup creation failed because the deployment identity
+  lacked `ec2:DescribeAccountAttributes`.
+- Added the required read-only permission.
+- Verified partial state and actual AWS inventory.
+- Generated and reviewed a fresh recovery plan.
+- Recovery apply: 2 add, 0 change, 0 destroy.
+- Workgroup creation completed in 67 seconds.
+- Usage limit creation completed in 1 second.
+- Final managed resource count: 15.
+- Recovery apply exit code: 0.
+
+### 12.2 Post-deployment runtime acceptance
+
+| Verification | Observed result |
+|---|---|
+| Namespace | AVAILABLE |
+| Workgroup | AVAILABLE |
+| Database | nyc_v2 |
+| Base capacity | 4 RPU |
+| Maximum capacity | 4 RPU |
+| Public access | Disabled |
+| Enhanced VPC Routing | Enabled |
+| Daily compute usage limit | 2 RPU-hours |
+| Breach action | deactivate |
+| Usage limit binding | Correct Workgroup ARN |
+| Managed administrator secret reference | Present |
+| Default COPY role association | Verified |
+| Security Group ingress | None |
+| Security Group egress | S3 HTTPS only |
+| Private subnet associations | 3/3 |
+| Internet/NAT default route | None |
+| S3 Gateway Endpoint | Available |
+
+The actual AWS configuration matched the intended
+infrastructure design.
+
+No SQL or COPY operations were executed.
+Usage limit configuration was verified, but actual
+limit enforcement was not exercised.
+
+### 12.3 Teardown and recovery evidence
+
+- Initial destroy plan: 0 add, 0 change, 15 destroy.
+- Initial teardown successfully removed 11 resources.
+- Three private subnets and one security group remained.
+- The provider failed during its ENI dependency inspection
+  because `ec2:DescribeNetworkInterfaces` was missing.
+- Added the required read-only permission.
+- Verified zero ENI dependencies for the remaining resources.
+- Generated a fresh destroy plan containing exactly four
+  expected resource addresses and resource IDs.
+- Verified the saved plan SHA256 before execution.
+- Recovery teardown: 0 add, 0 change, 4 destroy.
+- Final apply exit code: 0.
+- Final Terraform managed resource count: 0.
+
+### 12.4 Runtime IAM remediation
+
+| Incident | Missing IAM action | Remediation |
+|---|---|---|
+| Workgroup creation | ec2:DescribeAccountAttributes | Region-scoped read permission |
+| Subnet and Security Group deletion | ec2:DescribeNetworkInterfaces | Region-scoped read permission |
+
+Both actions are now included in the ReadNetworking
+statement of `NYCV2TerraformNetworkLifecycle`.
+
+The permissions are restricted to `eu-central-1`.
+
+No AdministratorAccess was attached to the deployment role.
+No ENI detach/delete permission was added.
+No Terraform state removal or forced resource recreation
+was required.
+
+These permissions are part of the required deployment
+lifecycle baseline for future R4 sessions.
+
+### 12.5 Final residual resource audit
+
+| Resource | Final observed state |
+|---|---|
+| Terraform managed resources | 0 |
+| Redshift namespaces | 0 |
+| Redshift workgroups | 0 |
+| Redshift usage limits | 0 |
+| Dedicated private subnets | 0 |
+| Dedicated security group | 0 |
+| Dedicated private route table | 0 |
+| S3 Gateway Endpoint | Absent |
+| Redshift-managed VPC Endpoint | Absent |
+| Redshift-managed ENIs | 0 |
+| Managed administrator secret | ResourceNotFoundException |
+| Redshift snapshots | 0 |
+| Redshift recovery points | 0 |
+| Temporary COPY role | NoSuchEntity |
+
+Read-only AWS inventory checks independently confirmed
+the absence of the above experiment resources.
+
+### 12.6 Preserved assets
+
+| Asset | Observed result |
+|---|---|
+| Certified S3 serving release | Preserved |
+| Serving release ID | airflow-a521894129ca813bd8977d28 |
+| S3 release object count | 14 |
+| S3 release total bytes | 14047189 |
+| Remote Terraform state | Preserved |
+| State object size | 1371 bytes |
+| State server-side encryption | AES256 |
+
+The S3 preservation check verified object count and total
+size, not a new per-object content-integrity verification.
+
+Existing shared infrastructure and account-level
+deployment dependencies are outside the teardown scope.
+
+### 12.7 Remaining validation and next stage
+
+R3 infrastructure lifecycle acceptance is complete.
+
+The following items remain outside the completed R3 scope:
+
+- Delayed AWS billing reconciliation against the planned
+  USD 2 experiment budget.
+- Actual Redshift usage limit enforcement.
+- Authorization for Redshift Data API queries.
+- Database DDL and COPY permissions.
+- Runtime COPY role assumption and S3 connectivity.
+- Six Gold serving tables reconciliation.
+- Serving API and dashboard integration.
+
+R4 requires a fresh infrastructure deployment, current
+budget verification, explicit approval, and a new
+post-deployment quality gate.
+
+The historical R3 deployment is not authorization to
+recreate infrastructure or execute SQL/COPY.
